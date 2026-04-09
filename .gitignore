@@ -1,0 +1,16 @@
+# Build artifacts
+/dist/
+*.exe
+*.test
+*.out
+
+# Go
+/vendor/
+coverage.txt
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
