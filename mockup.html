@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>stackctl – Mockup</title>
+  <link rel="stylesheet" href="internal/web/static/oat.min.css">
+  <style>
+    /* stackctl custom styles */
+    .sub { color: color-mix(in srgb, var(--foreground) 62%, transparent); }
+    .wordmark { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em; }
+
+    /* Status dots */
+    .status-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      margin-right: 0.4rem;
+      vertical-align: middle;
+    }
+    .status-dot.running  { background: var(--green, #22c55e); }
+    .status-dot.stopped  { background: var(--red, #ef4444); }
+    .status-dot.starting { background: var(--yellow, #eab308); }
+    .status-dot.unknown  { background: color-mix(in srgb, var(--foreground) 30%, transparent); }
+
+    /* App cards grid */
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 1rem;
+    }
+    .app-grid {
+      align-items: start;
+    }
+    .app-card {
+      display: grid !important;
+      grid-template-rows: subgrid;
+      grid-row: span 4;  /* header, description, meta, footer */
+    }
+    .app-card .card-header {
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .app-card .card-desc {
+      font-size: 0.9rem;
+    }
+    .app-card .card-meta {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding-top: 0.25rem;
+    }
+    .app-card .card-footer {
+      display: flex; align-items: center; justify-content: flex-end;
+      gap: 0.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+    }
+
+    /* Tunnel URL badge */
+    .tunnel-url {
+      font-size: 0.75rem;
+      font-family: monospace;
+      background: color-mix(in srgb, var(--foreground) 6%, transparent);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      word-break: break-all;
+    }
+
+    /* Buttons: always show outline, not just on hover */
+    button.ghost, .button.ghost,
+    button[class*="ghost"], a[class*="ghost"] {
+      border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent) !important;
+    }
+    button.ghost:hover, .button.ghost:hover {
+      border-color: color-mix(in srgb, var(--foreground) 40%, transparent) !important;
+    }
+    /* Make small action buttons in cards more visible */
+    button.small, .button.small, a.button.small {
+      border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+      border-radius: 6px;
+      padding: 0.25rem 0.75rem;
+    }
+
+    /* Topnav school name */
+    .school-name {
+      font-size: 1.05rem;
+      font-weight: 500;
+    }
+    /* Topnav layout: push right side to end */
+    [data-topnav] {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    /* Page sections for mockup navigation */
+    .mockup-page { display: none; }
+    .mockup-page.active { display: block; }
+
+    /* Sidebar active marker */
+    [data-sidebar] a[aria-current="page"] {
+      font-weight: 600;
+    }
+
+    /* Setup/Login centering */
+    .centered-box {
+      max-width: 480px;
+      margin: 3rem auto;
+    }
+
+    /* Spacing helpers */
+    .mb-1 { margin-bottom: 0.5rem; }
+    .mb-2 { margin-bottom: 1rem; }
+    .mb-3 { margin-bottom: 1.5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .mt-3 { margin-top: 1.5rem; }
+    .gap-1 { gap: 0.5rem; }
+    .gap-2 { gap: 1rem; }
+
+    /* Key display (tunnel settings) */
+    .key-display {
+      font-family: monospace;
+      font-size: 0.85rem;
+      background: color-mix(in srgb, var(--foreground) 6%, transparent);
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      word-break: break-all;
+      user-select: all;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- MOCKUP SWITCHER (nicht Teil der echten UI)                    -->
+<!-- ============================================================ -->
+<div style="background: #111; color: #eee; padding: 0.5rem 1rem; font-size: 0.85rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 1000;">
+  <strong>Mockup:</strong>
+  <button onclick="showPage('setup')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">Setup</button>
+  <button onclick="showPage('register')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">Registrierung</button>
+  <button onclick="showPage('login')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">Login</button>
+  <button onclick="showPage('dashboard')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">Dashboard</button>
+  <button onclick="showPage('apps')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">Apps</button>
+  <button onclick="showPage('app-detail')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">App-Detail</button>
+  <button onclick="showPage('install')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">Install</button>
+  <button onclick="showPage('settings')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">Einstellungen</button>
+  <button onclick="showPage('tunnel')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">Tunnel</button>
+  <button onclick="showPage('system')" style="all:unset;cursor:pointer;padding:0.2rem 0.6rem;background:#333;border-radius:4px;">System</button>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- SETUP (needs_setup) – kein Sidebar-Layout                    -->
+<!-- ============================================================ -->
+<div id="page-setup" class="mockup-page active">
+  <div class="centered-box">
+    <h1 class="mb-2" style="text-align:center;">
+      <span class="wordmark">learningstack</span>
+    </h1>
+    <p class="sub mb-3" style="text-align:center;">Ersteinrichtung – bitte alle Felder ausfüllen.</p>
+
+    <article class="card">
+      <form>
+        <h3 class="mb-2">Schule</h3>
+
+        <label data-field class="mb-1">
+          Schulname
+          <input type="text" value="Gymnasium Phoenix" placeholder="z.B. Gymnasium Musterstadt">
+        </label>
+
+        <label data-field class="mb-1">
+          Schul-Slug
+          <input type="text" value="phoenix" placeholder="z.B. musterstadt">
+          <span class="hint">Automatisch aus dem Schulnamen abgeleitet. URL-sichere Kurzform (a-z, 0-9, Bindestrich), wird in Subdomains verwendet. Kann manuell angepasst werden.</span>
+        </label>
+
+        <label data-field class="mb-1">
+          Server-IP / Hostname
+          <input type="text" value="192.168.1.10" placeholder="wird automatisch erkannt">
+          <span class="hint">Automatisch erkannt. LAN-Adresse dieses Servers, für lokale App-Links.</span>
+        </label>
+
+        <label data-field class="mb-2">
+          Kontakt-E-Mail
+          <input type="email" value="admin@gym-phoenix.de" placeholder="admin@schule.de">
+          <span class="hint">Für Rückfragen bei der Registrierung.</span>
+        </label>
+
+        <h3 class="mb-2">Admin-Zugang</h3>
+
+        <label data-field class="mb-1">
+          Admin-Passwort
+          <input type="password" value="supersecret123">
+        </label>
+
+        <label data-field class="mb-2">
+          Passwort wiederholen
+          <input type="password" value="supersecret123">
+        </label>
+
+        <h3 class="mb-2">KI-Einstellungen <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>
+
+        <label data-field class="mb-1">
+          LLM-Endpunkt
+          <input type="text" value="https://llm.learningstack.online/v1" placeholder="OpenAI-kompatibler Endpunkt">
+        </label>
+
+        <label data-field class="mb-1">
+          LLM-API-Key
+          <input type="password" placeholder="sk-...">
+        </label>
+
+        <button type="submit" class="mt-2" style="width:100%;">Setup abschliessen</button>
+      </form>
+    </article>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- REGISTRIERUNG (awaiting_registration) – kein Sidebar         -->
+<!-- ============================================================ -->
+<div id="page-register" class="mockup-page">
+  <div class="centered-box">
+    <h1 class="mb-2" style="text-align:center;">
+      <span class="wordmark">learningstack</span>
+    </h1>
+
+    <article class="card">
+      <h3 class="mb-2">Registrierung ausstehend</h3>
+
+      <p class="mb-2">
+        Dein Setup-Paket wurde erstellt. Schicke die verschlüsselte Datei an den learningstack-Betreiber,
+        damit dein Tunnel und OIDC-Zugang freigeschaltet werden.
+      </p>
+
+      <div class="mb-2" style="display: flex; gap: 0.5rem;">
+        <a href="mailto:registrierung@learningstack.online?subject=stackctl%20registrierung%20phoenix" class="button">
+          E-Mail öffnen
+        </a>
+        <a href="#" class="button" data-variant="secondary">
+          Paket herunterladen
+        </a>
+      </div>
+
+      <div role="alert" data-variant="info" class="mb-2">
+        <strong>Was passiert jetzt?</strong><br>
+        Der Betreiber richtet deinen Tunnel und OIDC-Zugang ein. Das dauert in der Regel wenige Stunden.
+        Diese Seite prüft automatisch alle 30 Sekunden den Status.
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: color-mix(in srgb, var(--foreground) 4%, transparent); border-radius: 8px;">
+        <div class="status-dot starting"></div>
+        <div>
+          <strong>Warten auf Freischaltung …</strong>
+          <div class="sub" style="font-size: 0.85rem;">Seit 09.04.2026, 12:34 Uhr</div>
+        </div>
+      </div>
+
+      <details class="mt-2">
+        <summary class="sub" style="cursor: pointer; font-size: 0.85rem;">Was wird geprüft?</summary>
+        <div style="font-size: 0.85rem; margin-top: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+            <span class="status-dot stopped"></span> Tunnel: auth.phoenix.learningstack.online erreichbar
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="status-dot stopped"></span> OIDC: Client beim zentralen Dex registriert
+          </div>
+        </div>
+      </details>
+    </article>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- LOGIN (ready, nicht eingeloggt) – kein Sidebar               -->
+<!-- ============================================================ -->
+<div id="page-login" class="mockup-page">
+  <div class="centered-box">
+    <h1 class="mb-2" style="text-align:center;">
+      <span class="wordmark">learningstack</span>
+    </h1>
+    <p class="sub mb-3" style="text-align:center;">Gymnasium Phoenix – Admin-Login</p>
+
+    <article class="card">
+      <form>
+        <label data-field class="mb-2">
+          Passwort
+          <input type="password" autofocus>
+        </label>
+        <button type="submit" style="width:100%;">Anmelden</button>
+      </form>
+    </article>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- DASHBOARD (ready, eingeloggt) – Sidebar-Layout               -->
+<!-- ============================================================ -->
+<div id="page-dashboard" class="mockup-page">
+  <div data-sidebar-layout>
+    <aside data-sidebar>
+      <div style="padding: 1rem 1rem 0.5rem;">
+        <span class="wordmark">learningstack</span>
+      </div>
+      <nav>
+        <ul class="unstyled">
+          <li><a href="#" aria-current="page" onclick="showPage('dashboard');return false">Dashboard</a></li>
+          <li><a href="#" onclick="showPage('apps');return false">Apps</a></li>
+          <li><a href="#" onclick="showPage('settings');return false">Einstellungen</a></li>
+          <li><a href="#" onclick="showPage('tunnel');return false">Tunnel</a></li>
+          <li><a href="#" onclick="showPage('system');return false">System</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main>
+      <nav data-topnav>
+        <div></div>
+        <div class="hstack gap-2">
+          <span class="school-name">Gymnasium Phoenix</span>
+          <ot-dropdown>
+            <button class="ghost" popovertarget="user-menu-dash">Admin &#x25BE;</button>
+            <div popover="auto" id="user-menu-dash">
+              <a href="#" role="menuitem" onclick="showPage('login');return false">Abmelden</a>
+            </div>
+          </ot-dropdown>
+        </div>
+      </nav>
+
+      <div style="padding:1.5rem">
+        <h2 class="mb-2">Dashboard</h2>
+
+        <div class="app-grid">
+          <!-- PostgreSQL -->
+          <article class="card app-card">
+            <div class="card-header">
+              <span class="status-dot running"></span>
+              <strong>PostgreSQL</strong>
+              <span class="badge" style="margin-left:auto">infrastructure</span>
+            </div>
+            <p class="sub card-desc">Zentrale Datenbank für alle Apps</p>
+            <div class="card-meta">
+              <div class="sub" style="font-size:0.8rem;">Port 8100 · v16.2</div>
+            </div>
+            <div class="card-footer">
+              <button class="ghost small" data-variant="danger">Stop</button>
+            </div>
+          </article>
+
+          <!-- Dex -->
+          <article class="card app-card">
+            <div class="card-header">
+              <span class="status-dot running"></span>
+              <strong>Dex (OIDC)</strong>
+              <span class="badge" style="margin-left:auto">infrastructure</span>
+            </div>
+            <p class="sub card-desc">OIDC-Provider (Proxy zu moin.schule)</p>
+            <div class="card-meta">
+              <div class="sub" style="font-size:0.8rem;">Port 5556 · v2.45.1</div>
+              <span class="tunnel-url" style="margin-top:0.35rem;display:inline-block;">auth.phoenix.learningstack.online</span>
+            </div>
+            <div class="card-footer">
+              <span class="sub" style="font-size:0.8rem;">Pflicht-Container</span>
+            </div>
+          </article>
+
+          <!-- Langflow -->
+          <article class="card app-card">
+            <div class="card-header">
+              <span class="status-dot running"></span>
+              <strong>Langflow</strong>
+              <span class="badge" style="margin-left:auto">education</span>
+            </div>
+            <p class="sub card-desc">Visueller KI-Flow Builder</p>
+            <div class="card-meta">
+              <div class="sub" style="font-size:0.8rem;">Port 8320 · v1.1.0</div>
+              <span class="tunnel-url" style="margin-top:0.35rem;display:inline-block;">langflow.phoenix.learningstack.online</span>
+            </div>
+            <div class="card-footer">
+              <a href="#" onclick="showPage('app-detail');return false" class="button small">Details</a>
+              <button class="ghost small" data-variant="danger">Stop</button>
+            </div>
+          </article>
+
+          <!-- Open WebUI (gestoppt) -->
+          <article class="card app-card">
+            <div class="card-header">
+              <span class="status-dot stopped"></span>
+              <strong>Open WebUI</strong>
+              <span class="badge" style="margin-left:auto">education</span>
+            </div>
+            <p class="sub card-desc">Chat-Oberfläche für LLMs</p>
+            <div class="card-meta">
+              <div class="sub" style="font-size:0.8rem;">Port 8310 · v0.5.0</div>
+            </div>
+            <div class="card-footer">
+              <a href="#" class="button small">Details</a>
+              <button class="ghost small">Start</button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- APPS (Katalog)                                               -->
+<!-- ============================================================ -->
+<div id="page-apps" class="mockup-page">
+  <div data-sidebar-layout>
+    <aside data-sidebar>
+      <div style="padding: 1rem 1rem 0.5rem;"><span class="wordmark">learningstack</span></div>
+      <nav><ul class="unstyled">
+        <li><a href="#" onclick="showPage('dashboard');return false">Dashboard</a></li>
+        <li><a href="#" aria-current="page" onclick="showPage('apps');return false">Apps</a></li>
+        <li><a href="#" onclick="showPage('settings');return false">Einstellungen</a></li>
+        <li><a href="#" onclick="showPage('tunnel');return false">Tunnel</a></li>
+        <li><a href="#" onclick="showPage('system');return false">System</a></li>
+      </ul></nav>
+    </aside>
+    <main>
+      <nav data-topnav>
+        <div></div>
+        <div class="hstack gap-2">
+          <span class="school-name">Gymnasium Phoenix</span>
+          <ot-dropdown>
+            <button class="ghost" popovertarget="user-menu-apps">Admin &#x25BE;</button>
+            <div popover="auto" id="user-menu-apps"><a href="#" role="menuitem">Abmelden</a></div>
+          </ot-dropdown>
+        </div>
+      </nav>
+
+      <div style="padding:1.5rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-2">
+          <h2>Apps</h2>
+          <button class="ghost small" onclick="alert('Katalog wird synchronisiert …')">Katalog aktualisieren</button>
+        </div>
+
+        <ot-tabs>
+          <div role="tablist">
+            <button role="tab" aria-selected="true">Alle</button>
+            <button role="tab">Installiert</button>
+            <button role="tab">Verfügbar</button>
+          </div>
+
+          <!-- Alle -->
+          <div role="tabpanel">
+            <div class="app-grid mt-2">
+              <!-- Installiert: Langflow -->
+              <article class="card app-card">
+                <div class="card-body">
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+                    <span class="status-dot running"></span>
+                    <strong>Langflow</strong>
+                    <span class="badge" style="margin-left:auto">education</span>
+                  </div>
+                  <p class="sub" style="font-size:0.9rem">Visueller KI-Flow Builder</p>
+                </div>
+                <div class="card-footer">
+                  <span class="sub" style="font-size:0.8rem">v1.1.0 installiert</span>
+                  <a href="#" onclick="showPage('app-detail');return false" class="button small" style="margin-left:auto">Details</a>
+                </div>
+              </article>
+
+              <!-- Installiert: Open WebUI -->
+              <article class="card app-card">
+                <div class="card-body">
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+                    <span class="status-dot stopped"></span>
+                    <strong>Open WebUI</strong>
+                    <span class="badge" style="margin-left:auto">education</span>
+                  </div>
+                  <p class="sub" style="font-size:0.9rem">Chat-Oberfläche für LLMs</p>
+                </div>
+                <div class="card-footer">
+                  <span class="sub" style="font-size:0.8rem">v0.5.0 installiert</span>
+                  <a href="#" class="button small" style="margin-left:auto">Details</a>
+                </div>
+              </article>
+
+              <!-- Verfügbar: Grafana -->
+              <article class="card app-card">
+                <div class="card-body">
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+                    <span class="status-dot unknown"></span>
+                    <strong>Grafana</strong>
+                    <span class="badge" style="margin-left:auto">tools</span>
+                  </div>
+                  <p class="sub" style="font-size:0.9rem">Monitoring-Dashboard</p>
+                </div>
+                <div class="card-footer">
+                  <span class="sub" style="font-size:0.8rem">v1.0 verfügbar</span>
+                  <a href="#" onclick="showPage('install');return false" class="button small" style="margin-left:auto">Installieren</a>
+                </div>
+              </article>
+
+              <!-- Verfügbar: Minesweeper -->
+              <article class="card app-card">
+                <div class="card-body">
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+                    <span class="status-dot unknown"></span>
+                    <strong>Minesweeper</strong>
+                    <span class="badge" style="margin-left:auto">games</span>
+                  </div>
+                  <p class="sub" style="font-size:0.9rem">Der Klassiker als Webapp</p>
+                </div>
+                <div class="card-footer">
+                  <span class="sub" style="font-size:0.8rem">v1.0 verfügbar</span>
+                  <a href="#" class="button small" style="margin-left:auto">Installieren</a>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <!-- Installiert -->
+          <div role="tabpanel">
+            <p class="sub mt-2">Zeigt nur installierte Apps.</p>
+          </div>
+
+          <!-- Verfügbar -->
+          <div role="tabpanel">
+            <p class="sub mt-2">Zeigt nur noch nicht installierte Apps.</p>
+          </div>
+        </ot-tabs>
+      </div>
+    </main>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- APP-DETAIL                                                    -->
+<!-- ============================================================ -->
+<div id="page-app-detail" class="mockup-page">
+  <div data-sidebar-layout>
+    <aside data-sidebar>
+      <div style="padding: 1rem 1rem 0.5rem;"><span class="wordmark">learningstack</span></div>
+      <nav><ul class="unstyled">
+        <li><a href="#" onclick="showPage('dashboard');return false">Dashboard</a></li>
+        <li><a href="#" aria-current="page" onclick="showPage('apps');return false">Apps</a></li>
+        <li><a href="#" onclick="showPage('settings');return false">Einstellungen</a></li>
+        <li><a href="#" onclick="showPage('tunnel');return false">Tunnel</a></li>
+        <li><a href="#" onclick="showPage('system');return false">System</a></li>
+      </ul></nav>
+    </aside>
+    <main>
+      <nav data-topnav>
+        <div></div>
+        <div class="hstack gap-2">
+          <span class="school-name">Gymnasium Phoenix</span>
+          <ot-dropdown>
+            <button class="ghost" popovertarget="user-menu-detail">Admin &#x25BE;</button>
+            <div popover="auto" id="user-menu-detail"><a href="#" role="menuitem">Abmelden</a></div>
+          </ot-dropdown>
+        </div>
+      </nav>
+
+      <div style="padding:1.5rem">
+        <div style="display:flex;align-items:center;gap:0.75rem;" class="mb-2">
+          <a href="#" onclick="showPage('apps');return false" class="sub" style="text-decoration:none;">&larr; Apps</a>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:0.75rem;" class="mb-3">
+          <span class="status-dot running"></span>
+          <h2 style="margin:0">Langflow</h2>
+          <span class="badge">education</span>
+          <span class="sub" style="font-size:0.85rem">v1.1.0</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+          <!-- Links: Info -->
+          <div>
+            <article class="card mb-2">
+              <h4 class="mb-1">Zugriff</h4>
+              <table>
+                <tbody>
+                  <tr><td class="sub">Lokal</td><td><code>192.168.1.10:8320</code></td></tr>
+                  <tr><td class="sub">Öffentlich</td><td><a href="#">langflow.phoenix.learningstack.online</a></td></tr>
+                  <tr><td class="sub">Container</td><td><code>ls-langflow</code></td></tr>
+                  <tr><td class="sub">Installiert</td><td>09.04.2026, 12:38</td></tr>
+                </tbody>
+              </table>
+            </article>
+
+            <article class="card mb-2">
+              <h4 class="mb-1">OIDC</h4>
+              <table>
+                <tbody>
+                  <tr><td class="sub">Client-ID</td><td><code>langflow</code></td></tr>
+                  <tr><td class="sub">Redirect-URI</td><td style="font-size:0.8rem;word-break:break-all;"><code>https://langflow.phoenix.learningstack.online/oauth/callback</code></td></tr>
+                </tbody>
+              </table>
+            </article>
+
+            <article class="card">
+              <h4 class="mb-1">Links</h4>
+              <div style="display:flex;gap:1rem;">
+                <a href="#">Homepage</a>
+                <a href="#">Docs</a>
+              </div>
+            </article>
+          </div>
+
+          <!-- Rechts: Aktionen -->
+          <div>
+            <article class="card mb-2">
+              <h4 class="mb-1">Tunnel</h4>
+              <div style="display:flex;align-items:center;gap:0.75rem;">
+                <span class="status-dot running"></span>
+                <span>Aktiv</span>
+                <span class="tunnel-url" style="margin-left:auto;">langflow.phoenix.learningstack.online</span>
+              </div>
+              <p class="sub mt-2" style="font-size:0.85rem;">
+                Diese App nutzt OIDC – der Tunnel muss aktiv sein, damit der Login funktioniert.
+              </p>
+              <button class="ghost small mt-2" data-variant="danger">Tunnel deaktivieren</button>
+            </article>
+
+            <article class="card mb-2">
+              <h4 class="mb-1">Aktionen</h4>
+              <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                <button class="ghost small" data-variant="danger">Stoppen</button>
+                <button class="ghost small">Neustarten</button>
+                <button class="ghost small">Update prüfen</button>
+              </div>
+            </article>
+
+            <article class="card">
+              <h4 class="mb-1">Entfernen</h4>
+              <p class="sub mb-1" style="font-size:0.85rem">
+                Container und Konfiguration werden entfernt. Daten unter
+                <code>/opt/learningstack/langflow/</code> bleiben erhalten.
+              </p>
+              <button data-variant="danger" class="small">App entfernen</button>
+            </article>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- INSTALL (Pre-Install-Formular)                               -->
+<!-- ============================================================ -->
+<div id="page-install" class="mockup-page">
+  <div data-sidebar-layout>
+    <aside data-sidebar>
+      <div style="padding: 1rem 1rem 0.5rem;"><span class="wordmark">learningstack</span></div>
+      <nav><ul class="unstyled">
+        <li><a href="#" onclick="showPage('dashboard');return false">Dashboard</a></li>
+        <li><a href="#" aria-current="page">Apps</a></li>
+        <li><a href="#" onclick="showPage('settings');return false">Einstellungen</a></li>
+        <li><a href="#" onclick="showPage('tunnel');return false">Tunnel</a></li>
+        <li><a href="#" onclick="showPage('system');return false">System</a></li>
+      </ul></nav>
+    </aside>
+    <main>
+      <nav data-topnav>
+        <div></div>
+        <div class="hstack gap-2">
+          <span class="school-name">Gymnasium Phoenix</span>
+          <ot-dropdown>
+            <button class="ghost" popovertarget="user-menu-install">Admin &#x25BE;</button>
+            <div popover="auto" id="user-menu-install"><a href="#" role="menuitem">Abmelden</a></div>
+          </ot-dropdown>
+        </div>
+      </nav>
+
+      <div style="padding:1.5rem">
+        <a href="#" onclick="showPage('apps');return false" class="sub" style="text-decoration:none;">&larr; Apps</a>
+
+        <h2 class="mt-2 mb-2">Grafana installieren</h2>
+
+        <article class="card mb-2">
+          <p class="sub mb-2">Monitoring-Dashboard · Version 1.0 · Kategorie: tools</p>
+
+          <div role="alert" data-variant="info" class="mb-2">
+            Diese App nutzt OIDC-Login. Nach der Installation muss der Tunnel aktiviert werden.
+          </div>
+
+          <form>
+            <h4 class="mb-1">Einstellungen</h4>
+
+            <label data-field class="mb-1">
+              Datenquelle
+              <select>
+                <option>Prometheus</option>
+                <option selected>InfluxDB</option>
+                <option>Loki</option>
+              </select>
+              <span class="hint">Welche Monitoring-Datenquelle soll vorkonfiguriert werden?</span>
+            </label>
+
+            <label data-field class="mb-2">
+              Dashboard-Theme
+              <input type="text" value="light" placeholder="light oder dark">
+            </label>
+
+            <h4 class="mb-1">Automatisch generiert</h4>
+            <p class="sub mb-2" style="font-size:0.85rem;">
+              Folgende Secrets werden automatisch erzeugt: GRAFANA_DB_PASSWORD, GRAFANA_OIDC_SECRET.
+              Das Admin-Passwort wird aus deinem stackctl-Passwort übernommen.
+            </p>
+
+            <button type="submit" style="width:100%;">Installieren</button>
+          </form>
+        </article>
+      </div>
+    </main>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- EINSTELLUNGEN                                                 -->
+<!-- ============================================================ -->
+<div id="page-settings" class="mockup-page">
+  <div data-sidebar-layout>
+    <aside data-sidebar>
+      <div style="padding: 1rem 1rem 0.5rem;"><span class="wordmark">learningstack</span></div>
+      <nav><ul class="unstyled">
+        <li><a href="#" onclick="showPage('dashboard');return false">Dashboard</a></li>
+        <li><a href="#" onclick="showPage('apps');return false">Apps</a></li>
+        <li><a href="#" aria-current="page" onclick="showPage('settings');return false">Einstellungen</a></li>
+        <li><a href="#" onclick="showPage('tunnel');return false">Tunnel</a></li>
+        <li><a href="#" onclick="showPage('system');return false">System</a></li>
+      </ul></nav>
+    </aside>
+    <main>
+      <nav data-topnav>
+        <div></div>
+        <div class="hstack gap-2">
+          <span class="school-name">Gymnasium Phoenix</span>
+          <ot-dropdown>
+            <button class="ghost" popovertarget="user-menu-settings">Admin &#x25BE;</button>
+            <div popover="auto" id="user-menu-settings"><a href="#" role="menuitem">Abmelden</a></div>
+          </ot-dropdown>
+        </div>
+      </nav>
+
+      <div style="padding:1.5rem">
+        <h2 class="mb-2">Einstellungen</h2>
+
+        <article class="card mb-2">
+          <h3 class="mb-2">Schule</h3>
+          <form>
+            <label data-field class="mb-1">
+              Schulname
+              <input type="text" value="Gymnasium Phoenix">
+            </label>
+            <label data-field class="mb-1">
+              Server-IP / Hostname
+              <input type="text" value="192.168.1.10">
+            </label>
+            <label data-field class="mb-2">
+              Kontakt-E-Mail
+              <input type="email" value="admin@gym-phoenix.de">
+            </label>
+            <div class="sub mb-2" style="font-size:0.85rem;">
+              Slug: <code>phoenix</code> (kann nach dem Setup nicht geändert werden)
+            </div>
+            <button type="submit">Speichern</button>
+          </form>
+        </article>
+
+        <article class="card mb-2">
+          <h3 class="mb-2">KI-Einstellungen</h3>
+          <form>
+            <label data-field class="mb-1">
+              LLM-Endpunkt
+              <input type="text" value="https://llm.learningstack.online/v1">
+            </label>
+            <label data-field class="mb-1">
+              LLM-API-Key
+              <input type="password" value="sk-abc123">
+            </label>
+            <button type="submit">Speichern</button>
+          </form>
+        </article>
+
+        <article class="card">
+          <h3 class="mb-2">Passwort ändern</h3>
+          <form>
+            <label data-field class="mb-1">
+              Aktuelles Passwort
+              <input type="password">
+            </label>
+            <label data-field class="mb-1">
+              Neues Passwort
+              <input type="password">
+            </label>
+            <label data-field class="mb-2">
+              Neues Passwort wiederholen
+              <input type="password">
+            </label>
+            <button type="submit">Passwort ändern</button>
+          </form>
+        </article>
+      </div>
+    </main>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- TUNNEL                                                        -->
+<!-- ============================================================ -->
+<div id="page-tunnel" class="mockup-page">
+  <div data-sidebar-layout>
+    <aside data-sidebar>
+      <div style="padding: 1rem 1rem 0.5rem;"><span class="wordmark">learningstack</span></div>
+      <nav><ul class="unstyled">
+        <li><a href="#" onclick="showPage('dashboard');return false">Dashboard</a></li>
+        <li><a href="#" onclick="showPage('apps');return false">Apps</a></li>
+        <li><a href="#" onclick="showPage('settings');return false">Einstellungen</a></li>
+        <li><a href="#" aria-current="page" onclick="showPage('tunnel');return false">Tunnel</a></li>
+        <li><a href="#" onclick="showPage('system');return false">System</a></li>
+      </ul></nav>
+    </aside>
+    <main>
+      <nav data-topnav>
+        <div></div>
+        <div class="hstack gap-2">
+          <span class="school-name">Gymnasium Phoenix</span>
+          <ot-dropdown>
+            <button class="ghost" popovertarget="user-menu-tunnel">Admin &#x25BE;</button>
+            <div popover="auto" id="user-menu-tunnel"><a href="#" role="menuitem">Abmelden</a></div>
+          </ot-dropdown>
+        </div>
+      </nav>
+
+      <div style="padding:1.5rem">
+        <h2 class="mb-2">Tunnel</h2>
+
+        <article class="card mb-2">
+          <h3 class="mb-2">SSH-Verbindung</h3>
+          <div style="display:flex;align-items:center;gap:0.75rem;" class="mb-2">
+            <span class="status-dot running"></span>
+            <span>Verbunden mit <code>sish.learningstack.online:22</code></span>
+          </div>
+          <button class="ghost small">Verbindung testen</button>
+
+          <h4 class="mt-3 mb-1">Public Key</h4>
+          <div class="key-display">
+            ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHuXrJxJg9bW4mY7v2kPqKzN8oL3wR5fT1xM9aN0bCdE stackctl@phoenix
+          </div>
+          <p class="sub mt-2" style="font-size:0.8rem;">
+            Dieser Key wurde beim Setup erzeugt und ist Teil des Registrierungs-Pakets.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3 class="mb-2">Aktive Tunnel</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>App</th>
+                <th>Subdomain</th>
+                <th>Lokaler Port</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Dex (OIDC)</strong></td>
+                <td><span class="tunnel-url">auth.phoenix.learningstack.online</span></td>
+                <td><code>5556</code></td>
+                <td><span class="status-dot running"></span> Aktiv</td>
+                <td><span class="sub" style="font-size:0.8rem;">Permanent</span></td>
+              </tr>
+              <tr>
+                <td><strong>Langflow</strong></td>
+                <td><span class="tunnel-url">langflow.phoenix.learningstack.online</span></td>
+                <td><code>8320</code></td>
+                <td><span class="status-dot running"></span> Aktiv</td>
+                <td><button class="ghost small" data-variant="danger">Deaktivieren</button></td>
+              </tr>
+              <tr>
+                <td class="sub">Open WebUI</td>
+                <td class="sub">—</td>
+                <td><code>8310</code></td>
+                <td><span class="status-dot unknown"></span> <span class="sub">Inaktiv</span></td>
+                <td><button class="ghost small">Aktivieren</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+      </div>
+    </main>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- SYSTEM                                                        -->
+<!-- ============================================================ -->
+<div id="page-system" class="mockup-page">
+  <div data-sidebar-layout>
+    <aside data-sidebar>
+      <div style="padding: 1rem 1rem 0.5rem;"><span class="wordmark">learningstack</span></div>
+      <nav><ul class="unstyled">
+        <li><a href="#" onclick="showPage('dashboard');return false">Dashboard</a></li>
+        <li><a href="#" onclick="showPage('apps');return false">Apps</a></li>
+        <li><a href="#" onclick="showPage('settings');return false">Einstellungen</a></li>
+        <li><a href="#" onclick="showPage('tunnel');return false">Tunnel</a></li>
+        <li><a href="#" aria-current="page" onclick="showPage('system');return false">System</a></li>
+      </ul></nav>
+    </aside>
+    <main>
+      <nav data-topnav>
+        <div></div>
+        <div class="hstack gap-2">
+          <span class="school-name">Gymnasium Phoenix</span>
+          <ot-dropdown>
+            <button class="ghost" popovertarget="user-menu-system">Admin &#x25BE;</button>
+            <div popover="auto" id="user-menu-system"><a href="#" role="menuitem">Abmelden</a></div>
+          </ot-dropdown>
+        </div>
+      </nav>
+
+      <div style="padding:1.5rem">
+        <h2 class="mb-2">System</h2>
+
+        <article class="card mb-2">
+          <h3 class="mb-2">stackctl</h3>
+          <table>
+            <tbody>
+              <tr><td class="sub" style="width:160px;">Version</td><td><strong>v0.1.0</strong></td></tr>
+              <tr><td class="sub">Architektur</td><td>linux/amd64</td></tr>
+              <tr><td class="sub">Go</td><td>go1.26.2</td></tr>
+              <tr><td class="sub">Uptime</td><td>3 Tage, 14 Stunden</td></tr>
+            </tbody>
+          </table>
+
+          <div role="alert" data-variant="success" class="mt-2">
+            stackctl ist auf dem neuesten Stand.
+          </div>
+
+          <div style="display:flex;gap:0.5rem;" class="mt-2">
+            <button class="ghost small">Update prüfen</button>
+            <button class="ghost small">Katalog aktualisieren</button>
+          </div>
+        </article>
+
+        <article class="card mb-2">
+          <h3 class="mb-2">Diagnose</h3>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="ghost small">docker-compose.yml neu generieren</button>
+            <button class="ghost small">Dex-Config neu schreiben</button>
+            <button class="ghost small">Alle Container neustarten</button>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3 class="mb-2">Pfade</h3>
+          <table style="font-size:0.85rem;">
+            <tbody>
+              <tr><td class="sub">Programm</td><td><code>/opt/stackctl/</code></td></tr>
+              <tr><td class="sub">Daten</td><td><code>/opt/learningstack/</code></td></tr>
+              <tr><td class="sub">Compose</td><td><code>/opt/stackctl/compose/docker-compose.yml</code></td></tr>
+              <tr><td class="sub">Config</td><td><code>/opt/stackctl/config/config.yaml</code></td></tr>
+              <tr><td class="sub">Katalog-Cache</td><td><code>/opt/stackctl/config/catalog/</code></td></tr>
+            </tbody>
+          </table>
+        </article>
+      </div>
+    </main>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- SCRIPTS                                                       -->
+<!-- ============================================================ -->
+<script src="internal/web/static/oat.min.js"></script>
+<script>
+function showPage(name) {
+  document.querySelectorAll('.mockup-page').forEach(p => p.classList.remove('active'));
+  const el = document.getElementById('page-' + name);
+  if (el) el.classList.add('active');
+}
+</script>
+</body>
+</html>

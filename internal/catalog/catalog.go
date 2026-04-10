@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,8 +131,8 @@ func GetOrFetch(catalogURL, appID string) (*Definition, error) {
 	return FetchDefinition(catalogURL, appID)
 }
 
-// Validate performs a structural check on a definition. Returns a list of
-// problems; empty slice means valid.
+// Validate performs structural checks on a definition per spec v3.0.
+// Returns a list of problems; empty slice means valid.
 func Validate(def *Definition) []string {
 	var problems []string
 	check := func(cond bool, msg string) {
@@ -139,26 +140,107 @@ func Validate(def *Definition) []string {
 			problems = append(problems, msg)
 		}
 	}
+
+	// Metadata.
 	check(def.ID == "", "id is required")
+	if def.ID != "" {
+		if !isValidID(def.ID) {
+			problems = append(problems, "id must match [a-z0-9][a-z0-9-]* with no --")
+		}
+	}
 	check(def.Name == "", "name is required")
 	check(def.Version == "", "version is required")
+	check(def.Description == "", "description is required")
+	check(def.Category == "", "category is required")
+
+	// Image.
 	check(def.Image.Name == "", "image.name is required")
 	check(def.Image.Tag == "", "image.tag is required")
-	check(len(def.Ports) == 0, "at least one port is required")
 
+	// Ports.
+	check(len(def.Ports) == 0, "at least one port is required")
 	for i, p := range def.Ports {
 		check(p.Host == 0, fmt.Sprintf("ports[%d].host is 0", i))
 		check(p.Container == 0, fmt.Sprintf("ports[%d].container is 0", i))
 	}
+
+	// Volumes path check.
+	prefix := "/opt/learningstack/" + def.ID + "/"
 	for i, v := range def.Volumes {
 		check(v.Host == "", fmt.Sprintf("volumes[%d].host is empty", i))
 		check(v.Container == "", fmt.Sprintf("volumes[%d].container is empty", i))
+		if v.Host != "" && !strings.HasPrefix(v.Host, prefix) {
+			problems = append(problems, fmt.Sprintf("volumes[%d].host must start with %s", i, prefix))
+		}
 	}
+
+	// Configs path check.
+	for i, c := range def.Configs {
+		if c.Path != "" && !strings.HasPrefix(c.Path, prefix) {
+			problems = append(problems, fmt.Sprintf("configs[%d].path must start with %s", i, prefix))
+		}
+	}
+
+	// Binaries destination check.
+	for i, b := range def.Binaries {
+		if b.Destination != "" && !strings.HasPrefix(b.Destination, prefix) {
+			problems = append(problems, fmt.Sprintf("binaries[%d].destination must start with %s", i, prefix))
+		}
+	}
+
+	// OIDC.
 	if def.OIDC != nil {
 		check(def.OIDC.ClientID == "", "oidc.client_id is required")
-		check(def.OIDC.RedirectURITemplate == "", "oidc.redirect_uri_template is required")
+		check(def.OIDC.RedirectPath == "", "oidc.redirect_path is required")
+		if def.OIDC.RedirectPath != "" && !strings.HasPrefix(def.OIDC.RedirectPath, "/") {
+			problems = append(problems, "oidc.redirect_path must start with /")
+		}
 	}
+
+	// Scripts.
+	if def.Scripts != nil {
+		for i, s := range def.Scripts.PostInstall {
+			if s.Type != "docker-exec" && s.Type != "host" {
+				problems = append(problems, fmt.Sprintf("scripts.post_install[%d].type must be docker-exec or host", i))
+			}
+			if s.Wait != "" {
+				if s.Wait != "healthy" && s.Wait != "started" {
+					if _, err := strconv.Atoi(s.Wait); err != nil {
+						problems = append(problems, fmt.Sprintf("scripts.post_install[%d].wait must be healthy, started, or a positive integer", i))
+					}
+				}
+			}
+		}
+	}
+
+	// Prompts.
+	validValidators := map[string]bool{"": true, "email": true, "int": true, "url": true}
+	for i, p := range def.Prompts {
+		if !validValidators[p.Validate] {
+			problems = append(problems, fmt.Sprintf("prompts[%d].validate must be email, int, url, or empty", i))
+		}
+	}
+
 	return problems
+}
+
+// isValidID checks the app ID format: [a-z0-9][a-z0-9-]*, no --.
+func isValidID(id string) bool {
+	if len(id) == 0 {
+		return false
+	}
+	if id[0] < 'a' || id[0] > 'z' {
+		if id[0] < '0' || id[0] > '9' {
+			return false
+		}
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+			return false
+		}
+	}
+	return !strings.Contains(id, "--")
 }
 
 // MissingDependencies returns the dep IDs from def.DependsOn that are not

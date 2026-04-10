@@ -13,7 +13,6 @@ package dex
 
 import (
 	"fmt"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -175,12 +174,11 @@ func AuthURL(cfg *config.Config) string {
 	return "https://auth." + cfg.School.Slug + ".learningstack.online"
 }
 
-// BuildRedirectURI expands a redirect_uri_template from the app definition.
-// Templates use {app_id} and {school_slug} as placeholders.
-func BuildRedirectURI(template, appID, schoolSlug string) string {
-	r := strings.NewReplacer(
-		"{app_id}", appID,
-		"{school_slug}", schoolSlug,
-	)
-	return r.Replace(template)
+// BuildRedirectURI builds the full OIDC redirect URI for an app.
+// If tunneled is true, the public tunnel URL is used; otherwise the local URL.
+func BuildRedirectURI(redirectPath, appID, schoolSlug, serverDomain string, port int, tunneled bool) string {
+	if tunneled {
+		return "https://" + appID + "." + schoolSlug + ".learningstack.online" + redirectPath
+	}
+	return fmt.Sprintf("http://%s:%d%s", serverDomain, port, redirectPath)
 }

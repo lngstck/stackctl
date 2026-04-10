@@ -96,15 +96,15 @@ type Prompt struct {
 	Question string   `yaml:"question"`
 	Required bool     `yaml:"required,omitempty"`
 	Default  string   `yaml:"default,omitempty"`
-	Validate string   `yaml:"validate,omitempty"` // regex pattern
+	Validate string   `yaml:"validate,omitempty"` // "email" | "int" | "url" | "" (any string)
 	Options  []string `yaml:"options,omitempty"`   // multi-choice
 	Hint     string   `yaml:"hint,omitempty"`
 }
 
 // OIDCSpec declares that this app is an OIDC client registered with Dex.
 type OIDCSpec struct {
-	ClientID            string `yaml:"client_id"`
-	RedirectURITemplate string `yaml:"redirect_uri_template"` // e.g. "https://{app_id}.{school_slug}.learningstack.online/oauth/callback"
+	ClientID     string `yaml:"client_id"`
+	RedirectPath string `yaml:"redirect_path"` // e.g. "/oauth/oidc/callback"
 }
 
 // BinarySpec tells stackctl to download a file before starting the app.
@@ -123,14 +123,21 @@ type Scripts struct {
 type ScriptStep struct {
 	Type      string `yaml:"type"`                // "docker-exec" | "host"
 	Container string `yaml:"container,omitempty"` // for docker-exec
-	Wait      int    `yaml:"wait,omitempty"`      // seconds to wait before running
+	Wait      string `yaml:"wait,omitempty"`      // "healthy" | "started" | "30" (seconds)
 	Command   string `yaml:"command"`
+}
+
+// SecretToShow identifies an env key to display after install, with an
+// optional human-readable label.
+type SecretToShow struct {
+	Key   string `yaml:"key"`
+	Label string `yaml:"label,omitempty"`
 }
 
 // PostInstall holds messages and secrets to display after a successful install.
 type PostInstall struct {
-	Messages     []string `yaml:"messages,omitempty"`
-	SecretsToShow []string `yaml:"secrets_to_show,omitempty"` // env key names
+	Messages      []string       `yaml:"messages,omitempty"`
+	SecretsToShow []SecretToShow `yaml:"secrets_to_show,omitempty"`
 }
 
 // Links are documentation pointers for the app detail page.

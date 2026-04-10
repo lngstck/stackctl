@@ -105,7 +105,7 @@ func Install(
 
 	// --- 3. Data directories + configs --------------------------------------
 
-	if err := createDataDirs(def); err != nil {
+	if err := createDataDirs(def, env); err != nil {
 		return fail(res, "data dirs: %v", err)
 	}
 
@@ -142,10 +142,20 @@ func Install(
 		}
 
 		oidcSecret, _ := env.Get(oidcSecretKey)
+
+		// Build redirect URI. For now, always use the tunneled (public) URL
+		// because OIDC apps must be tunneled for the issuer URL to match.
+		firstPort := 0
+		if len(def.Ports) > 0 {
+			firstPort = def.Ports[0].Host
+		}
 		redirectURI := dex.BuildRedirectURI(
-			def.OIDC.RedirectURITemplate,
+			def.OIDC.RedirectPath,
 			def.ID,
 			cfg.School.Slug,
+			cfg.School.ServerDomain,
+			firstPort,
+			true, // tunneled — OIDC requires public URL
 		)
 
 		client := dex.Client{
@@ -215,9 +225,9 @@ func Install(
 	// Collect secrets to show.
 	res.SecretsToShow = map[string]string{}
 	if def.PostInstall != nil {
-		for _, key := range def.PostInstall.SecretsToShow {
-			if val, ok := env.Get(key); ok {
-				res.SecretsToShow[key] = val
+		for _, s := range def.PostInstall.SecretsToShow {
+			if val, ok := env.Get(s.Key); ok {
+				res.SecretsToShow[s.Key] = val
 			}
 		}
 		res.Messages = append(res.Messages, def.PostInstall.Messages...)
@@ -313,7 +323,7 @@ func generateSecret(spec catalog.SecretSpec) (string, error) {
 	}
 }
 
-func createDataDirs(def *catalog.Definition) error {
+func createDataDirs(def *catalog.Definition, env *envfile.File) error {
 	for _, v := range def.Volumes {
 		if err := paths.EnsureDir(v.Host, 0o750); err != nil {
 			return err
@@ -331,12 +341,25 @@ func createDataDirs(def *catalog.Definition) error {
 					mode = os.FileMode(m)
 				}
 			}
-			if err := paths.AtomicWrite(c.Path, []byte(c.Content), mode); err != nil {
+			// Template substitution: ${VAR} resolved from .env.
+			content := expandEnvVars(c.Content, env)
+			if err := paths.AtomicWrite(c.Path, []byte(content), mode); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// expandEnvVars replaces ${VAR} placeholders in s with values from env.
+// Unknown variables are left as-is.
+func expandEnvVars(s string, env *envfile.File) string {
+	return os.Expand(s, func(key string) string {
+		if val, ok := env.Get(key); ok {
+			return val
+		}
+		return "${" + key + "}"
+	})
 }
 
 func collectComposeDefs(allDefs []*catalog.Definition, newDef *catalog.Definition) []*compose.AppDefinition {
@@ -353,8 +376,15 @@ func collectComposeDefs(allDefs []*catalog.Definition, newDef *catalog.Definitio
 }
 
 func runScript(step catalog.ScriptStep) error {
-	if step.Wait > 0 {
-		time.Sleep(time.Duration(step.Wait) * time.Second)
+	switch step.Wait {
+	case "", "started":
+		// No delay.
+	case "healthy":
+		// TODO: poll docker health status before running.
+	default:
+		if secs, err := strconv.Atoi(step.Wait); err == nil && secs > 0 {
+			time.Sleep(time.Duration(secs) * time.Second)
+		}
 	}
 	switch step.Type {
 	case "docker-exec":

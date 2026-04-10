@@ -164,10 +164,17 @@ func TestAuthURL(t *testing.T) {
 }
 
 func TestBuildRedirectURI(t *testing.T) {
-	tmpl := "https://{app_id}.{school_slug}.learningstack.online/oauth/callback"
-	got := BuildRedirectURI(tmpl, "langflow", "phoenix")
+	// Tunneled (public URL).
+	got := BuildRedirectURI("/oauth/callback", "langflow", "phoenix", "192.168.1.10", 8320, true)
 	want := "https://langflow.phoenix.learningstack.online/oauth/callback"
 	if got != want {
-		t.Errorf("BuildRedirectURI = %q, want %q", got, want)
+		t.Errorf("BuildRedirectURI tunneled = %q, want %q", got, want)
+	}
+
+	// Local.
+	got = BuildRedirectURI("/oauth/callback", "langflow", "phoenix", "192.168.1.10", 8320, false)
+	want = "http://192.168.1.10:8320/oauth/callback"
+	if got != want {
+		t.Errorf("BuildRedirectURI local = %q, want %q", got, want)
 	}
 }

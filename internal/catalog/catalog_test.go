@@ -53,7 +53,7 @@ depends_on:
   - dex
 oidc:
   client_id: langflow
-  redirect_uri_template: "https://{app_id}.{school_slug}.learningstack.online/oauth/callback"
+  redirect_path: /oauth/callback
 secrets:
   - key: LANGFLOW_DB_PASSWORD
     generate: password
@@ -70,7 +70,8 @@ post_install:
   messages:
     - "Langflow läuft unter Port 8320"
   secrets_to_show:
-    - LANGFLOW_DB_PASSWORD
+    - key: LANGFLOW_DB_PASSWORD
+      label: Datenbank-Passwort
 `
 
 func withTempDir(t *testing.T) {
