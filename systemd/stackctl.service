@@ -1,0 +1,22 @@
+# /etc/systemd/system/stackctl.service
+# Installed by scripts/install.sh — do not edit manually.
+
+[Unit]
+Description=stackctl – learningstack control plane
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=learningstack
+Group=learningstack
+SupplementaryGroups=docker
+ExecStart=/opt/stackctl/stackctl web --host 0.0.0.0 --port 8090
+Restart=on-failure
+RestartSec=3
+# Self-update: stackctl replaces its own binary and restarts via systemctl.
+# No NoNewPrivileges because docker CLI may need it.
+
+[Install]
+WantedBy=multi-user.target
