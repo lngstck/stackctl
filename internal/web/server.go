@@ -131,8 +131,7 @@ func (s *Server) routes() {
 
 	// System (ready + auth).
 	s.mux.HandleFunc("GET /system", s.requireAuth(s.handleSystem))
-
-	// API endpoints (ready + auth).
+	s.mux.HandleFunc("POST /system/update", s.requireAuth(s.handleSystemUpdate))
 	s.mux.HandleFunc("POST /system/catalog/sync", s.requireAuth(s.handleCatalogSync))
 
 	// Server IP detection (no auth — used in setup).

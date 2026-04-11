@@ -1,9 +1,71 @@
 {{define "page"}}
 {{template "head" .}}
-{{template "sidebar-layout-start" .}}
+{{template "sidebar-layout-start" .PageData}}
 
 <h2 class="mb-2">System</h2>
-<p class="sub">Systemverwaltung wird in Schritt 10 implementiert.</p>
+
+{{if .SyncResult}}
+  <div role="alert" data-variant="success" class="mb-2">{{.SyncResult}}</div>
+{{end}}
+{{if .SyncError}}
+  <div role="alert" data-variant="danger" class="mb-2">{{.SyncError}}</div>
+{{end}}
+{{if .UpdateResult}}
+  <div role="alert" data-variant="success" class="mb-2">{{.UpdateResult}}</div>
+{{end}}
+{{if .UpdateError}}
+  <div role="alert" data-variant="danger" class="mb-2">{{.UpdateError}}</div>
+{{end}}
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+  {{/* Version + Update card */}}
+  <article class="card">
+    <h4 class="mb-1">stackctl</h4>
+    <table style="width:100%;" class="mb-2">
+      <tr>
+        <td class="sub">Installierte Version</td>
+        <td><strong>{{.CurrentVersion}}</strong></td>
+      </tr>
+      {{if .LatestVersion}}
+      <tr>
+        <td class="sub">Neueste Version</td>
+        <td>
+          {{.LatestVersion}}
+          {{if .UpdateAvailable}}
+            <span class="badge" style="margin-left:0.5rem;">Update verfuegbar</span>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+      {{if .CheckError}}
+      <tr>
+        <td class="sub">Update-Check</td>
+        <td style="color:var(--danger);">{{.CheckError}}</td>
+      </tr>
+      {{end}}
+    </table>
+
+    {{if .UpdateAvailable}}
+      <form method="POST" action="/system/update"
+            onsubmit="return confirm('Update auf {{.LatestVersion}} installieren? stackctl wird kurz neu gestartet.');">
+        <button type="submit">Update installieren</button>
+      </form>
+    {{else if not .CheckError}}
+      <p class="sub" style="font-size:0.85rem;">stackctl ist aktuell.</p>
+    {{end}}
+  </article>
+
+  {{/* Catalog sync card */}}
+  <article class="card">
+    <h4 class="mb-1">App-Katalog</h4>
+    <p class="sub mb-2" style="font-size:0.85rem;">
+      Katalog von <code>{{.SchoolSlug}}</code> synchronisieren, um neue Apps und Updates zu sehen.
+    </p>
+    <form method="POST" action="/system/catalog/sync">
+      <button type="submit" class="small">Katalog synchronisieren</button>
+    </form>
+  </article>
+</div>
 
 {{template "sidebar-layout-end" .}}
 {{template "foot" .}}
