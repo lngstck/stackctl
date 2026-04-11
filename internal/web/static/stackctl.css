@@ -1,0 +1,115 @@
+/* stackctl custom styles – supplements oat.min.css */
+
+.sub { color: color-mix(in srgb, var(--foreground) 62%, transparent); }
+.wordmark { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em; }
+
+/* Status dots */
+.status-dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+.status-dot.running  { background: var(--green, #22c55e); }
+.status-dot.stopped  { background: var(--red, #ef4444); }
+.status-dot.starting { background: var(--yellow, #eab308); }
+.status-dot.unknown  { background: color-mix(in srgb, var(--foreground) 30%, transparent); }
+
+/* App cards grid – subgrid for aligned footers */
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.app-card {
+  display: grid !important;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+}
+.app-card .card-header {
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.app-card .card-desc {
+  font-size: 0.9rem;
+}
+.app-card .card-meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+.app-card .card-footer {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+/* Tunnel URL badge */
+.tunnel-url {
+  font-size: 0.75rem;
+  font-family: monospace;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+/* Buttons: always show outline */
+button.ghost, .button.ghost,
+button[class*="ghost"], a[class*="ghost"] {
+  border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent) !important;
+}
+button.ghost:hover, .button.ghost:hover {
+  border-color: color-mix(in srgb, var(--foreground) 40%, transparent) !important;
+}
+button.small, .button.small, a.button.small {
+  border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+  border-radius: 6px;
+  padding: 0.25rem 0.75rem;
+}
+
+/* Topnav */
+.school-name {
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+[data-topnav] {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+/* Sidebar active */
+[data-sidebar] a[aria-current="page"] {
+  font-weight: 600;
+}
+
+/* Centered box (setup, login) */
+.centered-box {
+  max-width: 480px;
+  margin: 3rem auto;
+}
+
+/* Spacing helpers */
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 1.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.5rem; }
+.gap-1 { gap: 0.5rem; }
+.gap-2 { gap: 1rem; }
+
+/* Key display (tunnel settings) */
+.key-display {
+  font-family: monospace;
+  font-size: 0.85rem;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  word-break: break-all;
+  user-select: all;
+}

@@ -1,0 +1,59 @@
+{{define "head"}}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>stackctl</title>
+  <link rel="stylesheet" href="/static/oat.min.css">
+  <link rel="stylesheet" href="/static/stackctl.css">
+</head>
+<body>
+{{end}}
+
+{{define "foot"}}
+<script src="/static/oat.min.js"></script>
+{{block "scripts" .}}{{end}}
+</body>
+</html>
+{{end}}
+
+{{define "sidebar-layout-start"}}
+<div data-sidebar-layout>
+  <aside data-sidebar>
+    <div style="padding: 1rem 1rem 0.5rem;">
+      <span class="wordmark">learningstack</span>
+    </div>
+    <nav>
+      <ul class="unstyled">
+        <li><a href="/" {{activeNav .NavActive "dashboard"}}>Dashboard</a></li>
+        <li><a href="/apps" {{activeNav .NavActive "apps"}}>Apps</a></li>
+        <li><a href="/settings" {{activeNav .NavActive "settings"}}>Einstellungen</a></li>
+        <li><a href="/tunnel" {{activeNav .NavActive "tunnel"}}>Tunnel</a></li>
+        <li><a href="/system" {{activeNav .NavActive "system"}}>System</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main>
+    <nav data-topnav>
+      <div></div>
+      <div class="hstack gap-2">
+        <span class="school-name">{{.SchoolName}}</span>
+        <ot-dropdown>
+          <button class="ghost" popovertarget="user-menu">Admin &#x25BE;</button>
+          <div popover="auto" id="user-menu">
+            <a href="/logout" role="menuitem">Abmelden</a>
+          </div>
+        </ot-dropdown>
+      </div>
+    </nav>
+
+    <div style="padding:1.5rem">
+{{end}}
+
+{{define "sidebar-layout-end"}}
+    </div>
+  </main>
+</div>
+{{end}}

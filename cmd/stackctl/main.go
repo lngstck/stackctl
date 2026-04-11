@@ -9,7 +9,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
+
+	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/web"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".
@@ -52,9 +58,45 @@ func cmdWeb(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "stackctl %s: web stub\n", version)
-	fmt.Fprintf(stdout, "  host=%s port=%d dev=%t\n", *host, *port, *dev)
-	fmt.Fprintln(stdout, "  HTTP server not yet implemented (Anhang A Schritt 7).")
+	// Load or create config.
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("No existing config, using defaults: %v", err)
+		cfg = config.Default()
+	}
+
+	// Load state (empty if missing).
+	state, err := config.LoadState()
+	if err != nil {
+		log.Printf("No existing state, using empty: %v", err)
+		state = config.NewState()
+	}
+
+	// Build server options.
+	var opts []web.Option
+	if *dev {
+		// In dev mode, find the web package dir relative to the binary or CWD.
+		webDir := filepath.Join(paths.StackctlDir(), "internal", "web")
+		if _, err := os.Stat(webDir); os.IsNotExist(err) {
+			// Fallback: try relative to CWD (for development).
+			cwd, _ := os.Getwd()
+			webDir = filepath.Join(cwd, "internal", "web")
+		}
+		opts = append(opts, web.WithDevMode(webDir))
+		log.Printf("Dev mode: templates from %s", webDir)
+	}
+
+	srv, err := web.New(cfg, state, opts...)
+	if err != nil {
+		fmt.Fprintf(stderr, "stackctl web: %v\n", err)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "stackctl %s\n", version)
+	if err := srv.ListenAndServe(*host, *port); err != nil {
+		fmt.Fprintf(stderr, "stackctl web: %v\n", err)
+		return 1
+	}
 	return 0
 }
 
@@ -66,6 +108,6 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  version        Print version and exit")
-	fmt.Fprintln(w, "  web            Start the admin web UI (stub)")
+	fmt.Fprintln(w, "  web            Start the admin web UI")
 	fmt.Fprintln(w, "  help           Show this help")
 }

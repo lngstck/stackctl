@@ -1,0 +1,64 @@
+{{define "page"}}
+{{template "head" .}}
+
+<div class="centered-box">
+  <h1 class="mb-2" style="text-align:center;">
+    <span class="wordmark">learningstack</span>
+  </h1>
+
+  <article class="card">
+    <h3 class="mb-2">Registrierung</h3>
+    <p class="mb-2">Das Setup ist abgeschlossen. Dein Server muss jetzt beim Betreiber freigeschaltet werden.</p>
+
+    <div role="alert" data-variant="warning" class="mb-2">
+      <strong>Naechster Schritt:</strong> Sende die Registrierungsdatei an
+      <code>registrierung@learningstack.online</code>.
+    </div>
+
+    <div class="mb-2">
+      <a href="/setup/register/download" class="button" style="width:100%;text-align:center;">
+        Registrierungsdatei herunterladen
+      </a>
+    </div>
+
+    <p class="sub mb-2" style="font-size:0.85rem;">
+      Oder per E-Mail:
+      <a href="mailto:registrierung@learningstack.online?subject=stackctl%20registrierung%20{{.SchoolSlug}}">
+        registrierung@learningstack.online
+      </a>
+    </p>
+
+    <hr class="mb-2">
+
+    <h4 class="mb-1">Status</h4>
+    <div id="poll-status">
+      <p class="sub">Warte auf Freischaltung…</p>
+    </div>
+  </article>
+</div>
+
+<script>
+(function() {
+  const statusEl = document.getElementById('poll-status');
+  async function poll() {
+    try {
+      const resp = await fetch('/setup/status');
+      const data = await resp.json();
+      if (data.status === 'ready') {
+        window.location.href = '/login';
+        return;
+      }
+      statusEl.innerHTML =
+        '<p class="sub">' +
+        'Dex-Tunnel: ' + (data.dex_tunnel ? '✓' : '✗') + '<br>' +
+        'OIDC-Client: ' + (data.oidc_client ? '✓' : '✗') +
+        '</p>';
+    } catch(e) {}
+    setTimeout(poll, 30000);
+  }
+  setTimeout(poll, 5000);
+})();
+</script>
+
+{{template "foot" .}}
+{{end}}

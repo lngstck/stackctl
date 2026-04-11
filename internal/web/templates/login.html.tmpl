@@ -1,0 +1,26 @@
+{{define "page"}}
+{{template "head" .}}
+
+<div class="centered-box">
+  <h1 class="mb-2" style="text-align:center;">
+    <span class="wordmark">learningstack</span>
+  </h1>
+
+  {{if .Error}}
+  <div role="alert" data-variant="danger" class="mb-2">{{.Error}}</div>
+  {{end}}
+
+  <article class="card">
+    <form method="post" action="/login">
+      <label data-field class="mb-2">
+        Admin-Passwort
+        <input type="password" name="password" autofocus required>
+      </label>
+
+      <button type="submit" style="width:100%;">Anmelden</button>
+    </form>
+  </article>
+</div>
+
+{{template "foot" .}}
+{{end}}

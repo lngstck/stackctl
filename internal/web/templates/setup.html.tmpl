@@ -1,0 +1,182 @@
+{{define "page"}}
+{{template "head" .}}
+
+<div class="centered-box">
+  <h1 class="mb-2" style="text-align:center;">
+    <span class="wordmark">learningstack</span>
+  </h1>
+  <p class="sub mb-3" style="text-align:center;">Ersteinrichtung – bitte alle Felder ausfuellen.</p>
+
+  {{if .Error}}
+  <div role="alert" data-variant="danger" class="mb-2">{{.Error}}</div>
+  {{end}}
+
+  <article class="card">
+    <form method="post" action="/setup">
+      <h3 class="mb-2">Schule</h3>
+
+      <label data-field class="mb-1">
+        Schulname
+        <input type="text" name="school_name" value="{{.SchoolName}}" placeholder="z.B. Gymnasium Musterstadt" required id="school-name">
+      </label>
+
+      <label data-field class="mb-1">
+        Schul-Slug
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <input type="text" name="school_slug" value="{{.SchoolSlug}}" placeholder="aus Schulname ableiten" id="slug-input" style="flex:1;">
+          <button type="button" class="ghost small" id="derive-slug-btn" title="Slug aus Schulname ableiten">Ableiten</button>
+        </div>
+        <span class="hint">Kurzform fuer URLs (a-z, 0-9, Bindestrich, max. 10 Zeichen). Wird in Subdomains verwendet: <code>auth.<strong>slug</strong>.learningstack.online</code></span>
+      </label>
+
+      <label data-field class="mb-1">
+        Server-IP / Hostname
+        <input type="text" name="server_domain" value="{{.ServerDomain}}" placeholder="wird automatisch erkannt" id="server-ip">
+        <span class="hint">Automatisch erkannt. LAN-Adresse dieses Servers.</span>
+      </label>
+
+      <label data-field class="mb-2">
+        Kontakt-E-Mail
+        <input type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="admin@schule.de">
+        <span class="hint">Fuer Rueckfragen bei der Registrierung.</span>
+      </label>
+
+      <h3 class="mb-2">Admin-Zugang</h3>
+
+      <label data-field class="mb-1">
+        Admin-Passwort
+        <input type="password" name="password" minlength="8" required id="password-input">
+      </label>
+
+      <label data-field class="mb-1">
+        Passwort wiederholen
+        <input type="password" name="password_confirm" minlength="8" required id="password-confirm">
+      </label>
+
+      <div class="mb-2" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <button type="button" class="ghost small" id="gen-password-btn">Generieren</button>
+        <button type="button" class="ghost small" id="copy-password-btn" style="display:none;">Kopieren</button>
+        <button type="button" class="ghost small" id="show-password-btn" style="display:none;">Anzeigen</button>
+        <span class="sub" style="font-size:0.8rem;display:none;" id="password-hint"></span>
+      </div>
+
+      <h3 class="mb-2">KI-Einstellungen <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>
+
+      <label data-field class="mb-1">
+        LLM-Endpunkt
+        <input type="text" name="llm_endpoint" value="{{.LLMEndpoint}}" placeholder="OpenAI-kompatibler Endpunkt">
+      </label>
+
+      <label data-field class="mb-1">
+        LLM-API-Key
+        <input type="password" name="llm_api_key" value="{{.LLMAPIKey}}" placeholder="sk-...">
+      </label>
+
+      <button type="submit" class="mt-2" style="width:100%;">Setup abschliessen</button>
+    </form>
+  </article>
+</div>
+
+<script>
+(function() {
+  // --- Slug derivation ---
+  const nameInput = document.getElementById('school-name');
+  const slugInput = document.getElementById('slug-input');
+  const deriveBtn = document.getElementById('derive-slug-btn');
+
+  deriveBtn.addEventListener('click', function() {
+    const name = nameInput.value.trim();
+    if (!name) { slugInput.focus(); return; }
+    slugInput.value = deriveSlug(name);
+  });
+
+  function deriveSlug(name) {
+    // Lowercase + umlaut replacement.
+    name = name.toLowerCase();
+    const map = {'ä':'ae','ö':'oe','ü':'ue','ß':'ss'};
+    name = name.replace(/[äöüß]/g, c => map[c] || c);
+
+    // Split into words, keep only a-z0-9.
+    const words = name.split(/[\s\-_.,]+/)
+      .map(w => w.replace(/[^a-z0-9]/g, ''))
+      .filter(w => w.length > 0);
+
+    // Drop generic school-type words.
+    const skip = new Set([
+      'schule','grundschule','oberschule','realschule','hauptschule',
+      'gesamtschule','gymnasium','igs','bbs','fos','kgs','ganztagsschule',
+      'der','die','das','und','von','zu','am','an','im','in','fuer','for'
+    ]);
+    let meaningful = words.filter(w => !skip.has(w));
+
+    // Fallback: if everything was filtered, use first non-generic word.
+    if (meaningful.length === 0) meaningful = words.slice(0, 1);
+
+    // Join with dashes, truncate to 10 chars at word boundary.
+    let slug = '';
+    for (const w of meaningful) {
+      const next = slug ? slug + '-' + w : w;
+      if (next.length > 10) break;
+      slug = next;
+    }
+
+    // If first word alone is >10, hard-truncate.
+    if (!slug && meaningful.length > 0) {
+      slug = meaningful[0].substring(0, 10);
+    }
+
+    return slug.replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
+  }
+
+  // --- Password generator ---
+  const genBtn = document.getElementById('gen-password-btn');
+  const copyBtn = document.getElementById('copy-password-btn');
+  const showBtn = document.getElementById('show-password-btn');
+  const pwInput = document.getElementById('password-input');
+  const pwConfirm = document.getElementById('password-confirm');
+  const pwHint = document.getElementById('password-hint');
+  let generatedPW = '';
+
+  genBtn.addEventListener('click', function() {
+    generatedPW = generatePassword(20);
+    pwInput.type = 'password';
+    pwConfirm.type = 'password';
+    pwInput.value = generatedPW;
+    pwConfirm.value = generatedPW;
+    copyBtn.style.display = '';
+    showBtn.style.display = '';
+    showBtn.textContent = 'Anzeigen';
+    pwHint.textContent = 'Passwort generiert – bitte kopieren und sicher aufbewahren.';
+    pwHint.style.display = '';
+  });
+
+  copyBtn.addEventListener('click', function() {
+    navigator.clipboard.writeText(generatedPW).then(function() {
+      pwHint.textContent = 'Kopiert!';
+      copyBtn.textContent = 'Kopiert ✓';
+      setTimeout(function() {
+        copyBtn.textContent = 'Kopieren';
+      }, 2000);
+    });
+  });
+
+  showBtn.addEventListener('click', function() {
+    const showing = pwInput.type === 'text';
+    pwInput.type = showing ? 'password' : 'text';
+    pwConfirm.type = showing ? 'password' : 'text';
+    showBtn.textContent = showing ? 'Anzeigen' : 'Verbergen';
+  });
+
+  function generatePassword(len) {
+    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%&*+-=?';
+    const arr = new Uint8Array(len);
+    crypto.getRandomValues(arr);
+    let pw = '';
+    for (let i = 0; i < len; i++) pw += chars[arr[i] % chars.length];
+    return pw;
+  }
+})();
+</script>
+
+{{template "foot" .}}
+{{end}}

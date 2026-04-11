@@ -1,0 +1,53 @@
+{{define "page"}}
+{{template "head" .}}
+
+{{template "sidebar-layout-start" .PageData}}
+
+<h2 class="mb-2">Dashboard</h2>
+
+{{if not .Apps}}
+<div role="alert">
+  Noch keine Apps installiert. <a href="/apps">Zum App-Katalog</a>
+</div>
+{{else}}
+<div class="app-grid">
+  {{range .Apps}}
+  <article class="card app-card">
+    <div class="card-header">
+      <span class="status-dot {{.Status}}"></span>
+      <strong>{{.Name}}</strong>
+      {{if .Category}}<span class="badge" style="margin-left:auto">{{.Category}}</span>{{end}}
+    </div>
+    <p class="sub card-desc">{{.Description}}</p>
+    <div class="card-meta">
+      <div class="sub" style="font-size:0.8rem;">Port {{.Port}} · v{{.Version}}</div>
+      {{if .TunnelEnabled}}
+      <span class="tunnel-url" style="margin-top:0.35rem;display:inline-block;">{{.TunnelSubdomain}}</span>
+      {{end}}
+    </div>
+    <div class="card-footer">
+      {{if .IsMandatory}}
+        {{if .TunnelEnabled}}
+        <span class="sub" style="font-size:0.8rem;">Pflicht-Container</span>
+        {{end}}
+      {{else}}
+        <a href="/apps/{{.ID}}" class="button small">Details</a>
+        {{if eq .Status "running"}}
+        <form method="post" action="/apps/{{.ID}}/stop" style="display:inline">
+          <button class="ghost small" data-variant="danger">Stop</button>
+        </form>
+        {{else}}
+        <form method="post" action="/apps/{{.ID}}/start" style="display:inline">
+          <button class="ghost small">Start</button>
+        </form>
+        {{end}}
+      {{end}}
+    </div>
+  </article>
+  {{end}}
+</div>
+{{end}}
+
+{{template "sidebar-layout-end" .PageData}}
+{{template "foot" .}}
+{{end}}
