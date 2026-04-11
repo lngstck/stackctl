@@ -9,7 +9,7 @@ DIST               := dist
 LEARNINGSTACK_DEVBOX ?= learningstack-local
 
 .PHONY: all build build-linux-amd64 build-linux-arm64 build-all dev run \
-        test vet fmt clean deploy-devbox version
+        test vet fmt clean deploy-devbox release version
 
 all: build
 
@@ -60,6 +60,18 @@ deploy-devbox:
 	GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(DIST)/stackctl-dev $(PKG)
 	rsync -avz $(DIST)/stackctl-dev $(LEARNINGSTACK_DEVBOX):/tmp/stackctl
 	ssh $(LEARNINGSTACK_DEVBOX) 'sudo mv /tmp/stackctl /opt/stackctl/stackctl && sudo systemctl restart stackctl'
+
+## release: Tag setzen, Linux-Binaries bauen, GitHub Release erstellen
+## Nutzung: make release TAG=v0.1.0
+release: build-all
+	@test -n "$(TAG)" || (echo "Nutzung: make release TAG=v0.1.0" && exit 1)
+	git tag -a $(TAG) -m "Release $(TAG)"
+	git push origin $(TAG)
+	gh release create $(TAG) \
+		$(DIST)/stackctl-linux-amd64 \
+		$(DIST)/stackctl-linux-arm64 \
+		--title "$(TAG)" \
+		--generate-notes
 
 ## version: aktuelle Versionskennung ausgeben
 version:
