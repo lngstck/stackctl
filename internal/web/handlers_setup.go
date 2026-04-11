@@ -139,8 +139,9 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 
 // registerData is the template context for register.html.tmpl.
 type registerData struct {
-	SchoolSlug  string
+	SchoolSlug   string
 	ContactEmail string
+	DevMode      bool
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +153,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	data := registerData{
 		SchoolSlug:   s.cfg.School.Slug,
 		ContactEmail: s.cfg.School.ContactEmail,
+		DevMode:      s.devMode,
 	}
 	s.render(w, "register.html.tmpl", data)
 }
@@ -163,6 +165,22 @@ func (s *Server) handleRegisterDownload(w http.ResponseWriter, r *http.Request) 
 	}
 	// TODO: Serve the age-encrypted registration package.
 	http.Error(w, "Registrierungspaket nicht implementiert", http.StatusNotImplemented)
+}
+
+func (s *Server) handleRegisterSkip(w http.ResponseWriter, r *http.Request) {
+	if !s.devMode {
+		http.Error(w, "Nur im Dev-Modus verfuegbar", http.StatusForbidden)
+		return
+	}
+	if s.cfg.SetupState != config.SetupStateAwaitingRegistration {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	s.cfg.SetupState = config.SetupStateReady
+	if err := s.cfg.Save(); err != nil {
+		log.Printf("web: skip registration save: %v", err)
+	}
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {

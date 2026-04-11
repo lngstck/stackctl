@@ -1,9 +1,127 @@
 {{define "page"}}
 {{template "head" .}}
-{{template "sidebar-layout-start" .}}
+{{template "sidebar-layout-start" .PageData}}
 
 <h2 class="mb-2">Tunnel</h2>
-<p class="sub">Tunnel-Verwaltung wird in Schritt 9 implementiert.</p>
+
+{{if .TestDone}}
+  {{if eq .TestResult "ok"}}
+    <div role="alert" data-variant="success" class="mb-2">SSH-Verbindung erfolgreich.</div>
+  {{else}}
+    <div role="alert" data-variant="danger" class="mb-2">{{.TestResult}}</div>
+  {{end}}
+{{end}}
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+  {{/* SSH Key card */}}
+  <article class="card">
+    <h4 class="mb-1">SSH-Key</h4>
+    {{if .KeyExists}}
+      <div class="key-display mb-1">{{.SSHPubKey}}</div>
+      <p class="sub" style="font-size:0.85rem;">
+        Ziel: <code>{{.SSHHost}}:{{.SSHPort}}</code>
+      </p>
+    {{else}}
+      <div role="alert" data-variant="warning">
+        Kein SSH-Key vorhanden. Der Key wird beim Setup automatisch erzeugt.
+      </div>
+    {{end}}
+  </article>
+
+  {{/* Connection test card */}}
+  <article class="card">
+    <h4 class="mb-1">Verbindungstest</h4>
+    <p class="sub mb-2" style="font-size:0.85rem;">
+      Testet den SSH-Handshake zu <code>{{.SSHHost}}</code>.
+    </p>
+    <form method="POST" action="/tunnel/test">
+      <button type="submit" class="small">Verbindung testen</button>
+    </form>
+  </article>
+</div>
+
+{{/* Dex tunnel */}}
+<h3 class="mb-1">Dex-Tunnel (immer aktiv)</h3>
+<table class="mb-3" style="width:100%;">
+  <thead>
+    <tr><th>Dienst</th><th>Subdomain</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Dex (OIDC)</td>
+      <td><code>{{.DexSubdomain}}</code></td>
+      <td>
+        <span class="status-dot {{.DexTunnelStatus}}"></span>
+        {{if eq .DexTunnelStatus "running"}}Aktiv
+        {{else if eq .DexTunnelStatus "error"}}Fehler (mehrfach abgestuerzt)
+        {{else}}Gestoppt
+        {{end}}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+{{/* App tunnels */}}
+<h3 class="mb-1">App-Tunnel</h3>
+
+{{if .Apps}}
+<table style="width:100%;">
+  <thead>
+    <tr>
+      <th>App</th>
+      <th>Port</th>
+      <th>Oeffentliche URL</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Apps}}
+    <tr>
+      <td>
+        {{.Name}}
+        {{if and .HasOIDC (not .TunnelEnabled)}}
+          <span title="OIDC-App ohne Tunnel — Login funktioniert nicht" style="color:var(--danger);">&#9888;</span>
+        {{end}}
+      </td>
+      <td>{{.Port}}</td>
+      <td>
+        {{if .TunnelEnabled}}
+          <a href="https://{{.TunnelSubdomain}}" target="_blank" class="tunnel-url">{{.TunnelSubdomain}}</a>
+        {{else}}
+          <span class="sub">—</span>
+        {{end}}
+      </td>
+      <td>
+        {{if .TunnelEnabled}}
+          <span class="status-dot {{.TunnelStatus}}"></span>
+          {{if eq .TunnelStatus "running"}}Aktiv
+          {{else if eq .TunnelStatus "error"}}Fehler
+          {{else}}Gestoppt
+          {{end}}
+        {{else}}
+          <span class="sub">Aus</span>
+        {{end}}
+      </td>
+      <td style="text-align:right;">
+        {{if .TunnelEnabled}}
+          <form method="POST" action="/apps/{{.ID}}/tunnel/disable" style="display:inline;"
+                onsubmit="return confirm('Tunnel deaktivieren?{{if .HasOIDC}} OIDC-Login funktioniert dann nicht mehr.{{end}}');">
+            <button type="submit" class="small ghost">Deaktivieren</button>
+          </form>
+        {{else}}
+          <form method="POST" action="/apps/{{.ID}}/tunnel/enable" style="display:inline;">
+            <button type="submit" class="small">Aktivieren</button>
+          </form>
+        {{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+  <p class="sub">Keine Apps installiert.</p>
+{{end}}
 
 {{template "sidebar-layout-end" .}}
 {{template "foot" .}}

@@ -1,0 +1,62 @@
+{{define "page"}}
+{{template "head" .}}
+{{template "sidebar-layout-start" .PageData}}
+
+<a href="/apps" class="sub" style="text-decoration:none;">&larr; Apps</a>
+
+<h2 class="mt-2 mb-2">{{.Name}} installieren</h2>
+
+<article class="card mb-2">
+  <p class="sub mb-2">{{.Description}} · Version {{.Version}} · Kategorie: {{.Category}}</p>
+
+  {{if .HasOIDC}}
+  <div role="alert" class="mb-2" style="font-size:0.85rem;">
+    Diese App nutzt OIDC-Login. Nach der Installation muss der Tunnel aktiviert werden.
+  </div>
+  {{end}}
+
+  {{if .Error}}
+  <div role="alert" data-variant="danger" class="mb-2">{{.Error}}</div>
+  {{end}}
+
+  <form method="post" action="/apps/{{.ID}}/install">
+    {{if .Prompts}}
+    <h4 class="mb-1">Einstellungen</h4>
+
+    {{range .Prompts}}
+    <label data-field class="mb-1">
+      {{.Question}}
+      {{if .Options}}
+      <select name="{{.Key}}">
+        {{$val := index $.Values .Key}}
+        {{range .Options}}
+        <option value="{{.}}" {{if eq . $val}}selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+      {{else}}
+      <input type="text" name="{{.Key}}"
+             value="{{index $.Values .Key}}"
+             placeholder="{{.Default}}"
+             {{if .Required}}required{{end}}>
+      {{end}}
+      {{if .Hint}}<span class="hint">{{.Hint}}</span>{{end}}
+    </label>
+    {{end}}
+    {{end}}
+
+    {{if or .Secrets .AdminPwEnv}}
+    <h4 class="mb-1 mt-2">Automatisch generiert</h4>
+    <p class="sub mb-2" style="font-size:0.85rem;">
+      {{if .Secrets}}Folgende Secrets werden automatisch erzeugt:
+      {{range $i, $s := .Secrets}}{{if $i}}, {{end}}{{$s.Key}}{{end}}.{{end}}
+      {{if .AdminPwEnv}} Das Admin-Passwort wird aus deinem stackctl-Passwort uebernommen.{{end}}
+    </p>
+    {{end}}
+
+    <button type="submit" style="width:100%;">Installieren</button>
+  </form>
+</article>
+
+{{template "sidebar-layout-end" .PageData}}
+{{template "foot" .}}
+{{end}}

@@ -34,6 +34,15 @@
     <div id="poll-status">
       <p class="sub">Warte auf Freischaltung…</p>
     </div>
+
+    {{if .DevMode}}
+    <hr class="mb-2">
+    <form method="POST" action="/setup/register/skip">
+      <button type="submit" class="ghost" style="width:100%;text-align:center;color:var(--danger);">
+        Dev-Modus: Registrierung ueberspringen →
+      </button>
+    </form>
+    {{end}}
   </article>
 </div>
 

@@ -1,7 +1,7 @@
 /* stackctl custom styles – supplements oat.min.css */
 
 .sub { color: color-mix(in srgb, var(--foreground) 62%, transparent); }
-.wordmark { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em; }
+.wordmark { font-weight: 700; font-size: 1.6rem; letter-spacing: -0.02em; }
 
 /* Status dots */
 .status-dot {
@@ -78,9 +78,16 @@ button.small, .button.small, a.button.small {
 }
 [data-topnav] {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
   gap: 1.5rem;
+}
+[data-topnav] > :last-child {
+  margin-left: auto;
+}
+
+/* Reduce default main padding so topnav isn't too tall */
+[data-sidebar-layout] > main {
+  padding-top: 0;
 }
 
 /* Sidebar active */

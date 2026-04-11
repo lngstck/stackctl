@@ -21,7 +21,7 @@
 {{define "sidebar-layout-start"}}
 <div data-sidebar-layout>
   <aside data-sidebar>
-    <div style="padding: 1rem 1rem 0.5rem;">
+    <div style="padding: 0.5rem 1rem 0.5rem;">
       <span class="wordmark">learningstack</span>
     </div>
     <nav>
@@ -37,7 +37,7 @@
 
   <main>
     <nav data-topnav>
-      <div></div>
+      <button data-sidebar-toggle aria-label="Menue" class="ghost">&#9776;</button>
       <div class="hstack gap-2">
         <span class="school-name">{{.SchoolName}}</span>
         <ot-dropdown>

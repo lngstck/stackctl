@@ -47,7 +47,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	password := r.FormValue("password")
-	if !secrets.VerifyPassword(password, s.cfg.Admin.PasswordHash) {
+	if !secrets.VerifyPassword(s.cfg.Admin.PasswordHash, password) {
 		s.limiter.recordFailure(ip)
 		s.render(w, "login.html.tmpl", loginData{
 			Error: "Falsches Passwort.",

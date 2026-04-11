@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/tunnel"
 )
 
 //go:embed static/*
@@ -28,6 +29,7 @@ type Server struct {
 	sessions  *sessionStore
 	limiter   *rateLimiter
 	pages     map[string]*template.Template // page name → compiled template
+	tunnelMgr *tunnel.Manager
 	devMode   bool
 	devDir    string // path to internal/web/ for dev-mode FS reload
 	mux       *http.ServeMux
@@ -35,6 +37,12 @@ type Server struct {
 
 // Option configures the server.
 type Option func(*Server)
+
+// WithTunnelManager attaches a tunnel.Manager so the web UI can start/stop
+// tunnels and display their status.
+func WithTunnelManager(mgr *tunnel.Manager) Option {
+	return func(s *Server) { s.tunnelMgr = mgr }
+}
 
 // WithDevMode enables filesystem-based template/asset loading for live reload.
 func WithDevMode(webDir string) Option {
@@ -92,6 +100,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /setup/register", s.handleRegister)
 	s.mux.HandleFunc("GET /setup/register/download", s.handleRegisterDownload)
 	s.mux.HandleFunc("GET /setup/status", s.handleSetupStatus)
+	s.mux.HandleFunc("POST /setup/register/skip", s.handleRegisterSkip)
 
 	// Login/Logout (ready state).
 	s.mux.HandleFunc("GET /login", s.handleLogin)
@@ -101,8 +110,14 @@ func (s *Server) routes() {
 	// Dashboard (ready + auth).
 	s.mux.HandleFunc("GET /{$}", s.requireAuth(s.handleDashboard))
 
-	// Apps (ready + auth) — Schritt 8.
+	// Apps (ready + auth).
 	s.mux.HandleFunc("GET /apps", s.requireAuth(s.handleApps))
+	s.mux.HandleFunc("GET /apps/{id}", s.requireAuth(s.handleAppDetail))
+	s.mux.HandleFunc("GET /apps/{id}/install", s.requireAuth(s.handleAppInstallForm))
+	s.mux.HandleFunc("POST /apps/{id}/install", s.requireAuth(s.handleAppInstallPost))
+	s.mux.HandleFunc("POST /apps/{id}/remove", s.requireAuth(s.handleAppRemove))
+	s.mux.HandleFunc("POST /apps/{id}/start", s.requireAuth(s.handleAppStart))
+	s.mux.HandleFunc("POST /apps/{id}/stop", s.requireAuth(s.handleAppStop))
 
 	// Settings (ready + auth).
 	s.mux.HandleFunc("GET /settings", s.requireAuth(s.handleSettings))
@@ -110,6 +125,9 @@ func (s *Server) routes() {
 
 	// Tunnel (ready + auth).
 	s.mux.HandleFunc("GET /tunnel", s.requireAuth(s.handleTunnel))
+	s.mux.HandleFunc("POST /tunnel/test", s.requireAuth(s.handleTunnelTest))
+	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.requireAuth(s.handleAppTunnelEnable))
+	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.requireAuth(s.handleAppTunnelDisable))
 
 	// System (ready + auth).
 	s.mux.HandleFunc("GET /system", s.requireAuth(s.handleSystem))

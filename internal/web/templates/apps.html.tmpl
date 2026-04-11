@@ -1,10 +1,92 @@
 {{define "page"}}
 {{template "head" .}}
-{{template "sidebar-layout-start" .}}
+{{template "sidebar-layout-start" .PageData}}
 
-<h2 class="mb-2">Apps</h2>
-<p class="sub">App-Katalog wird in Schritt 8 implementiert.</p>
+<div style="display:flex;justify-content:space-between;align-items:center;" class="mb-2">
+  <h2>Apps</h2>
+  <form method="post" action="/system/catalog/sync" style="display:inline">
+    <button class="ghost small">Katalog aktualisieren</button>
+  </form>
+</div>
 
-{{template "sidebar-layout-end" .}}
+{{if .Message}}
+<div role="alert" data-variant="{{if .IsError}}danger{{else}}success{{end}}" class="mb-2">{{.Message}}</div>
+{{end}}
+
+<ot-tabs>
+  <div role="tablist">
+    <button role="tab" aria-selected="true">Alle ({{len .All}})</button>
+    <button role="tab">Installiert ({{len .Installed}})</button>
+    <button role="tab">Verfuegbar ({{len .Available}})</button>
+  </div>
+
+  <!-- Alle -->
+  <div role="tabpanel">
+    {{if not .All}}
+    <p class="sub mt-2">Katalog ist leer. Bitte zuerst synchronisieren.</p>
+    {{else}}
+    <div class="app-grid mt-2">
+      {{range .All}}
+      {{template "app-card" .}}
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+
+  <!-- Installiert -->
+  <div role="tabpanel">
+    {{if not .Installed}}
+    <p class="sub mt-2">Noch keine Apps installiert.</p>
+    {{else}}
+    <div class="app-grid mt-2">
+      {{range .Installed}}
+      {{template "app-card" .}}
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+
+  <!-- Verfuegbar -->
+  <div role="tabpanel">
+    {{if not .Available}}
+    <p class="sub mt-2">Alle Apps sind bereits installiert.</p>
+    {{else}}
+    <div class="app-grid mt-2">
+      {{range .Available}}
+      {{template "app-card" .}}
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</ot-tabs>
+
+{{template "sidebar-layout-end" .PageData}}
 {{template "foot" .}}
+{{end}}
+
+{{define "app-card"}}
+<article class="card app-card">
+  <div class="card-header">
+    {{if .IsInstalled}}
+    <span class="status-dot {{.Status}}"></span>
+    {{else}}
+    <span class="status-dot unknown"></span>
+    {{end}}
+    <strong>{{.Name}}</strong>
+    <span class="badge" style="margin-left:auto">{{.Category}}</span>
+  </div>
+  <p class="sub card-desc">{{.Description}}</p>
+  <div class="card-meta">
+    {{if .IsInstalled}}
+    <div class="sub" style="font-size:0.8rem;">v{{.Version}} installiert</div>
+    {{end}}
+  </div>
+  <div class="card-footer">
+    {{if .IsInstalled}}
+    <a href="/apps/{{.ID}}" class="button small">Details</a>
+    {{else}}
+    <a href="/apps/{{.ID}}/install" class="button small">Installieren</a>
+    {{end}}
+  </div>
+</article>
 {{end}}

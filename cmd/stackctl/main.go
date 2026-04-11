@@ -15,6 +15,7 @@ import (
 
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/tunnel"
 	"github.com/lngstck/stackctl/internal/web"
 )
 
@@ -72,8 +73,22 @@ func cmdWeb(args []string, stdout, stderr io.Writer) int {
 		state = config.NewState()
 	}
 
+	// Tunnel manager.
+	tunnelMgr := tunnel.New(cfg, state)
+	if cfg.SetupState == config.SetupStateReady {
+		if err := tunnel.EnsureKey(); err != nil {
+			log.Printf("tunnel: ensure key: %v", err)
+		}
+		if err := tunnelMgr.EnsureDexTunnel(); err != nil {
+			log.Printf("tunnel: dex tunnel: %v", err)
+		}
+		tunnelMgr.RestoreAppTunnels()
+		tunnelMgr.StartMonitor()
+	}
+
 	// Build server options.
 	var opts []web.Option
+	opts = append(opts, web.WithTunnelManager(tunnelMgr))
 	if *dev {
 		// In dev mode, find the web package dir relative to the binary or CWD.
 		webDir := filepath.Join(paths.StackctlDir(), "internal", "web")

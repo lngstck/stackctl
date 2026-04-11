@@ -11,10 +11,6 @@ import (
 // Stub handlers for pages that will be fully implemented in later steps.
 // They render real templates but with minimal/placeholder data.
 
-func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "apps.html.tmpl", s.pageData("apps"))
-}
-
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "settings.html.tmpl", s.pageData("settings"))
 }
@@ -22,10 +18,6 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 	// TODO: Schritt 8
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
-}
-
-func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "tunnel.html.tmpl", s.pageData("tunnel"))
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {

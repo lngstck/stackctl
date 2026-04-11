@@ -1,0 +1,120 @@
+{{define "page"}}
+{{template "head" .}}
+{{template "sidebar-layout-start" .PageData}}
+
+<div class="mb-2">
+  <a href="/apps" class="sub" style="text-decoration:none;">&larr; Apps</a>
+</div>
+
+<div style="display:flex;align-items:center;gap:0.75rem;" class="mb-3">
+  <span class="status-dot {{.Status}}"></span>
+  <h2 style="margin:0">{{.Name}}</h2>
+  {{if .Category}}<span class="badge">{{.Category}}</span>{{end}}
+  <span class="sub" style="font-size:0.85rem">v{{.Version}}</span>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+  <!-- Left: Info -->
+  <div>
+    <article class="card mb-2">
+      <h4 class="mb-1">Zugriff</h4>
+      <table>
+        <tbody>
+          <tr><td class="sub">Lokal</td><td><code>{{.ServerDomain}}:{{.Port}}</code></td></tr>
+          {{if .TunnelEnabled}}
+          <tr><td class="sub">Oeffentlich</td><td><a href="https://{{.TunnelSubdomain}}" target="_blank">{{.TunnelSubdomain}}</a></td></tr>
+          {{end}}
+          <tr><td class="sub">Container</td><td><code>{{.ContainerName}}</code></td></tr>
+          <tr><td class="sub">Installiert</td><td>{{.InstalledAt}}</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    {{if .HasOIDC}}
+    <article class="card mb-2">
+      <h4 class="mb-1">OIDC</h4>
+      <table>
+        <tbody>
+          <tr><td class="sub">Client-ID</td><td><code>{{.OIDCClientID}}</code></td></tr>
+          <tr><td class="sub">Redirect-URI</td><td style="font-size:0.8rem;word-break:break-all;"><code>{{.OIDCRedirectURI}}</code></td></tr>
+        </tbody>
+      </table>
+      {{if not .TunnelEnabled}}
+      <div role="alert" data-variant="warning" class="mt-2" style="font-size:0.85rem;">
+        Diese App nutzt OIDC, ist aber nicht getunnelt. Login funktioniert nur mit aktivem Tunnel.
+      </div>
+      {{end}}
+    </article>
+    {{end}}
+
+    {{if or .Homepage .Docs}}
+    <article class="card">
+      <h4 class="mb-1">Links</h4>
+      <div style="display:flex;gap:1rem;">
+        {{if .Homepage}}<a href="{{.Homepage}}" target="_blank">Homepage</a>{{end}}
+        {{if .Docs}}<a href="{{.Docs}}" target="_blank">Docs</a>{{end}}
+      </div>
+    </article>
+    {{end}}
+  </div>
+
+  <!-- Right: Actions -->
+  <div>
+    {{if .HasOIDC}}
+    <article class="card mb-2">
+      <h4 class="mb-1">Tunnel</h4>
+      {{if .TunnelEnabled}}
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <span class="status-dot running"></span>
+        <span>Aktiv</span>
+        <span class="tunnel-url" style="margin-left:auto;">{{.TunnelSubdomain}}</span>
+      </div>
+      <form method="post" action="/apps/{{.ID}}/tunnel/disable" class="mt-2">
+        <button class="ghost small" data-variant="danger">Tunnel deaktivieren</button>
+      </form>
+      {{else}}
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <span class="status-dot stopped"></span>
+        <span>Inaktiv</span>
+      </div>
+      <form method="post" action="/apps/{{.ID}}/tunnel/enable" class="mt-2">
+        <button class="ghost small">Tunnel aktivieren</button>
+      </form>
+      {{end}}
+    </article>
+    {{end}}
+
+    <article class="card mb-2">
+      <h4 class="mb-1">Aktionen</h4>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        {{if eq .Status "running"}}
+        <form method="post" action="/apps/{{.ID}}/stop" style="display:inline">
+          <button class="ghost small" data-variant="danger">Stoppen</button>
+        </form>
+        {{else}}
+        <form method="post" action="/apps/{{.ID}}/start" style="display:inline">
+          <button class="ghost small">Starten</button>
+        </form>
+        {{end}}
+      </div>
+    </article>
+
+    {{if not .IsMandatory}}
+    <article class="card">
+      <h4 class="mb-1">Entfernen</h4>
+      <p class="sub mb-1" style="font-size:0.85rem">
+        Container und Konfiguration werden entfernt. Daten unter
+        <code>/opt/learningstack/{{.ID}}/</code> bleiben erhalten.
+      </p>
+      <form method="post" action="/apps/{{.ID}}/remove"
+            onsubmit="return confirm('App {{.Name}} wirklich entfernen?')">
+        <button data-variant="danger" class="small">App entfernen</button>
+      </form>
+    </article>
+    {{end}}
+  </div>
+</div>
+
+{{template "sidebar-layout-end" .PageData}}
+{{template "foot" .}}
+{{end}}
