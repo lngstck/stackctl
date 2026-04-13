@@ -8,6 +8,11 @@
 /vendor/
 coverage.txt
 
+# Internal docs (local only, not published)
+ARCHITECTURE.md
+CONTAINER-DEFINITION-SPEC.md
+mockup.html
+
 # Editors / OS
 .DS_Store
 .idea/
