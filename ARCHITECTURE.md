@@ -61,7 +61,7 @@ learningstack verteilt seine zentralen Aufgaben **bewusst auf zwei getrennte Ser
 │  sish      → SSH-Reverse-Tunnel-Router │    │  zentraler Dex                 │
 │  nginx     → TLS-Terminierung, vhosts  │    │  (tools/central-dex/)          │
 │  acme.sh   → Wildcard-Certs (IONOS)    │    │  - storage: memory (kein PII)  │
-│  catalog   → statisches nginx          │    │  - moin.schule Upstream        │
+│  (catalog  → GitHub: lngstck/catalog)  │    │  - moin.schule Upstream        │
 │  registry  → Docker Registry v2        │    │  - staticClients via 'schulen' │
 │                                        │    │                                │
 │  tools/register-tunnel (Operator)      │    │  schulen (Operator-CLI)        │
@@ -513,7 +513,6 @@ school:
   contact_email: "admin@gym-phoenix.de"
 catalog:
   url: "https://raw.githubusercontent.com/lngstck/catalog/main"
-  # oder: "https://catalog.learningstack.online"
 admin:
   password_hash: "$2a$10$..."          # bcrypt
 dex:
@@ -603,7 +602,7 @@ Das Catalog-Schema bekommt ein eigenes Dokument unter `docs/catalog-spec.md`. De
 - `version` der App-Definition (SemVer) als **Quelle der Wahrheit** für Update-Erkennung festlegen
 - moin.schule claim conventions hineinziehen (`sub`, `email`=sub, `groups`)
 
-Das alte `./catalog/` im Projekt-Root wird ersetzt — wahrscheinlich durch ein eigenes Repo `lngstck/catalog`, hosted via GitHub Pages oder weiterhin `catalog.learningstack.online`. Das ist aber **nicht Teil dieses Architektur-Dokuments**, sondern folgt eigenständig.
+Katalog-Definitionen leben im eigenen Repo `lngstck/catalog` (public, GitHub). stackctl fetcht via `https://raw.githubusercontent.com/lngstck/catalog/main/`. Kein separater Catalog-Server nötig.
 
 ## 14. Build, Release, Distribution
 
@@ -739,7 +738,7 @@ damit nichts an der späteren Produktions-Struktur ankratzt.
 Diese Punkte waren früher offene Fragen und sind jetzt fixiert:
 
 1. **Linux-Devbox:** SSH-Alias `learningstack-local` (→ `192.168.1.161`, User `learningstack`). Default-Target für `deploy-devbox` im Makefile.
-2. **Catalog-Host:** eigenes GitHub-Repo `lngstck/catalog` (via raw.githubusercontent.com oder GitHub Pages). `catalog.learningstack.online` bleibt als Alias nutzbar, ist aber nicht Quelle.
+2. **Catalog-Host:** eigenes GitHub-Repo `lngstck/catalog` (public, via raw.githubusercontent.com). Kein separater Catalog-Server. Default-URL: `https://raw.githubusercontent.com/lngstck/catalog/main`.
 3. **Port 8090** für die stackctl-Web-UI. Port 80 bleibt dem späteren User-Portal vorbehalten.
 4. **Dex immer getunnelt.** Der Schul-Dex ist in Phase 1 permanent öffentlich unter `https://auth.{slug}.learningstack.online`. Kein lokaler Modus, kein Toggle. Der Tunnel wird beim Setup aufgezogen und von stackctl aktiv überwacht.
 5. **Upstream-Typ fest:** zentraler Dex → moin.schule. Kein Static-Password-Fallback, kein Wobila in Phase 1. Andere Upstreams folgen in Phase 2.
