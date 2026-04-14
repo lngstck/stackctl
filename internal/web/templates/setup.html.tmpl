@@ -26,7 +26,7 @@
           <input type="text" name="school_slug" value="{{.SchoolSlug}}" placeholder="aus Schulname ableiten" id="slug-input" style="flex:1;">
           <button type="button" class="ghost small" id="derive-slug-btn" title="Slug aus Schulname ableiten">Ableiten</button>
         </div>
-        <span class="hint">Kurzform fuer URLs (a-z, 0-9, Bindestrich, max. 10 Zeichen). Wird in Subdomains verwendet: <code>auth.<strong>slug</strong>.learningstack.online</code></span>
+        <span class="hint">Kurzform fuer URLs (a-z, 0-9, Bindestrich, max. 30 Zeichen). Wird in Subdomains verwendet: <code>auth.<strong>slug</strong>.learningstack.online</code></span>
       </label>
 
       <label data-field class="mb-1">
@@ -116,13 +116,13 @@
     let slug = '';
     for (const w of meaningful) {
       const next = slug ? slug + '-' + w : w;
-      if (next.length > 10) break;
+      if (next.length > 30) break;
       slug = next;
     }
 
     // If first word alone is >10, hard-truncate.
     if (!slug && meaningful.length > 0) {
-      slug = meaningful[0].substring(0, 10);
+      slug = meaningful[0].substring(0, 30);
     }
 
     return slug.replace(/-{2,}/g, '-').replace(/^-|-$/g, '');

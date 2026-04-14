@@ -157,6 +157,17 @@ func templateFuncs() template.FuncMap {
 			}
 			return ""
 		},
+		"jsString": func(s string) template.JS {
+			// Escape for safe embedding inside a JS string literal.
+			r := strings.NewReplacer(
+				`\`, `\\`,
+				`'`, `\'`,
+				`"`, `\"`,
+				"\n", `\n`,
+				"\r", ``,
+			)
+			return template.JS(r.Replace(s))
+		},
 	}
 }
 

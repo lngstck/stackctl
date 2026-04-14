@@ -99,7 +99,7 @@ func Default() *Config {
 		},
 		Tunnel: Tunnel{
 			SSHHost: "sish.learningstack.online",
-			SSHPort: 22,
+			SSHPort: 2222,
 		},
 		GlobalEnv: map[string]string{},
 	}

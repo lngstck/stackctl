@@ -11,22 +11,29 @@
     <p class="mb-2">Das Setup ist abgeschlossen. Dein Server muss jetzt beim Betreiber freigeschaltet werden.</p>
 
     <div role="alert" data-variant="warning" class="mb-2">
-      <strong>Naechster Schritt:</strong> Sende die Registrierungsdatei an
-      <code>registrierung@learningstack.online</code>.
+      <strong>Naechster Schritt:</strong> Sende den Registrierungsblock an
+      <code style="word-break:break-all;">registrierung@learningstack.online</code>.
     </div>
 
-    <div class="mb-2">
-      <a href="/setup/register/download" class="button" style="width:100%;text-align:center;">
-        Registrierungsdatei herunterladen
+    <div class="hstack gap-2 mb-2">
+      <a id="mailto-link" class="button" style="flex:1;text-align:center;">
+        E-Mail senden
+      </a>
+      <a href="/setup/register/download" class="button ghost" style="flex:1;text-align:center;">
+        Als Datei herunterladen
       </a>
     </div>
 
-    <p class="sub mb-2" style="font-size:0.85rem;">
-      Oder per E-Mail:
-      <a href="mailto:registrierung@learningstack.online?subject=stackctl%20registrierung%20{{.SchoolSlug}}">
-        registrierung@learningstack.online
-      </a>
-    </p>
+    <details class="mb-2">
+      <summary class="sub" style="font-size:0.85rem;cursor:pointer;">Registrierungsblock anzeigen / kopieren</summary>
+      <div style="position:relative;margin-top:0.5rem;">
+        <pre id="age-block" style="background:var(--surface-2);padding:1rem;border-radius:0.5rem;font-size:0.75rem;overflow-x:auto;white-space:pre;user-select:all;">{{.AgeBlock}}</pre>
+        <button type="button" class="ghost small" id="copy-btn"
+          style="position:absolute;top:0.5rem;right:0.5rem;font-size:0.75rem;">
+          Kopieren
+        </button>
+      </div>
+    </details>
 
     <hr class="mb-2">
 
@@ -48,22 +55,54 @@
 
 <script>
 (function() {
-  const statusEl = document.getElementById('poll-status');
-  async function poll() {
-    try {
-      const resp = await fetch('/setup/status');
-      const data = await resp.json();
-      if (data.status === 'ready') {
-        window.location.href = '/login';
-        return;
-      }
-      statusEl.innerHTML =
-        '<p class="sub">' +
-        'Dex-Tunnel: ' + (data.dex_tunnel ? '✓' : '✗') + '<br>' +
-        'OIDC-Client: ' + (data.oidc_client ? '✓' : '✗') +
-        '</p>';
-    } catch(e) {}
-    setTimeout(poll, 30000);
+  // --- Copy button ---
+  var copyBtn = document.getElementById('copy-btn');
+  var ageBlock = document.getElementById('age-block');
+  copyBtn.addEventListener('click', function() {
+    navigator.clipboard.writeText(ageBlock.textContent.trim()).then(function() {
+      copyBtn.textContent = 'Kopiert!';
+      setTimeout(function() { copyBtn.textContent = 'Kopieren'; }, 2000);
+    });
+  });
+
+  // --- Mailto link with age block in body ---
+  var subject = 'Learningstack Registrierung {{.SchoolSlug}}';
+  var body =
+    'Hallo learningstack-Team,\n\n' +
+    'wir wuerden gerne die Schule "{{.SchoolName}}" ({{.SchoolSlug}}) ins learningstack-System aufnehmen.\n\n' +
+    'Registrierungspaket:\n\n' +
+    '{{jsString .AgeBlock}}\n\n' +
+    'Hier kannst du etwas ueber dich als Admin und deine Schule schreiben:\n\n' +
+    '...\n\n' +
+    'Viele Gruesse';
+
+  var link = document.getElementById('mailto-link');
+  link.href = 'mailto:registrierung@learningstack.online'
+    + '?subject=' + encodeURIComponent(subject)
+    + '&body=' + encodeURIComponent(body);
+
+  // --- Status polling ---
+  var statusEl = document.getElementById('poll-status');
+  function poll() {
+    fetch('/setup/status')
+      .then(function(resp) { return resp.json(); })
+      .then(function(data) {
+        if (data.status === 'ready') {
+          statusEl.innerHTML =
+            '<div role="alert" data-variant="success">' +
+            'Freischaltung erfolgreich! Weiterleitung ...' +
+            '</div>';
+          setTimeout(function() { window.location.href = '/login'; }, 2000);
+          return;
+        }
+        statusEl.innerHTML =
+          '<p class="sub">' +
+          'Dex-Tunnel: ' + (data.dex_tunnel ? '✓' : '✗') + '<br>' +
+          'OIDC-Client: ' + (data.oidc_client ? '✓' : '✗') +
+          '</p>';
+        setTimeout(poll, 30000);
+      })
+      .catch(function() { setTimeout(poll, 30000); });
   }
   setTimeout(poll, 5000);
 })();

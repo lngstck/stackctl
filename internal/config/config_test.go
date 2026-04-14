@@ -32,8 +32,8 @@ func TestDefaultConfig(t *testing.T) {
 	if c.Tunnel.SSHHost != "sish.learningstack.online" {
 		t.Errorf("Tunnel.SSHHost = %q", c.Tunnel.SSHHost)
 	}
-	if c.Tunnel.SSHPort != 22 {
-		t.Errorf("Tunnel.SSHPort = %d, want 22", c.Tunnel.SSHPort)
+	if c.Tunnel.SSHPort != 2222 {
+		t.Errorf("Tunnel.SSHPort = %d, want 2222", c.Tunnel.SSHPort)
 	}
 	if c.GlobalEnv == nil {
 		t.Error("GlobalEnv should be non-nil map")

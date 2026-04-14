@@ -4,9 +4,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/registration"
 	"github.com/lngstck/stackctl/internal/secrets"
+	"github.com/lngstck/stackctl/internal/tunnel"
 )
 
 // setupData is the template context for setup.html.tmpl.
@@ -121,8 +129,43 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.Dex.ClientSecret = dexSecret
 
-	// TODO: Generate SSH tunnel key.
-	// TODO: Build age-encrypted registration package.
+	// Generate SSH tunnel key (idempotent — keeps existing key).
+	if err := tunnel.EnsureKey(); err != nil {
+		log.Printf("web: generate tunnel key: %v", err)
+		data.Error = "SSH-Key konnte nicht erzeugt werden: " + err.Error()
+		s.render(w, "setup.html.tmpl", data)
+		return
+	}
+
+	sshPubKey, err := tunnel.PublicKey()
+	if err != nil {
+		data.Error = "SSH-Public-Key konnte nicht gelesen werden."
+		s.render(w, "setup.html.tmpl", data)
+		return
+	}
+
+	// Build age-encrypted registration package.
+	payload := registration.Payload{
+		Slug:            schoolSlug,
+		SchoolName:      schoolName,
+		ContactEmail:    contactEmail,
+		CreatedAt:       time.Now().UTC().Format(time.RFC3339),
+		ServerDomain:    serverDomain,
+		SSHPublicKey:    sshPubKey,
+		DexClientID:     schoolSlug,
+		DexClientSecret: dexSecret,
+	}
+	pkgPath, err := registration.BuildAndEncrypt(payload)
+	if err != nil {
+		log.Printf("web: build registration package: %v", err)
+		data.Error = "Registrierungspaket konnte nicht erstellt werden: " + err.Error()
+		s.render(w, "setup.html.tmpl", data)
+		return
+	}
+
+	// Record registration metadata.
+	s.cfg.Registration.StateEnteredAt = payload.CreatedAt
+	s.cfg.Registration.PackagePath = filepath.Base(pkgPath)
 
 	// Transition to awaiting_registration.
 	s.cfg.SetupState = config.SetupStateAwaitingRegistration
@@ -140,7 +183,9 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 // registerData is the template context for register.html.tmpl.
 type registerData struct {
 	SchoolSlug   string
+	SchoolName   string
 	ContactEmail string
+	AgeBlock     string
 	DevMode      bool
 }
 
@@ -150,9 +195,18 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Read the age block for display in the mailto body.
+	var ageBlock string
+	pkgFile := paths.RegistrationPackageFile(s.cfg.School.Slug)
+	if data, err := os.ReadFile(pkgFile); err == nil {
+		ageBlock = strings.TrimSpace(string(data))
+	}
+
 	data := registerData{
 		SchoolSlug:   s.cfg.School.Slug,
+		SchoolName:   s.cfg.School.Name,
 		ContactEmail: s.cfg.School.ContactEmail,
+		AgeBlock:     ageBlock,
 		DevMode:      s.devMode,
 	}
 	s.render(w, "register.html.tmpl", data)
@@ -163,8 +217,21 @@ func (s *Server) handleRegisterDownload(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	// TODO: Serve the age-encrypted registration package.
-	http.Error(w, "Registrierungspaket nicht implementiert", http.StatusNotImplemented)
+
+	slug := s.cfg.School.Slug
+	pkgFile := paths.RegistrationPackageFile(slug)
+	data, err := os.ReadFile(pkgFile)
+	if err != nil {
+		log.Printf("web: read registration package: %v", err)
+		http.Error(w, "Registrierungspaket nicht gefunden. Bitte Setup erneut durchfuehren.", http.StatusInternalServerError)
+		return
+	}
+
+	filename := fmt.Sprintf("registration-%s.age", slug)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, filename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	w.Write(data)
 }
 
 func (s *Server) handleRegisterSkip(w http.ResponseWriter, r *http.Request) {
@@ -190,8 +257,71 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Poll central Dex + sish tunnel to check registration status.
-	// For now, always return "waiting".
+	slug := s.cfg.School.Slug
+	dexTunnel := checkDexTunnel(slug)
+	oidcClient := false
+	if dexTunnel {
+		oidcClient = checkOIDCClient(slug, s.cfg.Dex.ClientSecret)
+	}
+
+	// If both checks pass, transition to ready.
+	if dexTunnel && oidcClient {
+		s.cfg.SetupState = config.SetupStateReady
+		if err := s.cfg.Save(); err != nil {
+			log.Printf("web: save config after registration: %v", err)
+		} else {
+			log.Printf("web: registration complete, state → ready")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ready"}`)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprint(w, `{"status":"waiting","dex_tunnel":false,"oidc_client":false}`)
+	fmt.Fprintf(w, `{"status":"waiting","dex_tunnel":%t,"oidc_client":%t}`, dexTunnel, oidcClient)
+}
+
+// checkDexTunnel tests whether the school's wildcard subdomain is reachable
+// via HTTPS. A successful TLS handshake (any HTTP status) means DNS + cert +
+// sish are all configured. Timeout is short since this runs every 30s.
+func checkDexTunnel(slug string) bool {
+	host := fmt.Sprintf("auth.%s.learningstack.online", slug)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // don't follow redirects
+		},
+	}
+	resp, err := client.Get("https://" + host + "/")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	// Any valid TLS response means the infrastructure is ready.
+	return true
+}
+
+// checkOIDCClient tests whether the school is registered as a client in the
+// central Dex by making an authorization request. If the central Dex knows
+// the client_id, it redirects to the login page (302). If not, it returns
+// an error page (4xx).
+func checkOIDCClient(slug, clientSecret string) bool {
+	authURL := fmt.Sprintf(
+		"https://auth.learningstack.online/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=openid",
+		slug,
+		url.QueryEscape(fmt.Sprintf("https://auth.%s.learningstack.online/callback", slug)),
+	)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(authURL)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	// Dex redirects to the login page (302) if the client_id is valid.
+	return resp.StatusCode == http.StatusFound
 }

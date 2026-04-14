@@ -1,11 +1,14 @@
 package tunnel
 
 import (
-	"context"
 	"fmt"
+	"net"
+	"os"
 	"os/exec"
 	"strconv"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // buildSSHCmd constructs an exec.Cmd for an SSH reverse tunnel.
@@ -43,21 +46,31 @@ func buildSSHCmd(remoteHost string, localPort int, sshHost string, sshPort int, 
 
 // TestConnection performs a quick SSH handshake to sish and returns nil on
 // success. This validates the key, network path, and sish authorization.
+//
+// sish only accepts port-forwarding sessions, not exec/shell, so we cannot
+// run a remote command. A successful ssh.Dial (which completes the auth
+// handshake) is sufficient proof that key + network + authorization work.
 func TestConnection(sshHost string, sshPort int, keyPath string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "ssh",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "ConnectTimeout=10",
-		"-i", keyPath,
-		"-p", strconv.Itoa(sshPort),
-		"tunnel@"+sshHost,
-		"exit",
-	)
-	out, err := cmd.CombinedOutput()
+	raw, err := os.ReadFile(keyPath)
 	if err != nil {
-		return fmt.Errorf("ssh test: %w\n%s", err, out)
+		return fmt.Errorf("read key: %w", err)
 	}
+	signer, err := ssh.ParsePrivateKey(raw)
+	if err != nil {
+		return fmt.Errorf("parse key: %w", err)
+	}
+
+	cfg := &ssh.ClientConfig{
+		User:            "tunnel",
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+	addr := net.JoinHostPort(sshHost, strconv.Itoa(sshPort))
+	client, err := ssh.Dial("tcp", addr, cfg)
+	if err != nil {
+		return fmt.Errorf("ssh dial %s: %w", addr, err)
+	}
+	_ = client.Close()
 	return nil
 }
