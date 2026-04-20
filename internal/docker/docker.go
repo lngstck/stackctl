@@ -124,6 +124,78 @@ func Pull(image string) (string, error) {
 	return out, nil
 }
 
+// HelperImage ist das Wegwerf-Image fuer kleine Host-Filesystem-Ops
+// (chown, rm -rf) die stackctl als Non-Root-User nicht selbst machen kann,
+// der Docker-Daemon aber als Root schon. Pin auf Major-Version, damit
+// zukuenftige Alpine-Majors nicht unerwartet eingreifen.
+const HelperImage = "alpine:3"
+
+// ChownHostPath setzt rekursiv Owner:Group auf einem Host-Verzeichnis,
+// indem es einen ephemeren alpine-Container mit dem Pfad gemountet
+// startet und dort `chown -R` ausfuehrt. owner im Format "uid:gid"
+// (z.B. "999:999"). Notwendig fuer Container, die als Non-Root laufen
+// (postgres: 999:999, dex: 1001:1001, grafana: 472:472 usw.).
+func ChownHostPath(hostPath, owner string) error {
+	if hostPath == "" || owner == "" {
+		return fmt.Errorf("chown: hostPath and owner are required")
+	}
+	if !strings.HasPrefix(hostPath, "/") {
+		return fmt.Errorf("chown: hostPath must be absolute, got %q", hostPath)
+	}
+	// owner Whitelist: nur Ziffern + ein Doppelpunkt, keine Shell-Tricks.
+	if !validOwner(owner) {
+		return fmt.Errorf("chown: invalid owner %q (expected uid:gid)", owner)
+	}
+	mount := hostPath + ":/target"
+	_, out, err := run(nil, "docker", "run", "--rm",
+		"-v", mount, HelperImage,
+		"chown", "-R", owner, "/target")
+	if err != nil {
+		return fmt.Errorf("chown %s -> %s: %s", hostPath, owner, out)
+	}
+	return nil
+}
+
+// RemoveHostPath loescht ein Host-Verzeichnis rekursiv via Throwaway-
+// Container. Vorgesehen fuer Deinstallations-Flows mit "Daten loeschen"-
+// Option. Aus Sicherheitsgruenden nur unter /opt/learningstack/ erlaubt.
+func RemoveHostPath(hostPath string) error {
+	if !strings.HasPrefix(hostPath, "/opt/learningstack/") {
+		return fmt.Errorf("rm: refuse to remove path outside /opt/learningstack/: %q", hostPath)
+	}
+	// Parent mounten + nur den Leaf-Namen loeschen, damit der Container
+	// nur die spezifische App-Daten weghaut, nicht irgendwas anderes.
+	parent := "/opt/learningstack"
+	leaf := strings.TrimPrefix(hostPath, parent+"/")
+	if leaf == "" || strings.Contains(leaf, "/") || strings.Contains(leaf, "..") {
+		return fmt.Errorf("rm: invalid app-data path %q", hostPath)
+	}
+	mount := parent + ":/target"
+	_, out, err := run(nil, "docker", "run", "--rm",
+		"-v", mount, HelperImage,
+		"rm", "-rf", "/target/"+leaf)
+	if err != nil {
+		return fmt.Errorf("rm %s: %s", hostPath, out)
+	}
+	return nil
+}
+
+// validOwner checkt "uid:gid" — nur Ziffern + ein einziger Doppelpunkt.
+func validOwner(s string) bool {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return false
+	}
+	for _, p := range parts {
+		for _, c := range p {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // -- internals --------------------------------------------------------------
 
 // composeArgs builds the argument slice for docker compose sub-commands.

@@ -46,10 +46,18 @@ type PortSpec struct {
 }
 
 // VolumeSpec maps a host path to a container path.
+//
+// Owner is an optional "uid:gid" string (e.g. "999:999" for postgres,
+// "1001:1001" for dex). When set, stackctl chownt das Host-Verzeichnis
+// nach dem Anlegen via Throwaway-Alpine-Container, damit Container,
+// die als Non-Root laufen, hineinschreiben koennen. Nur in der
+// Katalog-Definition relevant — beim Compose-Output wird das Feld nicht
+// emittiert.
 type VolumeSpec struct {
 	Host      string `yaml:"host"`
 	Container string `yaml:"container"`
 	ReadOnly  bool   `yaml:"readonly,omitempty"`
+	Owner     string `yaml:"owner,omitempty"`
 }
 
 // EnvVar is a key=value pair injected into the container environment.

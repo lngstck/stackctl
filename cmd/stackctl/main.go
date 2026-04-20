@@ -19,6 +19,7 @@ import (
 	"github.com/lngstck/stackctl/internal/paths"
 	"github.com/lngstck/stackctl/internal/secrets"
 	"github.com/lngstck/stackctl/internal/tunnel"
+	"github.com/lngstck/stackctl/internal/update"
 	"github.com/lngstck/stackctl/internal/web"
 )
 
@@ -26,6 +27,9 @@ import (
 var version = "dev"
 
 func main() {
+	// Propagate to the update package so CurrentVersion() reflects the
+	// actual running binary, not just whatever stackctl.version says.
+	update.Version = version
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 

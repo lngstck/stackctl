@@ -337,6 +337,14 @@ func createDataDirs(def *catalog.Definition, env *envfile.File) error {
 		if err := paths.EnsureDir(v.Host, 0o750); err != nil {
 			return err
 		}
+		// Falls der Container als Non-Root-User laeuft, das Host-Dir
+		// entsprechend chownen. stackctl selbst laeuft ohne root, aber
+		// docker tut's.
+		if v.Owner != "" {
+			if err := docker.ChownHostPath(v.Host, v.Owner); err != nil {
+				return fmt.Errorf("chown %s: %w", v.Host, err)
+			}
+		}
 	}
 	for _, c := range def.Configs {
 		dir := c.Path[:strings.LastIndex(c.Path, "/")]

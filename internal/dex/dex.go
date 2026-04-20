@@ -129,10 +129,15 @@ func SaveConfig(cfg *config.Config, clients []Client) error {
 	}
 	// DexConfigFile lives under LEARNINGSTACK_DIR/dex/config/ so the same
 	// host directory that's bind-mounted into /etc/dex contains the file.
-	if err := paths.EnsureDir(filepath.Dir(paths.DexConfigFile()), 0o750); err != nil {
+	// Dir 0o755 + File 0o644: das Config-Verzeichnis bleibt
+	// stackctl-writable (fuer zukuenftige SaveConfig-Aufrufe), und der
+	// Dex-Container (uid 1001) kann das File lesen ohne dass wir chownen
+	// muessen. Auf einem Single-Tenant-Server kein Sicherheitsproblem —
+	// dieselben Secrets liegen in der .env (gleiche Threat-Modellierung).
+	if err := paths.EnsureDir(filepath.Dir(paths.DexConfigFile()), 0o755); err != nil {
 		return err
 	}
-	if err := paths.AtomicWrite(paths.DexConfigFile(), data, 0o640); err != nil {
+	if err := paths.AtomicWrite(paths.DexConfigFile(), data, 0o644); err != nil {
 		return err
 	}
 	// Restart Dex so it picks up the new config. Sessions survive because

@@ -99,19 +99,24 @@
       </div>
     </article>
 
-    {{if not .IsMandatory}}
     <article class="card">
       <h4 class="mb-1">Entfernen</h4>
+      {{if .IsMandatory}}
+      <div role="alert" data-variant="warning" class="mb-1" style="font-size:0.85rem">
+        <strong>Pflicht-Container.</strong> {{.Name}} wird vom Rest des Stacks
+        benoetigt — andere Apps funktionieren ohne ihn nicht mehr.
+      </div>
+      {{end}}
       <p class="sub mb-1" style="font-size:0.85rem">
         Container und Konfiguration werden entfernt. Daten unter
-        <code>/opt/learningstack/{{.ID}}/</code> bleiben erhalten.
+        <code>/opt/learningstack/{{.ID}}/</code> bleiben erhalten und
+        werden bei einer Neuinstallation wiederverwendet.
       </p>
       <form method="post" action="/apps/{{.ID}}/remove"
-            onsubmit="return confirm('App {{.Name}} wirklich entfernen?')">
+            onsubmit="return confirm('App {{.Name}}{{if .IsMandatory}} (Pflicht-Container!){{end}} wirklich entfernen?')">
         <button data-variant="danger" class="small">App entfernen</button>
       </form>
     </article>
-    {{end}}
   </div>
 </div>
 

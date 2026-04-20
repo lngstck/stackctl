@@ -54,14 +54,27 @@ type CheckResult struct {
 	Release         *ReleaseInfo
 }
 
-// CurrentVersion reads the installed version from stackctl.version, falling
-// back to "dev" if the file does not exist.
+// Version is set at startup from main.version (injected via -ldflags).
+// When non-empty and not "dev", it takes precedence over the on-disk
+// stackctl.version file — the running binary is the source of truth.
+var Version string
+
+// CurrentVersion returns the version string for display and update checks.
+// Preference: Version (ldflags) > stackctl.version file > "dev".
 func CurrentVersion() string {
-	data, err := os.ReadFile(paths.VersionFile())
-	if err != nil {
-		return "dev"
+	if Version != "" && Version != "dev" {
+		return strings.TrimPrefix(Version, "v")
 	}
-	return strings.TrimSpace(string(data))
+	data, err := os.ReadFile(paths.VersionFile())
+	if err == nil {
+		if s := strings.TrimSpace(string(data)); s != "" {
+			return s
+		}
+	}
+	if Version != "" {
+		return Version
+	}
+	return "dev"
 }
 
 // Check queries GitHub for the latest release and compares it to the current
