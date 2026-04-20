@@ -151,7 +151,7 @@
   });
 
   copyBtn.addEventListener('click', function() {
-    navigator.clipboard.writeText(generatedPW).then(function() {
+    stackctlCopy(generatedPW).then(function() {
       pwHint.textContent = 'Kopiert!';
       copyBtn.textContent = 'Kopiert ✓';
       setTimeout(function() {

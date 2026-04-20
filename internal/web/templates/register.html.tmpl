@@ -59,9 +59,12 @@
   var copyBtn = document.getElementById('copy-btn');
   var ageBlock = document.getElementById('age-block');
   copyBtn.addEventListener('click', function() {
-    navigator.clipboard.writeText(ageBlock.textContent.trim()).then(function() {
+    stackctlCopy(ageBlock.textContent.trim()).then(function() {
       copyBtn.textContent = 'Kopiert!';
       setTimeout(function() { copyBtn.textContent = 'Kopieren'; }, 2000);
+    }, function(err) {
+      copyBtn.textContent = 'Fehler';
+      console.error('stackctlCopy:', err);
     });
   });
 

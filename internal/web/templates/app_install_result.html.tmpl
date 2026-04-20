@@ -39,7 +39,7 @@
         <td>
           <code style="word-break:break-all;">{{$val}}</code>
           <button class="ghost small" style="margin-left:0.5rem;font-size:0.75rem;"
-                  onclick="navigator.clipboard.writeText('{{$val}}');this.textContent='Kopiert ✓';setTimeout(()=>this.textContent='Kopieren',2000)">
+                  onclick="stackctlCopy('{{$val}}');this.textContent='Kopiert ✓';setTimeout(()=>this.textContent='Kopieren',2000)">
             Kopieren
           </button>
         </td>

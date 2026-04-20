@@ -19,6 +19,7 @@ type AppDefinition struct {
 	Volumes     []VolumeSpec `yaml:"volumes,omitempty"`
 	Environment []EnvVar    `yaml:"environment,omitempty"`
 	DependsOn   []string    `yaml:"depends_on,omitempty"`
+	Command     []string    `yaml:"command,omitempty"`
 	Configs     []ConfigSpec `yaml:"configs,omitempty"`
 }
 

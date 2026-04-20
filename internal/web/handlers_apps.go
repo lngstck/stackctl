@@ -298,6 +298,9 @@ func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: install %s: %v", appID, installErr)
 	}
 
+	// Refresh system-owned env keys (in case cfg changed since last save).
+	envfile.ApplySystemEnv(env, s.cfg, "")
+
 	// Save state + env regardless of partial success.
 	if err := env.Save(paths.EnvFile()); err != nil {
 		log.Printf("web: save env after install: %v", err)
@@ -344,6 +347,8 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/apps/%s?msg=Fehler+beim+Entfernen&err=1", appID), http.StatusSeeOther)
 		return
 	}
+
+	envfile.ApplySystemEnv(env, s.cfg, "")
 
 	if err := env.Save(paths.EnvFile()); err != nil {
 		log.Printf("web: save env after remove: %v", err)

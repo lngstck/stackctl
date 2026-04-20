@@ -60,6 +60,11 @@ func BuildServiceBlock(def *AppDefinition) map[string]any {
 		svc["environment"] = env
 	}
 
+	// command: exec-form list (never shell-form).
+	if len(def.Command) > 0 {
+		svc["command"] = append([]string{}, def.Command...)
+	}
+
 	// depends_on: ["ls-postgres", "ls-dex", ...]
 	if len(def.DependsOn) > 0 {
 		var deps []string

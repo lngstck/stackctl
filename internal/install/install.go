@@ -109,6 +109,15 @@ func Install(
 		return fail(res, "data dirs: %v", err)
 	}
 
+	// Dex itself has no oidc: block, so installing it wouldn't otherwise
+	// trigger a dex-config write. Do it explicitly here so the container
+	// finds /etc/dex/config.yaml when it starts.
+	if def.ID == "dex" {
+		if err := dex.SaveConfig(cfg, dexClients); err != nil {
+			return fail(res, "dex initial config: %v", err)
+		}
+	}
+
 	// --- 4. Postgres DB (if depends_on postgres) ----------------------------
 
 	if dependsOn(def, "postgres") {

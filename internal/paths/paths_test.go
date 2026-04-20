@@ -24,13 +24,15 @@ func TestStackctlDirOverride(t *testing.T) {
 
 func TestConfigPathsRespectOverride(t *testing.T) {
 	dir := t.TempDir()
+	lsDir := t.TempDir()
 	t.Setenv(EnvStackctlDir, dir)
+	t.Setenv(EnvLearningstackDir, lsDir)
 
 	cases := map[string]string{
 		"ConfigDir":            filepath.Join(dir, "config"),
 		"ConfigFile":           filepath.Join(dir, "config", "config.yaml"),
 		"StateFile":            filepath.Join(dir, "config", "state.yaml"),
-		"DexConfigFile":        filepath.Join(dir, "config", "dex-config.yaml"),
+		"DexConfigFile":        filepath.Join(lsDir, "dex", "config", "config.yaml"),
 		"TunnelKeyFile":        filepath.Join(dir, "config", "tunnel_key"),
 		"TunnelPubKeyFile":     filepath.Join(dir, "config", "tunnel_key.pub"),
 		"CatalogCacheDir":      filepath.Join(dir, "config", "catalog"),

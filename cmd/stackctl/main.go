@@ -6,15 +6,18 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/secrets"
 	"github.com/lngstck/stackctl/internal/tunnel"
 	"github.com/lngstck/stackctl/internal/web"
 )
@@ -39,6 +42,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "web":
 		return cmdWeb(rest, stdout, stderr)
+	case "hashpw":
+		return cmdHashpw(rest, stdout, stderr)
 	case "help", "-h", "--help":
 		usage(stdout)
 		return 0
@@ -115,6 +120,44 @@ func cmdWeb(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// cmdHashpw reads a password from -p, argv, or stdin and prints a bcrypt
+// hash suitable for config.yaml's admin.password_hash field. Intended as a
+// recovery tool when the admin has lost web-UI access.
+func cmdHashpw(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("hashpw", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	pwFlag := fs.String("p", "", "password (reads stdin if empty)")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "Usage: stackctl hashpw [-p password]")
+		fmt.Fprintln(stderr, "Without -p, the password is read from stdin (one line).")
+	}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	pw := *pwFlag
+	if pw == "" {
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil && line == "" {
+			fmt.Fprintf(stderr, "stackctl hashpw: read stdin: %v\n", err)
+			return 1
+		}
+		pw = strings.TrimRight(line, "\r\n")
+	}
+	if pw == "" {
+		fmt.Fprintln(stderr, "stackctl hashpw: empty password")
+		return 1
+	}
+
+	hash, err := secrets.HashPassword(pw)
+	if err != nil {
+		fmt.Fprintf(stderr, "stackctl hashpw: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, hash)
+	return 0
+}
+
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "stackctl – learningstack admin tool")
 	fmt.Fprintln(w)
@@ -124,5 +167,6 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  version        Print version and exit")
 	fmt.Fprintln(w, "  web            Start the admin web UI")
+	fmt.Fprintln(w, "  hashpw         Print a bcrypt hash for admin.password_hash")
 	fmt.Fprintln(w, "  help           Show this help")
 }

@@ -13,6 +13,7 @@ package dex
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 
@@ -57,6 +58,21 @@ func GenerateConfig(cfg *config.Config, clients []Client) ([]byte, error) {
 		"oauth2": map[string]any{
 			"skipApprovalScreen": true,
 			"responseTypes":     []string{"code"},
+		},
+		// Token/session expiry — keeps the SQLite store from growing forever.
+		// Auth-Request + Device-Request are short-lived UX windows. Refresh
+		// tokens bound the maximum session length regardless of activity.
+		"expiry": map[string]any{
+			"signingKeys":    "6h",
+			"idTokens":       "24h",
+			"authRequests":   "24h",
+			"deviceRequests": "5m",
+			"refreshTokens": map[string]any{
+				"disableRotation":   false,
+				"reuseInterval":     "30s",
+				"validIfNotUsedFor": "2160h", // 90d inactivity window
+				"absoluteLifetime":  "4320h", // 180d max session
+			},
 		},
 	}
 
@@ -115,7 +131,9 @@ func SaveConfig(cfg *config.Config, clients []Client) error {
 	if err != nil {
 		return err
 	}
-	if err := paths.EnsureDir(paths.ConfigDir(), 0o750); err != nil {
+	// DexConfigFile lives under LEARNINGSTACK_DIR/dex/config/ so the same
+	// host directory that's bind-mounted into /etc/dex contains the file.
+	if err := paths.EnsureDir(filepath.Dir(paths.DexConfigFile()), 0o750); err != nil {
 		return err
 	}
 	if err := paths.AtomicWrite(paths.DexConfigFile(), data, 0o640); err != nil {

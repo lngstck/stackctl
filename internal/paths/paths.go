@@ -46,8 +46,12 @@ func LearningstackDir() string {
 func ConfigDir() string    { return filepath.Join(StackctlDir(), "config") }
 func ConfigFile() string   { return filepath.Join(ConfigDir(), "config.yaml") }
 func StateFile() string    { return filepath.Join(ConfigDir(), "state.yaml") }
+// DexConfigFile is the host path stackctl writes the Dex config to. It
+// lives under the dex container's data dir so the same directory that is
+// bind-mounted into /etc/dex contains the file. The container reads it as
+// /etc/dex/config.yaml — keep that name in sync with dex.yaml's command:.
 func DexConfigFile() string {
-	return filepath.Join(ConfigDir(), "dex-config.yaml")
+	return filepath.Join(LearningstackDir(), "dex", "config", "config.yaml")
 }
 func TunnelKeyFile() string { return filepath.Join(ConfigDir(), "tunnel_key") }
 func TunnelPubKeyFile() string {

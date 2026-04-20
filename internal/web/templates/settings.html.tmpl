@@ -3,7 +3,71 @@
 {{template "sidebar-layout-start" .}}
 
 <h2 class="mb-2">Einstellungen</h2>
-<p class="sub">Einstellungen werden in Schritt 8 implementiert.</p>
+
+{{if .Error}}
+<div role="alert" data-variant="danger" class="mb-2">{{.Error}}</div>
+{{end}}
+{{if .Message}}
+<div role="alert" data-variant="success" class="mb-2">{{.Message}}</div>
+{{end}}
+
+<article class="card">
+  <form method="post" action="/settings">
+    <h3 class="mb-2">Schule</h3>
+
+    <label data-field class="mb-1">
+      Schulname
+      <input type="text" name="school_name" value="{{.SchoolName}}" required>
+    </label>
+
+    <label data-field class="mb-1">
+      Schul-Slug
+      <input type="text" value="{{.SchoolSlug}}" disabled>
+      <span class="hint">Der Slug ist nach der Registrierung nicht mehr aenderbar. Er ist Teil der oeffentlichen URLs: <code>auth.<strong>{{.SchoolSlug}}</strong>.learningstack.online</code></span>
+    </label>
+
+    <label data-field class="mb-1">
+      Server-IP / Hostname
+      <input type="text" name="server_domain" value="{{.ServerDomain}}">
+      <span class="hint">LAN-Adresse dieses Servers (fuer lokale App-Links).</span>
+    </label>
+
+    <label data-field class="mb-2">
+      Kontakt-E-Mail
+      <input type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="admin@schule.de">
+    </label>
+
+    <h3 class="mb-2">Admin-Passwort aendern <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>
+
+    <label data-field class="mb-1">
+      Neues Passwort
+      <input type="password" name="password" minlength="8" autocomplete="new-password">
+      <span class="hint">Leer lassen, um das aktuelle Passwort zu behalten. Neues Passwort meldet alle anderen Sessions ab.</span>
+    </label>
+
+    <label data-field class="mb-2">
+      Passwort wiederholen
+      <input type="password" name="password_confirm" minlength="8" autocomplete="new-password">
+    </label>
+
+    <h3 class="mb-2">KI-Einstellungen <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>
+
+    <label data-field class="mb-1">
+      LLM-Endpunkt
+      <input type="text" name="llm_endpoint" value="{{.LLMEndpoint}}" placeholder="OpenAI-kompatibler Endpunkt">
+    </label>
+
+    <label data-field class="mb-2">
+      LLM-API-Key
+      <input type="password" name="llm_api_key" value="{{.LLMAPIKey}}" placeholder="sk-...">
+    </label>
+
+    <h3 class="mb-2">Dex-Upstream</h3>
+    <p class="sub mb-2">Aktuell fest auf <strong>moin.schule</strong> via zentralem Dex konfiguriert. Dex-URL: <code>{{.DexAuthURL}}</code></p>
+
+    <button type="submit" class="mt-1">Speichern</button>
+  </form>
+</article>
 
 {{template "sidebar-layout-end" .}}
 {{template "foot" .}}

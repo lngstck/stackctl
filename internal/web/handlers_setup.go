@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/paths"
 	"github.com/lngstck/stackctl/internal/registration"
 	"github.com/lngstck/stackctl/internal/secrets"
@@ -177,6 +178,17 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Seed .env with system-owned keys, including the admin plaintext so
+	// apps with admin_password_env can reuse it during install.
+	env, err := envfile.Load(paths.EnvFile())
+	if err != nil {
+		env = envfile.New()
+	}
+	envfile.ApplySystemEnv(env, s.cfg, password)
+	if err := env.Save(paths.EnvFile()); err != nil {
+		log.Printf("web: save env after setup: %v", err)
+	}
+
 	http.Redirect(w, r, "/setup/register", http.StatusSeeOther)
 }
 
@@ -271,6 +283,18 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 			log.Printf("web: save config after registration: %v", err)
 		} else {
 			log.Printf("web: registration complete, state → ready")
+		}
+		// Bootstrap tunnels now that we're ready — otherwise the Dex tunnel
+		// would only come up on next stackctl restart.
+		if s.tunnelMgr != nil {
+			if err := tunnel.EnsureKey(); err != nil {
+				log.Printf("web: ensure tunnel key: %v", err)
+			}
+			if err := s.tunnelMgr.EnsureDexTunnel(); err != nil {
+				log.Printf("web: ensure dex tunnel: %v", err)
+			}
+			s.tunnelMgr.RestoreAppTunnels()
+			s.tunnelMgr.StartMonitor()
 		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"status":"ready"}`)
