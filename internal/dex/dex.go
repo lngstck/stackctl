@@ -90,13 +90,9 @@ func GenerateConfig(cfg *config.Config, clients []Client) ([]byte, error) {
 			"getUserInfo":              true,
 			"insecureSkipEmailVerified": true,
 			"insecureEnableGroups":      true,
-			"userNameKey":              "given_name",
-			// claimMapping (SINGULAR!) — Plural wird still ignoriert.
-			"claimMapping": map[string]string{
-				"preferred_username": "given_name",
-				"email":             "sub",
-				"groups":            "groups",
-			},
+			// Kein claimMapping: der zentrale Dex liefert email/groups/
+			// preferred_username/name bereits korrekt gemappt. Eigene
+			// Mappings wuerden den moin.schule-sub (als email) zerstoeren.
 		},
 	}
 	doc["connectors"] = []any{connector}

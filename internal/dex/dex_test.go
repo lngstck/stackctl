@@ -84,14 +84,11 @@ func TestGenerateConfigBasic(t *testing.T) {
 		t.Errorf("redirectURI = %v", connCfg["redirectURI"])
 	}
 
-	// CRITICAL: claimMapping (SINGULAR).
-	cm, ok := connCfg["claimMapping"]
-	if !ok {
-		t.Fatal("claimMapping missing — this is the SINGULAR key, not claimMappings")
-	}
-	cmMap := cm.(map[string]any)
-	if cmMap["email"] != "sub" {
-		t.Errorf("claimMapping.email = %v, want sub", cmMap["email"])
+	// Kein claimMapping: Claims laufen vom zentralen Dex (der seinerseits
+	// moin.schule mappt) unveraendert durch. Eigene Mappings hier wuerden
+	// email (= moin.schule sub, stabiler Identifier) zerstoeren.
+	if _, ok := connCfg["claimMapping"]; ok {
+		t.Error("claimMapping should not be set — central Dex already maps upstream claims")
 	}
 
 	// oauth2 settings.
