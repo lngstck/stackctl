@@ -157,10 +157,18 @@ func (m *Manager) AllStatuses() map[string]string {
 	return out
 }
 
+// RootDomain is the public root under which every school's subdomains live.
+// The `-R`-Remote-Host muss der volle FQDN sein, weil sish den angegebenen
+// Host 1:1 als Routing-Key benutzt — wenn wir nur `auth.{slug}` angeben,
+// registriert sich der Tunnel als `auth.{slug}`, aber eingehende Requests
+// kommen mit Host-Header `auth.{slug}.learningstack.online` und finden
+// keine passende Registrierung ("cannot find connection for host: …").
+const RootDomain = "learningstack.online"
+
 // EnsureDexTunnel starts the mandatory Dex tunnel if it is not already running.
-// The Dex tunnel forwards auth.{slug}:80 to localhost:5556.
+// The Dex tunnel forwards auth.{slug}.learningstack.online:80 to localhost:5556.
 func (m *Manager) EnsureDexTunnel() error {
-	remoteHost := "auth." + m.cfg.School.Slug
+	remoteHost := "auth." + m.cfg.School.Slug + "." + RootDomain
 	return m.Start(DexTunnelID, remoteHost, 5556)
 }
 
@@ -169,7 +177,7 @@ func (m *Manager) EnsureDexTunnel() error {
 func (m *Manager) RestoreAppTunnels() {
 	for id, cs := range m.state.Containers {
 		if cs.TunnelEnabled && len(cs.Ports) > 0 {
-			remoteHost := id + "." + m.cfg.School.Slug
+			remoteHost := id + "." + m.cfg.School.Slug + "." + RootDomain
 			if err := m.Start(id, remoteHost, cs.Ports[0]); err != nil {
 				log.Printf("tunnel: restore %s: %v", id, err)
 			}
@@ -186,12 +194,12 @@ func (m *Manager) EnableAppTunnel(appID string) error {
 	if len(cs.Ports) == 0 {
 		return fmt.Errorf("app %s has no ports", appID)
 	}
-	remoteHost := appID + "." + m.cfg.School.Slug
+	remoteHost := appID + "." + m.cfg.School.Slug + "." + RootDomain
 	if err := m.Start(appID, remoteHost, cs.Ports[0]); err != nil {
 		return err
 	}
 	cs.TunnelEnabled = true
-	cs.TunnelSubdomain = remoteHost + ".learningstack.online"
+	cs.TunnelSubdomain = remoteHost
 	return m.state.Save()
 }
 

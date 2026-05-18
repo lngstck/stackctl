@@ -178,8 +178,8 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Seed .env with system-owned keys, including the admin plaintext so
-	// apps with admin_password_env can reuse it during install.
+	// Seed .env with system-owned keys, including ADMIN_PASSWORD so apps
+	// can reference it via ${ADMIN_PASSWORD} in their environment block.
 	env, err := envfile.Load(paths.EnvFile())
 	if err != nil {
 		env = envfile.New()

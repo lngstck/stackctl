@@ -19,7 +19,8 @@
   <div role="alert" data-variant="danger" class="mb-2">{{.Error}}</div>
   {{end}}
 
-  <form method="post" action="/apps/{{.ID}}/install">
+  <form method="post" action="/apps/{{.ID}}/install"
+        onsubmit="var b=this.querySelector('button[type=submit]');b.disabled=true;b.textContent='Installiere… (kann einen Moment dauern)';">
     {{if .Prompts}}
     <h4 class="mb-1">Einstellungen</h4>
 
@@ -44,12 +45,12 @@
     {{end}}
     {{end}}
 
-    {{if or .Secrets .AdminPwEnv}}
+    {{if or .Secrets .UsesAdminPw}}
     <h4 class="mb-1 mt-2">Automatisch generiert</h4>
     <p class="sub mb-2" style="font-size:0.85rem;">
       {{if .Secrets}}Folgende Secrets werden automatisch erzeugt:
       {{range $i, $s := .Secrets}}{{if $i}}, {{end}}{{$s.Key}}{{end}}.{{end}}
-      {{if .AdminPwEnv}} Das Admin-Passwort wird aus deinem stackctl-Passwort uebernommen.{{end}}
+      {{if .UsesAdminPw}} Diese App verwendet das stackctl-Admin-Passwort.{{end}}
     </p>
     {{end}}
 

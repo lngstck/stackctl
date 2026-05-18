@@ -42,16 +42,19 @@ func SetupAppDB(appID, password string) error {
 		return fmt.Errorf("create user %s: %w", user, err)
 	}
 
-	// Create database owned by the user.
-	// CREATE DATABASE cannot run inside a transaction, and IF NOT EXISTS
-	// is not available before PG 9.5+ (we require 16+, so fine).
-	createDB := fmt.Sprintf(
-		"SELECT 'CREATE DATABASE \"%s\" OWNER \"%s\"' "+
-			"WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '%s') \\gexec",
-		db, user, db,
-	)
-	if err := psql(createDB); err != nil {
-		return fmt.Errorf("create database %s: %w", db, err)
+	// Create database owned by the user. CREATE DATABASE cannot run inside a
+	// transaction and has no IF NOT EXISTS, so we check existence first via a
+	// separate query. (psql's \gexec meta-command does not work reliably with
+	// `psql -c`, which is why we split it into two calls.)
+	exists, err := databaseExists(db)
+	if err != nil {
+		return fmt.Errorf("check database %s: %w", db, err)
+	}
+	if !exists {
+		createDB := fmt.Sprintf(`CREATE DATABASE "%s" OWNER "%s"`, db, user)
+		if err := psql(createDB); err != nil {
+			return fmt.Errorf("create database %s: %w", db, err)
+		}
 	}
 
 	// Grant all privileges on the database to the user.
@@ -110,6 +113,22 @@ func psql(sql string) error {
 		return fmt.Errorf("psql exit %d: %s", code, output)
 	}
 	return nil
+}
+
+// databaseExists returns true if a database with the given name exists.
+func databaseExists(db string) (bool, error) {
+	// -tAc: tuples-only, unaligned, run single command. Output is "1" or "".
+	code, output, err := docker.Exec(ContainerName, []string{
+		"psql", "-U", "postgres", "-tAc",
+		fmt.Sprintf("SELECT 1 FROM pg_database WHERE datname = '%s'", escapeSingleQuote(db)),
+	})
+	if err != nil {
+		return false, fmt.Errorf("docker exec: %w", err)
+	}
+	if code != 0 {
+		return false, fmt.Errorf("psql exit %d: %s", code, output)
+	}
+	return strings.TrimSpace(output) == "1", nil
 }
 
 // sanitizeIdent ensures the identifier is safe for PG. App IDs are already

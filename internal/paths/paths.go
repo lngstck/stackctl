@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Default roots on a production install (learningstack user owns both).
@@ -98,8 +99,31 @@ func AppDataDir(appID string) string {
 // -- helpers ----------------------------------------------------------------
 
 // EnsureDir creates dir (and parents) with the given permissions if missing.
-// Existing directories are left untouched.
+// For paths under LEARNINGSTACK_DIR the permission is forced to at least
+// 0o755 and — if the directory already exists — re-chmodded. These dirs are
+// container-facing bind mounts; non-root container users (postgres uid 999,
+// dex uid 1001, ...) need world-execute on the path to traverse into their
+// data. Genuine secrets don't live here — they sit in .env under
+// /opt/stackctl/compose/ with 0o640 root:docker. For paths outside
+// LEARNINGSTACK_DIR the caller's perm wins and existing dirs are untouched.
 func EnsureDir(dir string, perm os.FileMode) error {
+	if strings.HasPrefix(dir, LearningstackDir()+string(os.PathSeparator)) ||
+		dir == LearningstackDir() {
+		if perm < 0o755 {
+			perm = 0o755
+		}
+		if err := os.MkdirAll(dir, perm); err != nil {
+			return fmt.Errorf("create %s: %w", dir, err)
+		}
+		// MkdirAll leaves existing dirs alone — chmod the leaf explicitly
+		// so an older install with 0o750 gets pulled up. We only touch the
+		// leaf on purpose; parents might be owned by another uid
+		// (throwaway-chown) and shouldn't be re-permed from here.
+		if err := os.Chmod(dir, perm); err != nil {
+			return fmt.Errorf("chmod %s: %w", dir, err)
+		}
+		return nil
+	}
 	if err := os.MkdirAll(dir, perm); err != nil {
 		return fmt.Errorf("create %s: %w", dir, err)
 	}
@@ -111,7 +135,15 @@ func EnsureDir(dir string, perm os.FileMode) error {
 // file mode is set to perm after rename (umask-safe).
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	// Parent-Dir via EnsureDir, damit unter /opt/learningstack/ konsistent
+	// 0o755 gesetzt wird (container-facing). Unter /opt/stackctl/ kommt
+	// die urspruengliche strengere Permission zum Tragen (Secrets!).
+	parentPerm := os.FileMode(0o750)
+	if strings.HasPrefix(dir, LearningstackDir()+string(os.PathSeparator)) ||
+		dir == LearningstackDir() {
+		parentPerm = 0o755
+	}
+	if err := EnsureDir(dir, parentPerm); err != nil {
 		return fmt.Errorf("ensure parent %s: %w", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")

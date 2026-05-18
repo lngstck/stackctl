@@ -49,6 +49,22 @@ func Sync(catalogURL string) (bool, error) {
 	if err := paths.AtomicWrite(paths.CatalogIndexFile(), body, 0o644); err != nil {
 		return false, err
 	}
+
+	// Re-fetch every per-container definition so a published version bump
+	// actually reaches the cache. Without this, only the index updates and
+	// `GetOrFetch` keeps returning the stale cached YAML forever.
+	// Failures on individual apps are logged via the returned error chain
+	// but don't abort the sync — one broken definition shouldn't prevent
+	// the rest of the catalog from being refreshed.
+	var fetchErrs []string
+	for _, app := range idx.Apps {
+		if _, err := FetchDefinition(catalogURL, app.ID); err != nil {
+			fetchErrs = append(fetchErrs, fmt.Sprintf("%s: %v", app.ID, err))
+		}
+	}
+	if len(fetchErrs) > 0 {
+		return true, fmt.Errorf("catalog: some definitions failed to refresh: %s", strings.Join(fetchErrs, "; "))
+	}
 	return true, nil
 }
 

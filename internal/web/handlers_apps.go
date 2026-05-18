@@ -8,6 +8,7 @@ import (
 
 	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/compose"
+	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/dex"
 	"github.com/lngstck/stackctl/internal/docker"
 	"github.com/lngstck/stackctl/internal/envfile"
@@ -57,6 +58,9 @@ type appDetailData struct {
 	Homepage        string
 	Docs            string
 	IsMandatory     bool
+	AdminLogin      string
+	AdminPassword   string
+	AdminNotes      string
 }
 
 // appInstallData is the template context for app_install.html.tmpl.
@@ -70,9 +74,35 @@ type appInstallData struct {
 	HasOIDC     bool
 	Prompts     []catalog.Prompt
 	Secrets     []catalog.SecretSpec
-	AdminPwEnv  string
+	UsesAdminPw bool
 	Error       string
 	Values      map[string]string
+}
+
+// expandAdminPlaceholders replaces {school_slug}, {server_domain}, {app_id}
+// in admin_info strings. Kept narrow on purpose — admin_info is rendered
+// directly into the UI, so we don't want to pull in arbitrary .env values.
+func expandAdminPlaceholders(s string, cfg *config.Config, appID string) string {
+	if s == "" {
+		return ""
+	}
+	r := strings.NewReplacer(
+		"{school_slug}", cfg.School.Slug,
+		"{server_domain}", cfg.School.ServerDomain,
+		"{app_id}", appID,
+	)
+	return r.Replace(s)
+}
+
+// usesAdminPassword reports whether any of the app's environment values
+// references ${ADMIN_PASSWORD}. Used to show a UX hint on the install page.
+func usesAdminPassword(def *catalog.Definition) bool {
+	for _, e := range def.Environment {
+		if strings.Contains(e.Value, "${ADMIN_PASSWORD}") {
+			return true
+		}
+	}
+	return false
 }
 
 // appInstallResultData is the template context for app_install_result.html.tmpl.
@@ -185,6 +215,11 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 			data.Homepage = def.Links.Homepage
 			data.Docs = def.Links.Docs
 		}
+		if def.AdminInfo != nil {
+			data.AdminLogin = expandAdminPlaceholders(def.AdminInfo.Login, s.cfg, appID)
+			data.AdminPassword = expandAdminPlaceholders(def.AdminInfo.PasswordHint, s.cfg, appID)
+			data.AdminNotes = expandAdminPlaceholders(def.AdminInfo.Notes, s.cfg, appID)
+		}
 	}
 
 	s.render(w, "app_detail.html.tmpl", data)
@@ -222,7 +257,7 @@ func (s *Server) handleAppInstallForm(w http.ResponseWriter, r *http.Request) {
 		HasOIDC:     def.OIDC != nil,
 		Prompts:     def.Prompts,
 		Secrets:     def.Secrets,
-		AdminPwEnv:  def.AdminPasswordEnv,
+		UsesAdminPw: usesAdminPassword(def),
 		Values:      make(map[string]string),
 	}
 
@@ -262,7 +297,7 @@ func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
 				HasOIDC:     def.OIDC != nil,
 				Prompts:     def.Prompts,
 				Secrets:     def.Secrets,
-				AdminPwEnv:  def.AdminPasswordEnv,
+				UsesAdminPw: usesAdminPassword(def),
 				Error:       fmt.Sprintf("%s ist erforderlich.", p.Question),
 				Values:      promptValues,
 			}
@@ -322,6 +357,62 @@ func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
+	appID := r.PathValue("id")
+
+	if _, ok := s.state.Containers[appID]; !ok {
+		http.Redirect(w, r, "/apps?msg=Nicht+installiert&err=1", http.StatusSeeOther)
+		return
+	}
+
+	// Force-refresh: catalog.FetchDefinition always overwrites the local cache.
+	def, err := catalog.FetchDefinition(s.cfg.Catalog.URL, appID)
+	if err != nil {
+		log.Printf("web: fetch %s for update: %v", appID, err)
+		http.Redirect(w, r, fmt.Sprintf("/apps/%s?msg=Katalog-Abruf+fehlgeschlagen&err=1", appID), http.StatusSeeOther)
+		return
+	}
+
+	env, err := envfile.Load(paths.EnvFile())
+	if err != nil {
+		env = envfile.New()
+	}
+
+	var allDefs []*catalog.Definition
+	for id := range s.state.Containers {
+		if d, err := catalog.LoadDefinition(id); err == nil {
+			allDefs = append(allDefs, d)
+		}
+	}
+
+	var dexClients []dex.Client
+	result, updatedClients, updateErr := install.Update(
+		def, s.cfg, s.state, env, dexClients, allDefs,
+	)
+
+	if updateErr != nil {
+		log.Printf("web: update %s: %v", appID, updateErr)
+	}
+
+	envfile.ApplySystemEnv(env, s.cfg, "")
+	if err := env.Save(paths.EnvFile()); err != nil {
+		log.Printf("web: save env after update: %v", err)
+	}
+	if err := s.state.Save(); err != nil {
+		log.Printf("web: save state after update: %v", err)
+	}
+	if updatedClients != nil {
+		if err := dex.SaveConfig(s.cfg, updatedClients); err != nil {
+			log.Printf("web: save dex config after update: %v", err)
+		}
+	}
+
+	s.render(w, "app_install_result.html.tmpl", appInstallResultData{
+		PageData: s.pageData("apps"),
+		Result:   result,
+	})
+}
+
 func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 
@@ -339,8 +430,14 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+		return
+	}
+	wipeData := r.FormValue("wipe_data") == "on"
+
 	var dexClients []dex.Client
-	_, removeErr := install.Remove(appID, s.cfg, s.state, env, dexClients, remainingDefs)
+	_, removeErr := install.Remove(appID, s.cfg, s.state, env, dexClients, remainingDefs, wipeData)
 
 	if removeErr != nil {
 		log.Printf("web: remove %s: %v", appID, removeErr)

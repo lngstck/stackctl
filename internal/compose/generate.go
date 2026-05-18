@@ -60,7 +60,12 @@ func BuildServiceBlock(def *AppDefinition) map[string]any {
 		svc["environment"] = env
 	}
 
-	// command: exec-form list (never shell-form).
+	// entrypoint + command: both exec-form lists (never shell-form). Setting
+	// entrypoint bypasses the image's default — needed e.g. for dex to skip
+	// the gomplate wrapper.
+	if len(def.Entrypoint) > 0 {
+		svc["entrypoint"] = append([]string{}, def.Entrypoint...)
+	}
 	if len(def.Command) > 0 {
 		svc["command"] = append([]string{}, def.Command...)
 	}

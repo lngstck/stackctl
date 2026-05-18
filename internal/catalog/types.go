@@ -14,8 +14,8 @@ import (
 // server. It enumerates available apps and declares global environment
 // variables that apps may reference.
 type Index struct {
-	Version        string           `yaml:"version"`
-	Apps           []AppSummary     `yaml:"apps"`
+	Version         string          `yaml:"version"`
+	Apps            []AppSummary    `yaml:"apps"`
 	GlobalEnvSchema []GlobalEnvSpec `yaml:"global_env_schema,omitempty"`
 }
 
@@ -60,9 +60,6 @@ type Definition struct {
 	// OIDC client registration for Dex.
 	OIDC *OIDCSpec `yaml:"oidc,omitempty"`
 
-	// If set, stackctl injects STACKCTL_ADMIN_PASSWORD under this key.
-	AdminPasswordEnv string `yaml:"admin_password_env,omitempty"`
-
 	// Binaries to download before container start.
 	Binaries []BinarySpec `yaml:"binaries,omitempty"`
 
@@ -72,11 +69,24 @@ type Definition struct {
 
 	// Documentation links for the app detail page.
 	Links *Links `yaml:"links,omitempty"`
+
+	// AdminInfo dokumentiert, wie ein Admin sich neben OIDC lokal in der App
+	// anmeldet. Wird im App-Detail angezeigt; rein informativ.
+	AdminInfo *AdminInfo `yaml:"admin_info,omitempty"`
+}
+
+// AdminInfo beschreibt den lokalen Admin-Zugang einer App. Alle Felder
+// koennen die Platzhalter {school_slug}, {server_domain}, {app_id} und
+// beliebige .env-Vars (${KEY}) enthalten — werden beim Rendern ersetzt.
+type AdminInfo struct {
+	Login        string `yaml:"login,omitempty"`         // Username/E-Mail des lokalen Admins
+	PasswordHint string `yaml:"password_hint,omitempty"` // Klartext-Hinweis, NICHT das Secret selbst
+	Notes        string `yaml:"notes,omitempty"`         // Mehrzeiliger Kontext (z.B. wann der Seed greift)
 }
 
 // SecretSpec tells stackctl to auto-generate a secret and store it in .env.
 type SecretSpec struct {
-	Key      string `yaml:"key"`               // e.g. "LANGFLOW_OIDC_SECRET"
+	Key      string `yaml:"key"`                // e.g. "LANGFLOW_OIDC_SECRET"
 	Generate string `yaml:"generate,omitempty"` // "secret" (default) | "password" | "api_key"
 	Prefix   string `yaml:"prefix,omitempty"`   // only for api_key, e.g. "sk-lf"
 }
@@ -97,7 +107,7 @@ type Prompt struct {
 	Required bool     `yaml:"required,omitempty"`
 	Default  string   `yaml:"default,omitempty"`
 	Validate string   `yaml:"validate,omitempty"` // "email" | "int" | "url" | "" (any string)
-	Options  []string `yaml:"options,omitempty"`   // multi-choice
+	Options  []string `yaml:"options,omitempty"`  // multi-choice
 	Hint     string   `yaml:"hint,omitempty"`
 }
 

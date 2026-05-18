@@ -64,6 +64,23 @@ func Install(
 	}
 	var newEnvKeys []string
 
+	// On failure, roll back any .env keys we added in this run. Without this,
+	// a partial install (e.g. postgres setup crashes) leaves orphaned secrets
+	// in .env that Remove can't reach, because the app was never registered
+	// in state.Containers. The caller re-saves .env after Install returns, so
+	// rolling back here is enough — no need to write to disk ourselves.
+	rollback := func() {
+		if len(newEnvKeys) > 0 {
+			env.DeleteKeys(newEnvKeys)
+		}
+	}
+
+	// --- 0. Pre-flight: referenced system env vars must be populated -------
+
+	if err := checkSystemEnvDeps(def, env); err != nil {
+		return fail(res, "%v", err)
+	}
+
 	// --- 1. Secrets + global env defaults -----------------------------------
 
 	for _, s := range def.Secrets {
@@ -72,6 +89,7 @@ func Install(
 		}
 		val, err := generateSecret(s)
 		if err != nil {
+			rollback()
 			return fail(res, "generate secret %s: %v", s.Key, err)
 		}
 		env.Set(def.ID, s.Key, val)
@@ -90,15 +108,6 @@ func Install(
 		newEnvKeys = append(newEnvKeys, key)
 	}
 
-	// admin_password_env: inject STACKCTL_ADMIN_PASSWORD under the app's key.
-	if def.AdminPasswordEnv != "" {
-		adminPW, ok := env.Get("STACKCTL_ADMIN_PASSWORD")
-		if ok && adminPW != "" {
-			env.Set(def.ID, def.AdminPasswordEnv, adminPW)
-			newEnvKeys = append(newEnvKeys, def.AdminPasswordEnv)
-		}
-	}
-
 	// --- 2. Binaries --------------------------------------------------------
 
 	// (Binary downloads are a Phase 2 concern; stubbed here for completeness.)
@@ -106,6 +115,7 @@ func Install(
 	// --- 3. Data directories + configs --------------------------------------
 
 	if err := createDataDirs(def, env); err != nil {
+		rollback()
 		return fail(res, "data dirs: %v", err)
 	}
 
@@ -114,6 +124,7 @@ func Install(
 	// finds /etc/dex/config.yaml when it starts.
 	if def.ID == "dex" {
 		if err := dex.SaveConfig(cfg, dexClients); err != nil {
+			rollback()
 			return fail(res, "dex initial config: %v", err)
 		}
 	}
@@ -125,6 +136,7 @@ func Install(
 		if _, ok := env.Get(dbKey); !ok {
 			pw, err := secrets.RandomPassword(0)
 			if err != nil {
+				rollback()
 				return fail(res, "db password: %v", err)
 			}
 			env.Set(def.ID, dbKey, pw)
@@ -133,6 +145,7 @@ func Install(
 
 		dbPW, _ := env.Get(dbKey)
 		if err := postgres.SetupAppDB(def.ID, dbPW); err != nil {
+			rollback()
 			return fail(res, "postgres setup: %v", err)
 		}
 	}
@@ -144,6 +157,7 @@ func Install(
 		if _, ok := env.Get(oidcSecretKey); !ok {
 			sec, err := secrets.RandomHex(20)
 			if err != nil {
+				rollback()
 				return fail(res, "oidc secret: %v", err)
 			}
 			env.Set(def.ID, oidcSecretKey, sec)
@@ -177,6 +191,7 @@ func Install(
 		var err error
 		dexClients, err = dex.AddClient(client, cfg, dexClients)
 		if err != nil {
+			rollback()
 			return fail(res, "dex client: %v", err)
 		}
 	}
@@ -185,16 +200,30 @@ func Install(
 
 	composeDefs := collectComposeDefs(allDefs, def)
 	if err := compose.Regenerate(composeDefs); err != nil {
+		rollback()
 		return fail(res, "compose: %v", err)
 	}
 
 	// --- 7. docker compose up -----------------------------------------------
 
+	// Persist .env BEFORE `docker compose up` so the newly generated secrets
+	// (POSTGRES_PASSWORD, {APP}_DB_PASSWORD, {APP}_OIDC_SECRET, prompt values)
+	// are actually available to the container. Caller saves again afterwards
+	// to pick up ApplySystemEnv updates — this extra save is the one that
+	// counts for container startup.
+	envfile.ApplySystemEnv(env, cfg, "")
+	if err := env.Save(paths.EnvFile()); err != nil {
+		rollback()
+		return fail(res, "save env before compose up: %v", err)
+	}
+
 	if err := docker.EnsureNetwork(); err != nil {
+		rollback()
 		return fail(res, "network: %v", err)
 	}
 	code, out := docker.ComposeUp(paths.ComposeFile(), compose.ServiceName(def.ID))
 	if code != 0 {
+		rollback()
 		return fail(res, "docker up: %s", out)
 	}
 
@@ -239,15 +268,214 @@ func Install(
 				res.SecretsToShow[s.Key] = val
 			}
 		}
-		res.Messages = append(res.Messages, def.PostInstall.Messages...)
+		for _, m := range def.PostInstall.Messages {
+			res.Messages = append(res.Messages, expandEnvVars(m, env))
+		}
 	}
 
 	res.Success = true
 	return res, dexClients, nil
 }
 
-// Remove stops and removes an app from the stack. Data directories under
-// /opt/learningstack/{id}/ are kept (the admin can delete them manually).
+// Update refreshes an already-installed app against the current catalog
+// definition: regenerates secrets that the new definition added, rewrites
+// configs, re-registers the OIDC client, regenerates docker-compose.yml,
+// pulls a fresh image, and recreates the container. Existing prompt values,
+// tunnel state, and InstalledAt timestamp are preserved.
+//
+// The caller must have already (force-)refetched the catalog definition into
+// the local cache so `def` reflects the latest YAML.
+func Update(
+	def *catalog.Definition,
+	cfg *config.Config,
+	state *config.State,
+	env *envfile.File,
+	dexClients []dex.Client,
+	allDefs []*catalog.Definition,
+) (*Result, []dex.Client, error) {
+
+	res := &Result{AppID: def.ID, AppName: def.Name}
+
+	cs, ok := state.Containers[def.ID]
+	if !ok {
+		return fail(res, "app %q is not installed", def.ID)
+	}
+
+	if err := checkSystemEnvDeps(def, env); err != nil {
+		return fail(res, "%v", err)
+	}
+
+	// New secrets only — preserve everything already in .env so re-runs are
+	// safe and an admin's manually-tuned values survive.
+	for _, s := range def.Secrets {
+		if _, ok := env.Get(s.Key); ok {
+			continue
+		}
+		val, err := generateSecret(s)
+		if err != nil {
+			return fail(res, "generate secret %s: %v", s.Key, err)
+		}
+		env.Set(def.ID, s.Key, val)
+		cs.EnvKeys = appendUnique(cs.EnvKeys, s.Key)
+	}
+	for _, g := range def.GlobalEnv {
+		if _, ok := env.Get(g.Key); !ok && g.Default != "" {
+			env.Set(envfile.GlobalSection, g.Key, g.Default)
+		}
+	}
+
+	if err := createDataDirs(def, env); err != nil {
+		return fail(res, "data dirs: %v", err)
+	}
+
+	if def.ID == "dex" {
+		if err := dex.SaveConfig(cfg, dexClients); err != nil {
+			return fail(res, "dex config: %v", err)
+		}
+	}
+
+	if def.OIDC != nil {
+		oidcSecretKey := strings.ToUpper(strings.ReplaceAll(def.ID, "-", "_")) + "_OIDC_SECRET"
+		if _, ok := env.Get(oidcSecretKey); !ok {
+			sec, err := secrets.RandomHex(20)
+			if err != nil {
+				return fail(res, "oidc secret: %v", err)
+			}
+			env.Set(def.ID, oidcSecretKey, sec)
+			cs.EnvKeys = appendUnique(cs.EnvKeys, oidcSecretKey)
+		}
+		oidcSecret, _ := env.Get(oidcSecretKey)
+		firstPort := 0
+		if len(def.Ports) > 0 {
+			firstPort = def.Ports[0].Host
+		}
+		redirectURI := dex.BuildRedirectURI(
+			def.OIDC.RedirectPath, def.ID, cfg.School.Slug,
+			cfg.School.ServerDomain, firstPort, true,
+		)
+		client := dex.Client{
+			ID: def.OIDC.ClientID, Secret: oidcSecret, Name: def.Name,
+			RedirectURIs: []string{redirectURI},
+		}
+		var err error
+		dexClients, err = dex.AddClient(client, cfg, dexClients)
+		if err != nil {
+			return fail(res, "dex client: %v", err)
+		}
+	}
+
+	composeDefs := collectComposeDefs(allDefs, def)
+	if err := compose.Regenerate(composeDefs); err != nil {
+		return fail(res, "compose: %v", err)
+	}
+
+	envfile.ApplySystemEnv(env, cfg, "")
+	if err := env.Save(paths.EnvFile()); err != nil {
+		return fail(res, "save env: %v", err)
+	}
+
+	// Pull AHEAD of compose up so a tag like :latest or :main actually picks
+	// up a newer image — docker compose itself never re-pulls a tag it has
+	// cached. We continue on pull failure (offline / registry hiccup) so the
+	// recreate still happens against whatever image is on disk.
+	if _, pullOut := docker.ComposePull(paths.ComposeFile(), compose.ServiceName(def.ID)); pullOut != "" {
+		// Combined output includes both progress lines and errors; only surface
+		// it when something looked off. We can't reliably parse the exit code
+		// here because compose returns 0 even on partial pull failures.
+	}
+
+	if code, out := docker.ComposeUp(paths.ComposeFile(), compose.ServiceName(def.ID)); code != 0 {
+		return fail(res, "compose up: %s", out)
+	}
+
+	cs.VersionInstalled = def.Version
+
+	res.SecretsToShow = map[string]string{}
+	if def.PostInstall != nil {
+		for _, s := range def.PostInstall.SecretsToShow {
+			if val, ok := env.Get(s.Key); ok {
+				res.SecretsToShow[s.Key] = val
+			}
+		}
+		for _, m := range def.PostInstall.Messages {
+			res.Messages = append(res.Messages, expandEnvVars(m, env))
+		}
+	}
+	res.Success = true
+	return res, dexClients, nil
+}
+
+// checkSystemEnvDeps verifies that the system-owned env vars referenced by
+// the app are present and non-empty in .env. Specifically guards against the
+// silent-failure path where ${ADMIN_PASSWORD} expands to "" and an app's
+// WEBUI_ADMIN_PASSWORD seed is rejected without any error in compose. Only
+// envfile.SystemEnvKeys are checked — app secrets / DB passwords get
+// generated later in the install flow, so flagging them here would be wrong.
+func checkSystemEnvDeps(def *catalog.Definition, env *envfile.File) error {
+	systemKey := map[string]bool{}
+	for _, k := range envfile.SystemEnvKeys {
+		systemKey[k] = true
+	}
+	var missing []string
+	seen := map[string]bool{}
+	for _, e := range def.Environment {
+		for _, key := range extractEnvRefs(e.Value) {
+			if !systemKey[key] || seen[key] {
+				continue
+			}
+			seen[key] = true
+			val, ok := env.Get(key)
+			if !ok || val == "" {
+				missing = append(missing, key)
+			}
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	hint := ""
+	for _, k := range missing {
+		if k == "ADMIN_PASSWORD" {
+			hint = " (Admin-Passwort in den Einstellungen neu setzen, damit es in die .env geschrieben wird)"
+			break
+		}
+	}
+	return fmt.Errorf("system-env-Variablen leer in .env: %s%s", strings.Join(missing, ", "), hint)
+}
+
+// extractEnvRefs returns the names of all ${VAR} references in s. Plain $VAR
+// is intentionally ignored — stackctl always writes ${VAR} in catalog YAMLs.
+func extractEnvRefs(s string) []string {
+	var refs []string
+	for {
+		i := strings.Index(s, "${")
+		if i < 0 {
+			return refs
+		}
+		s = s[i+2:]
+		j := strings.Index(s, "}")
+		if j < 0 {
+			return refs
+		}
+		refs = append(refs, s[:j])
+		s = s[j+1:]
+	}
+}
+
+func appendUnique(s []string, v string) []string {
+	for _, x := range s {
+		if x == v {
+			return s
+		}
+	}
+	return append(s, v)
+}
+
+// Remove stops and removes an app from the stack. The image is deleted as
+// well, unless another installed app references it. If wipeData is true,
+// the host data directory under /opt/learningstack/{id}/ is wiped AND, for
+// apps with depends_on: postgres, the per-app database+role is dropped.
+// Otherwise data is preserved for a future reinstall.
 func Remove(
 	appID string,
 	cfg *config.Config,
@@ -255,6 +483,7 @@ func Remove(
 	env *envfile.File,
 	dexClients []dex.Client,
 	remainingDefs []*catalog.Definition,
+	wipeData bool,
 ) ([]dex.Client, error) {
 
 	cs, ok := state.Containers[appID]
@@ -262,8 +491,20 @@ func Remove(
 		return dexClients, fmt.Errorf("app %q not installed", appID)
 	}
 
-	// Stop container.
-	docker.ComposeStop(paths.ComposeFile(), compose.ServiceName(appID))
+	// Capture image + depends_on BEFORE we drop the cached definition /
+	// regenerate compose — we need them for cleanup below.
+	var (
+		removedImage string
+		usesPostgres bool
+	)
+	if def, err := catalog.LoadDefinition(appID); err == nil {
+		removedImage = def.Image.FullImage()
+		usesPostgres = dependsOn(def, "postgres")
+	}
+
+	// Stop AND remove the container. A plain stop would leave the container
+	// lingering in `docker ps -a` under the same name and block reinstall.
+	docker.ComposeRm(paths.ComposeFile(), compose.ServiceName(appID))
 
 	// Remove OIDC client if it was registered.
 	for _, c := range dexClients {
@@ -295,6 +536,42 @@ func Remove(
 	}
 	if err := compose.Regenerate(composeDefs); err != nil {
 		return dexClients, fmt.Errorf("compose regen: %w", err)
+	}
+
+	// Image-Cleanup: nur loeschen, wenn keine andere installierte App
+	// dasselbe Image referenziert (z.B. zwei Apps auf demselben Base-Image).
+	if removedImage != "" {
+		stillUsed := false
+		for _, d := range remainingDefs {
+			if d.Image.FullImage() == removedImage {
+				stillUsed = true
+				break
+			}
+		}
+		if !stillUsed {
+			if err := docker.RemoveImage(removedImage); err != nil {
+				// Nicht fatal: Container ist weg, Image-Rest darf hier kein
+				// Roll-back ausloesen. Caller loggt das uebliche Save-Ergebnis.
+				_ = err
+			}
+		}
+	}
+
+	// Daten-Cleanup nur wenn explizit angefordert. Nicht-fatal: Drop kann an
+	// einem Lock haengen (z.B. wenn ein anderer Container die DB noch offen
+	// hat), Host-Pfad kann auf einem ReadOnly-FS liegen. In beiden Faellen
+	// ist der Container schon weg — wir loggen, blocken aber nicht.
+	if wipeData {
+		if usesPostgres {
+			if err := postgres.DropAppDB(appID); err != nil {
+				_ = err
+			}
+		}
+		// Konvention: alle App-Daten liegen unter /opt/learningstack/{id}/.
+		// RemoveHostPath weigert sich, ausserhalb davon zu loeschen.
+		if err := docker.RemoveHostPath("/opt/learningstack/" + appID); err != nil {
+			_ = err
+		}
 	}
 
 	return dexClients, nil

@@ -65,6 +65,17 @@ func ComposeDown(composeFile string, services ...string) (int, string) {
 	return code, out
 }
 
+// ComposeRm stops AND removes the given services (does not touch networks
+// or volumes). Use this when a service was removed from docker-compose.yml
+// — plain stop leaves the container lingering in `docker ps -a` and blocks
+// the container name on reinstall.
+func ComposeRm(composeFile string, services ...string) (int, string) {
+	args := composeArgs(composeFile, "rm", "-f", "-s")
+	args = append(args, services...)
+	code, out, _ := run(nil, "docker", args...)
+	return code, out
+}
+
 // ComposeStop stops the given services without removing them.
 func ComposeStop(composeFile string, services ...string) (int, string) {
 	args := composeArgs(composeFile, "stop")
@@ -122,6 +133,34 @@ func Pull(image string) (string, error) {
 		return out, fmt.Errorf("pull %s: %s", image, out)
 	}
 	return out, nil
+}
+
+// ComposePull runs `docker compose pull` for the given services (or all if
+// empty). Used by the manual-update flow so that a subsequent `up -d`
+// recreates the container against the freshly fetched image.
+func ComposePull(composeFile string, services ...string) (int, string) {
+	args := composeArgs(composeFile, "pull")
+	args = append(args, services...)
+	code, out, _ := run(nil, "docker", args...)
+	return code, out
+}
+
+// RemoveImage deletes a local image. Errors are surfaced but the function is
+// tolerant of "no such image" and "image in use" situations so callers can
+// invoke it during uninstall without aborting the whole flow.
+func RemoveImage(image string) error {
+	if image == "" {
+		return fmt.Errorf("rmi: empty image")
+	}
+	_, out, err := run(nil, "docker", "rmi", image)
+	if err != nil {
+		// Image already gone — treat as success.
+		if strings.Contains(out, "No such image") || strings.Contains(out, "reference does not exist") {
+			return nil
+		}
+		return fmt.Errorf("rmi %s: %s", image, strings.TrimSpace(out))
+	}
+	return nil
 }
 
 // HelperImage ist das Wegwerf-Image fuer kleine Host-Filesystem-Ops

@@ -22,11 +22,11 @@ func TestApplySystemEnv(t *testing.T) {
 	ApplySystemEnv(f, cfg, "pw123456")
 
 	for k, want := range map[string]string{
-		"SCHOOL_NAME":             "Phoenix",
-		"SCHOOL_SLUG":             "phoenix",
-		"SERVER_DOMAIN":           "192.168.1.10",
-		"DEX_AUTH_URL":            "https://auth.phoenix.learningstack.online",
-		"STACKCTL_ADMIN_PASSWORD": "pw123456",
+		"SCHOOL_NAME":    "Phoenix",
+		"SCHOOL_SLUG":    "phoenix",
+		"SERVER_DOMAIN":  "192.168.1.10",
+		"DEX_AUTH_URL":   "https://auth.phoenix.learningstack.online",
+		"ADMIN_PASSWORD": "pw123456",
 	} {
 		if v, ok := f.Get(k); !ok || v != want {
 			t.Errorf("%s = %q,%v; want %q", k, v, ok, want)
@@ -36,13 +36,13 @@ func TestApplySystemEnv(t *testing.T) {
 
 func TestApplySystemEnvPreservesExistingPassword(t *testing.T) {
 	f := New()
-	f.Set(GlobalSection, "STACKCTL_ADMIN_PASSWORD", "old")
+	f.Set(GlobalSection, "ADMIN_PASSWORD", "old")
 	cfg := &config.Config{School: config.School{Name: "S", Slug: "s"}}
 
 	ApplySystemEnv(f, cfg, "") // empty password → preserve
 
-	if v, _ := f.Get("STACKCTL_ADMIN_PASSWORD"); v != "old" {
-		t.Errorf("STACKCTL_ADMIN_PASSWORD = %q; want %q (preserved)", v, "old")
+	if v, _ := f.Get("ADMIN_PASSWORD"); v != "old" {
+		t.Errorf("ADMIN_PASSWORD = %q; want %q (preserved)", v, "old")
 	}
 }
 

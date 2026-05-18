@@ -10,14 +10,14 @@ var SystemEnvKeys = []string{
 	"SCHOOL_SLUG",
 	"SERVER_DOMAIN",
 	"DEX_AUTH_URL",
-	"STACKCTL_ADMIN_PASSWORD",
+	"ADMIN_PASSWORD",
 }
 
 // ApplySystemEnv overwrites the system-owned keys in the global section
 // using the current Config. adminPassword, if non-empty, overwrites the
-// STACKCTL_ADMIN_PASSWORD entry; pass "" to leave any existing value
-// untouched (we never persist the plaintext in config.yaml, so callers
-// that don't have the plaintext at hand should pass "").
+// ADMIN_PASSWORD entry; pass "" to leave any existing value untouched
+// (we never persist the plaintext in config.yaml, so callers that don't
+// have the plaintext at hand should pass "").
 func ApplySystemEnv(f *File, cfg *config.Config, adminPassword string) {
 	if f == nil || cfg == nil {
 		return
@@ -38,6 +38,6 @@ func ApplySystemEnv(f *File, cfg *config.Config, adminPassword string) {
 	f.Set(GlobalSection, "DEX_AUTH_URL", authURL)
 
 	if adminPassword != "" {
-		f.Set(GlobalSection, "STACKCTL_ADMIN_PASSWORD", adminPassword)
+		f.Set(GlobalSection, "ADMIN_PASSWORD", adminPassword)
 	}
 }

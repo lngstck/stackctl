@@ -59,7 +59,6 @@ secrets:
     generate: password
   - key: LANGFLOW_OIDC_SECRET
     generate: secret
-admin_password_env: LANGFLOW_SUPERUSER_PASSWORD
 prompts:
   - key: LANGFLOW_EXTRA_SETTING
     question: Extra-Setting?
@@ -73,6 +72,18 @@ post_install:
     - key: LANGFLOW_DB_PASSWORD
       label: Datenbank-Passwort
 `
+
+// testStubYAML returns a minimal-but-valid Definition YAML for catalog
+// entries the test doesn't care about individually but Sync still tries to
+// fetch.
+func testStubYAML(id, name, image, tag string) string {
+	return "id: " + id + "\n" +
+		"name: " + name + "\n" +
+		"version: \"1.0\"\n" +
+		"description: stub\n" +
+		"category: infrastructure\n" +
+		"image:\n  name: " + image + "\n  tag: \"" + tag + "\"\n"
+}
 
 func withTempDir(t *testing.T) {
 	t.Helper()
@@ -88,6 +99,14 @@ func startTestServer(t *testing.T) *httptest.Server {
 	})
 	mux.HandleFunc("/containers/langflow.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(testAppDefYAML))
+	})
+	// Stubs fuer die anderen im Index gelisteten Apps — Sync laedt seit
+	// dem Definition-Refetch jede einzeln nach.
+	mux.HandleFunc("/containers/postgres.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(testStubYAML("postgres", "PostgreSQL", "postgres", "18")))
+	})
+	mux.HandleFunc("/containers/dex.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(testStubYAML("dex", "Dex", "ghcr.io/dexidp/dex", "v2.45.1")))
 	})
 	mux.HandleFunc("/containers/missing.yaml", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -157,9 +176,6 @@ func TestFetchAndLoadDefinition(t *testing.T) {
 	}
 	if def.OIDC == nil || def.OIDC.ClientID != "langflow" {
 		t.Errorf("OIDC = %+v", def.OIDC)
-	}
-	if def.AdminPasswordEnv != "LANGFLOW_SUPERUSER_PASSWORD" {
-		t.Errorf("AdminPasswordEnv = %q", def.AdminPasswordEnv)
 	}
 	if len(def.Secrets) != 2 {
 		t.Errorf("secrets count = %d", len(def.Secrets))

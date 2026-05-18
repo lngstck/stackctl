@@ -18,14 +18,17 @@ import (
 const DefaultPasswordLength = 20
 
 // passwordAlphabet is the character set used for generated passwords.
-// It is intentionally conservative: no quotes, backslash, whitespace, or
-// characters that could trip up shells, docker-compose variable
-// substitution, or YAML parsers. Upper, lower, digits, plus a few safe
-// specials.
+// Intentionally URL-safe and shell-safe: upper, lower, digits only.
+// We previously included "!@#%^&*+-=?", but `@` and `:` break any
+// connection string of the form scheme://user:pass@host (psycopg2, JDBC,
+// Redis URLs, …), and other specials require URL-encoding the password
+// everywhere it appears. 20 chars from [A-Za-z0-9] is ~119 bits of
+// entropy — plenty for a per-install DB password.
+// (Ambiguous characters like 0/O, 1/l/I are omitted so the value can be
+// read aloud / copied by an admin without errors.)
 const passwordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ" +
 	"abcdefghijkmnopqrstuvwxyz" +
-	"23456789" +
-	"!@#%^&*+-=?"
+	"23456789"
 
 // RandomHex returns a lowercase hex string of 2*nBytes characters. Use
 // this for secrets that live inside config files where arbitrary bytes

@@ -88,11 +88,31 @@ func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCatalogSync(w http.ResponseWriter, r *http.Request) {
+	// Caller darf via ?return=... bestimmen, wo nach dem Sync gelandet wird.
+	// Per Default: /system (alte URL, falls noch jemand direkt postet).
+	returnTo := r.FormValue("return")
+	if returnTo == "" {
+		returnTo = "/system"
+	}
+	// Whitelist statt freier Redirect-Akzeptanz: nur In-App-Pfade.
+	if returnTo[0] != '/' || (len(returnTo) > 1 && returnTo[1] == '/') {
+		returnTo = "/system"
+	}
+
+	param := "sync"
+	if returnTo == "/apps" {
+		param = "msg"
+	}
+
 	_, err := catalog.Sync(s.cfg.Catalog.URL)
 	if err != nil {
 		log.Printf("web: catalog sync: %v", err)
-		http.Redirect(w, r, "/system?sync="+fmt.Sprintf("Fehler: %v", err), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("%s?%s=%s&err=1", returnTo, param, "Katalog-Sync+fehlgeschlagen"), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/system?sync=ok", http.StatusSeeOther)
+	msg := "Katalog+aktualisiert"
+	if returnTo == "/system" {
+		msg = "ok"
+	}
+	http.Redirect(w, r, fmt.Sprintf("%s?%s=%s", returnTo, param, msg), http.StatusSeeOther)
 }

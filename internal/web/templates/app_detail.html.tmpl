@@ -47,6 +47,25 @@
     </article>
     {{end}}
 
+    {{if or .AdminLogin .AdminPassword .AdminNotes}}
+    <article class="card mb-2">
+      <h4 class="mb-1">Admin-Login</h4>
+      <table>
+        <tbody>
+          {{if .AdminLogin}}
+          <tr><td class="sub">Benutzer</td><td><code>{{.AdminLogin}}</code></td></tr>
+          {{end}}
+          {{if .AdminPassword}}
+          <tr><td class="sub">Passwort</td><td>{{.AdminPassword}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{if .AdminNotes}}
+      <p class="sub mt-1" style="font-size:0.85rem;white-space:pre-wrap;">{{.AdminNotes}}</p>
+      {{end}}
+    </article>
+    {{end}}
+
     {{if or .Homepage .Docs}}
     <article class="card">
       <h4 class="mb-1">Links</h4>
@@ -96,7 +115,15 @@
           <button class="ghost small">Starten</button>
         </form>
         {{end}}
+        <form method="post" action="/apps/{{.ID}}/update" style="display:inline"
+              onsubmit="return confirm('Katalog-Definition neu laden und Image aktualisieren? Der Container wird kurz neu gestartet.')">
+          <button class="ghost small">Aktualisieren</button>
+        </form>
       </div>
+      <p class="sub mt-1" style="font-size:0.8rem">
+        Holt die aktuelle Katalog-Definition + neueste Image-Version und
+        startet den Container neu. Daten und Secrets bleiben erhalten.
+      </p>
     </article>
 
     <article class="card">
@@ -108,12 +135,18 @@
       </div>
       {{end}}
       <p class="sub mb-1" style="font-size:0.85rem">
-        Container und Konfiguration werden entfernt. Daten unter
-        <code>/opt/learningstack/{{.ID}}/</code> bleiben erhalten und
-        werden bei einer Neuinstallation wiederverwendet.
+        Container, Konfiguration und das Docker-Image werden entfernt.
+        Daten unter <code>/opt/learningstack/{{.ID}}/</code> bleiben per
+        Default erhalten und werden bei einer Neuinstallation wiederverwendet.
       </p>
       <form method="post" action="/apps/{{.ID}}/remove"
-            onsubmit="return confirm('App {{.Name}}{{if .IsMandatory}} (Pflicht-Container!){{end}} wirklich entfernen?')">
+            onsubmit="return confirm(this.wipe_data.checked
+              ? 'App {{.Name}} entfernen UND alle Daten loeschen? Das ist nicht umkehrbar.'
+              : 'App {{.Name}}{{if .IsMandatory}} (Pflicht-Container!){{end}} wirklich entfernen?')">
+        <label data-field class="mb-1" style="font-size:0.85rem;">
+          <input type="checkbox" name="wipe_data">
+          Auch Daten loeschen (Postgres-DB + <code>/opt/learningstack/{{.ID}}/</code>)
+        </label>
         <button data-variant="danger" class="small">App entfernen</button>
       </form>
     </article>
