@@ -129,6 +129,18 @@ func Install(
 		}
 	}
 
+	// llmd hat eine eigene config.yaml unter /opt/learningstack/llmd/config/
+	// — beim Erstinstall seedet stackctl Beispiel-Personas und generiert
+	// den Schul-Default-API-Key (LLM_API_KEY). Bei Re-Installs idempotent.
+	if def.ID == "llmd" {
+		added, err := seedLLMConfig(env)
+		if err != nil {
+			rollback()
+			return fail(res, "llmd seed: %v", err)
+		}
+		newEnvKeys = append(newEnvKeys, added...)
+	}
+
 	// --- 4. Postgres DB (if depends_on postgres) ----------------------------
 
 	if dependsOn(def, "postgres") {
