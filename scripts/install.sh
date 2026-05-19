@@ -84,7 +84,17 @@ info "Erstelle Verzeichnisse..."
 mkdir -p "$INSTALL_DIR"/{config,compose}
 mkdir -p "$DATA_DIR"
 chown -R "$USER:$GROUP" "$INSTALL_DIR"
-chown -R "$USER:$GROUP" "$DATA_DIR"
+# WICHTIG: NICHT chown -R auf $DATA_DIR. Unter /opt/learningstack/ leben
+# Container-Daten mit Container-spezifischen UIDs (postgres 999, dex 1001,
+# grafana 472, ...). Ein rekursiver chown auf learningstack:learningstack
+# bricht Postgres-/Dex-Datenverzeichnisse bei jedem erneuten install.sh-
+# Lauf — Postmaster-Forks scheitern dann mit "permission denied" auf
+# global/pg_filenode.map. stackctl chownt die App-Daten beim Install via
+# Throwaway-Container auf die richtigen UIDs (paths.EnsureDir + owner:
+# aus der Katalog-Definition). Hier nur das Top-Level fuer stackctl
+# beschreibbar machen, damit der Service neue App-Verzeichnisse anlegen
+# kann.
+chown "$USER:$GROUP" "$DATA_DIR"
 
 # --- Download binary ------------------------------------------------------
 info "Lade stackctl herunter..."
