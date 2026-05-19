@@ -54,6 +54,28 @@ func StateFile() string    { return filepath.Join(ConfigDir(), "state.yaml") }
 func DexConfigFile() string {
 	return filepath.Join(LearningstackDir(), "dex", "config", "config.yaml")
 }
+// LLMConfigDir is the host directory that holds the llmd config.yaml and
+// per-persona prompt files. It is bind-mounted into the llmd container as
+// /etc/llmd (read-only). stackctl is the sole writer.
+func LLMConfigDir() string {
+	return filepath.Join(LearningstackDir(), "llmd", "config")
+}
+
+// LLMConfigFile is the canonical config.yaml that llmd reads.
+func LLMConfigFile() string {
+	return filepath.Join(LLMConfigDir(), "config.yaml")
+}
+
+// LLMPromptDir is the directory that holds one .md file per persona.
+func LLMPromptDir() string {
+	return filepath.Join(LLMConfigDir(), "prompts")
+}
+
+// LLMPromptFile returns the prompt file path for a persona ID.
+func LLMPromptFile(personaID string) string {
+	return filepath.Join(LLMPromptDir(), personaID+".md")
+}
+
 func TunnelKeyFile() string { return filepath.Join(ConfigDir(), "tunnel_key") }
 func TunnelPubKeyFile() string {
 	return filepath.Join(ConfigDir(), "tunnel_key.pub")
