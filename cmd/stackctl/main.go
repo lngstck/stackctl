@@ -15,7 +15,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/dex"
+	"github.com/lngstck/stackctl/internal/envfile"
+	"github.com/lngstck/stackctl/internal/install"
 	"github.com/lngstck/stackctl/internal/paths"
 	"github.com/lngstck/stackctl/internal/secrets"
 	"github.com/lngstck/stackctl/internal/tunnel"
@@ -48,6 +52,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdWeb(rest, stdout, stderr)
 	case "hashpw":
 		return cmdHashpw(rest, stdout, stderr)
+	case "autoupdate":
+		return cmdAutoupdate(rest, stdout, stderr)
 	case "help", "-h", "--help":
 		usage(stdout)
 		return 0
@@ -172,5 +178,122 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  version        Print version and exit")
 	fmt.Fprintln(w, "  web            Start the admin web UI")
 	fmt.Fprintln(w, "  hashpw         Print a bcrypt hash for admin.password_hash")
+	fmt.Fprintln(w, "  autoupdate     Sync catalog and install non-breaking app updates")
 	fmt.Fprintln(w, "  help           Show this help")
+}
+
+// cmdAutoupdate runs a single auto-update cycle:
+//  1. Syncs the catalog.
+//  2. Computes available updates against state.
+//  3. For each app: skips breaking + per-app opt-outs, otherwise install.Update.
+//
+// Exits 0 even with per-app failures so the systemd timer keeps running. The
+// global on/off switch lives in cfg.AutoUpdate.Enabled and is checked first;
+// the command is also safe to invoke manually (the global switch is bypassed
+// with -force).
+func cmdAutoupdate(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("autoupdate", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	force := fs.Bool("force", false, "ignore the global auto_update.enabled flag")
+	dryRun := fs.Bool("dry-run", false, "only list available updates, do not install")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(stderr, "autoupdate: load config: %v\n", err)
+		return 1
+	}
+	state, err := config.LoadState()
+	if err != nil {
+		fmt.Fprintf(stderr, "autoupdate: load state: %v\n", err)
+		return 1
+	}
+
+	if cfg.SetupState != config.SetupStateReady {
+		fmt.Fprintln(stdout, "autoupdate: setup not complete, skipping")
+		return 0
+	}
+	if !cfg.AutoUpdate.Enabled && !*force {
+		fmt.Fprintln(stdout, "autoupdate: disabled in settings, skipping")
+		return 0
+	}
+
+	if _, err := catalog.Sync(cfg.Catalog.URL); err != nil {
+		// Refresh-Fehler einzelner Definitionen sind nicht fatal — Sync hat
+		// den Index erfolgreich aktualisiert, wir laufen weiter mit dem, was
+		// gecacht ist.
+		fmt.Fprintf(stderr, "autoupdate: catalog sync warning: %v\n", err)
+	}
+
+	installed := map[string]string{}
+	for id, cs := range state.Containers {
+		installed[id] = cs.VersionInstalled
+	}
+	updates := catalog.AvailableUpdates(installed)
+	if len(updates) == 0 {
+		fmt.Fprintln(stdout, "autoupdate: no updates available")
+		return 0
+	}
+
+	for _, u := range updates {
+		cs := state.Containers[u.AppID]
+		switch {
+		case u.Breaking:
+			fmt.Fprintf(stdout, "autoupdate: skip %s (%s → %s): breaking\n", u.AppID, u.From, u.To)
+			continue
+		case cs != nil && cs.AutoUpdateDisabled:
+			fmt.Fprintf(stdout, "autoupdate: skip %s (%s → %s): opt-out\n", u.AppID, u.From, u.To)
+			continue
+		}
+		if *dryRun {
+			fmt.Fprintf(stdout, "autoupdate: would update %s (%s → %s)\n", u.AppID, u.From, u.To)
+			continue
+		}
+		if err := runUpdate(cfg, state, u.AppID); err != nil {
+			fmt.Fprintf(stderr, "autoupdate: %s: %v\n", u.AppID, err)
+			continue
+		}
+		fmt.Fprintf(stdout, "autoupdate: updated %s (%s → %s)\n", u.AppID, u.From, u.To)
+	}
+	return 0
+}
+
+// runUpdate fuehrt das Update einer einzelnen App durch — analog zum
+// Web-Handler handleAppUpdate, aber ohne HTTP-Drumherum.
+func runUpdate(cfg *config.Config, state *config.State, appID string) error {
+	def, err := catalog.FetchDefinition(cfg.Catalog.URL, appID)
+	if err != nil {
+		return fmt.Errorf("fetch definition: %w", err)
+	}
+
+	env, err := envfile.Load(paths.EnvFile())
+	if err != nil {
+		env = envfile.New()
+	}
+
+	var allDefs []*catalog.Definition
+	for id := range state.Containers {
+		if d, err := catalog.LoadDefinition(id); err == nil {
+			allDefs = append(allDefs, d)
+		}
+	}
+
+	var dexClients []dex.Client
+	_, updatedClients, updateErr := install.Update(def, cfg, state, env, dexClients, allDefs)
+
+	envfile.ApplySystemEnv(env, cfg, "")
+	if err := env.Save(paths.EnvFile()); err != nil {
+		return fmt.Errorf("save env: %w", err)
+	}
+	if err := state.Save(); err != nil {
+		return fmt.Errorf("save state: %w", err)
+	}
+	if updatedClients != nil {
+		if err := dex.SaveConfig(cfg, updatedClients); err != nil {
+			return fmt.Errorf("save dex config: %w", err)
+		}
+	}
+	return updateErr
 }

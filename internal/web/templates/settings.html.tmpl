@@ -62,6 +62,13 @@
       <input type="password" name="llm_api_key" value="{{.LLMAPIKey}}" placeholder="sk-...">
     </label>
 
+    <h3 class="mb-2">Automatische Updates</h3>
+    <label data-field class="mb-2">
+      <input type="checkbox" name="auto_update" {{if .AutoUpdate}}checked{{end}}>
+      Naechtliche Auto-Updates aktivieren
+      <span class="hint">stackctl prueft jede Nacht den Katalog und installiert nicht-kritische Updates automatisch. Apps mit Breaking-Marker und manuell deaktivierte Apps bleiben unangetastet.</span>
+    </label>
+
     <h3 class="mb-2">Dex-Upstream</h3>
     <p class="sub mb-2">Aktuell fest auf <strong>moin.schule</strong> via zentralem Dex konfiguriert. Dex-URL: <code>{{.DexAuthURL}}</code></p>
 

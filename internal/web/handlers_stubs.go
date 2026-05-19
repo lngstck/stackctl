@@ -19,6 +19,7 @@ type settingsData struct {
 	LLMEndpoint  string
 	LLMAPIKey    string
 	DexAuthURL   string
+	AutoUpdate   bool
 	Error        string
 	Message      string
 }
@@ -33,6 +34,7 @@ func (s *Server) settingsData(msg, errMsg string) settingsData {
 		LLMEndpoint:  s.cfg.GlobalEnv["LLM_ENDPOINT"],
 		LLMAPIKey:    s.cfg.GlobalEnv["LLM_API_KEY"],
 		DexAuthURL:   s.cfg.Dex.AuthURL,
+		AutoUpdate:   s.cfg.AutoUpdate.Enabled,
 		Message:      msg,
 		Error:        errMsg,
 	}
@@ -88,6 +90,7 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.GlobalEnv["LLM_ENDPOINT"] = llmEndpoint
 	s.cfg.GlobalEnv["LLM_API_KEY"] = llmAPIKey
+	s.cfg.AutoUpdate.Enabled = r.FormValue("auto_update") == "on"
 
 	if err := s.cfg.Save(); err != nil {
 		log.Printf("web: save config from settings: %v", err)

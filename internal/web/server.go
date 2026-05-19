@@ -116,6 +116,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /apps/{id}/install", s.requireAuth(s.handleAppInstallForm))
 	s.mux.HandleFunc("POST /apps/{id}/install", s.requireAuth(s.handleAppInstallPost))
 	s.mux.HandleFunc("POST /apps/{id}/update", s.requireAuth(s.handleAppUpdate))
+	s.mux.HandleFunc("POST /apps/{id}/autoupdate", s.requireAuth(s.handleAppAutoUpdateToggle))
 	s.mux.HandleFunc("POST /apps/{id}/remove", s.requireAuth(s.handleAppRemove))
 	s.mux.HandleFunc("POST /apps/{id}/start", s.requireAuth(s.handleAppStart))
 	s.mux.HandleFunc("POST /apps/{id}/stop", s.requireAuth(s.handleAppStop))

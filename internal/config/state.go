@@ -33,6 +33,9 @@ type ContainerState struct {
 	InstalledAt      string   `yaml:"installed_at"`
 	TunnelEnabled    bool     `yaml:"tunnel_enabled"`
 	TunnelSubdomain  string   `yaml:"tunnel_subdomain,omitempty"`
+	// AutoUpdateDisabled schliesst diese App vom naechtlichen Auto-Update
+	// aus. Manuelle Updates (Web-UI "Aktualisieren") sind weiterhin moeglich.
+	AutoUpdateDisabled bool `yaml:"auto_update_disabled,omitempty"`
 }
 
 // NewState returns an empty state with the current schema version.

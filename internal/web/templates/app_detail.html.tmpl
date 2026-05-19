@@ -11,6 +11,11 @@
   <h2 style="margin:0">{{.Name}}</h2>
   {{if .Category}}<span class="badge">{{.Category}}</span>{{end}}
   <span class="sub" style="font-size:0.85rem">v{{.Version}}</span>
+  {{if .UpdateAvailable}}
+  <span class="badge" data-variant="{{if .UpdateBreaking}}warning{{else}}success{{end}}">
+    {{if .UpdateBreaking}}Update (manuell): v{{.UpdateTo}}{{else}}Update verfuegbar: v{{.UpdateTo}}{{end}}
+  </span>
+  {{end}}
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
@@ -123,6 +128,27 @@
       <p class="sub mt-1" style="font-size:0.8rem">
         Holt die aktuelle Katalog-Definition + neueste Image-Version und
         startet den Container neu. Daten und Secrets bleiben erhalten.
+      </p>
+      {{if .UpdateBreaking}}
+      <div role="alert" data-variant="warning" class="mt-2" style="font-size:0.85rem">
+        Dieses Update ist als <strong>breaking</strong> markiert (z.B. DB-Migration).
+        Auto-Update ueberspringt es; bitte vorher Backup pruefen.
+      </div>
+      {{end}}
+    </article>
+
+    <article class="card mb-2">
+      <h4 class="mb-1">Auto-Update</h4>
+      <form method="post" action="/apps/{{.ID}}/autoupdate">
+        <label data-field class="mb-1" style="font-size:0.85rem;">
+          <input type="checkbox" name="disabled" {{if .AutoUpdateDisabled}}checked{{end}}>
+          Diese App vom naechtlichen Auto-Update ausnehmen
+        </label>
+        <button class="ghost small">Speichern</button>
+      </form>
+      <p class="sub mt-1" style="font-size:0.8rem">
+        Globaler Auto-Update-Schalter ist in den Einstellungen.
+        Breaking-Updates werden immer uebersprungen.
       </p>
     </article>
 

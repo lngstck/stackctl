@@ -80,6 +80,11 @@
   <div class="card-meta">
     {{if .IsInstalled}}
     <div class="sub" style="font-size:0.8rem;">v{{.Version}} installiert</div>
+    {{if .UpdateAvailable}}
+    <span class="badge" data-variant="{{if .UpdateBreaking}}warning{{else}}success{{end}}" style="margin-top:0.25rem;font-size:0.75rem">
+      {{if .UpdateBreaking}}Update (manuell): v{{.UpdateTo}}{{else}}Update verfuegbar: v{{.UpdateTo}}{{end}}
+    </span>
+    {{end}}
     {{end}}
   </div>
   <div class="card-footer">

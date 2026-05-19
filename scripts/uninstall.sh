@@ -23,6 +23,15 @@ die()   { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
 PURGE=false
 [ "${1:-}" = "--purge" ] && PURGE=true
 
+# Stop and disable auto-update timer.
+if systemctl is-active stackctl-autoupdate.timer &>/dev/null; then
+    info "Stoppe stackctl-autoupdate.timer..."
+    systemctl stop stackctl-autoupdate.timer
+fi
+if systemctl is-enabled stackctl-autoupdate.timer &>/dev/null; then
+    systemctl disable stackctl-autoupdate.timer
+fi
+
 # Stop and disable service.
 if systemctl is-active stackctl &>/dev/null; then
     info "Stoppe stackctl..."
@@ -38,8 +47,10 @@ if [ -f /opt/stackctl/compose/docker-compose.yml ]; then
     docker compose -f /opt/stackctl/compose/docker-compose.yml down 2>/dev/null || true
 fi
 
-# Remove service file.
+# Remove service files.
 rm -f /etc/systemd/system/stackctl.service
+rm -f /etc/systemd/system/stackctl-autoupdate.service
+rm -f /etc/systemd/system/stackctl-autoupdate.timer
 systemctl daemon-reload 2>/dev/null || true
 
 # Remove symlink.

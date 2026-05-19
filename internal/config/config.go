@@ -44,6 +44,16 @@ type Config struct {
 	Registration Registration      `yaml:"registration,omitempty"`
 	GlobalEnv    map[string]string `yaml:"global_env,omitempty"`
 	Tunnel       Tunnel            `yaml:"tunnel"`
+	// AutoUpdate steuert das naechtliche Auto-Update aller Apps.
+	AutoUpdate AutoUpdate `yaml:"auto_update,omitempty"`
+}
+
+// AutoUpdate konfiguriert das naechtliche Auto-Update.
+// Default ist deaktiviert; der Admin schaltet es in den Einstellungen ein.
+// Auch im aktivierten Zustand werden Apps mit Breaking-Flag oder
+// AutoUpdateDisabled uebersprungen.
+type AutoUpdate struct {
+	Enabled bool `yaml:"enabled,omitempty"`
 }
 
 // School holds user-entered identity fields for a school install.

@@ -48,6 +48,11 @@ type Definition struct {
 	Description string `yaml:"description"`
 	Category    string `yaml:"category"`
 
+	// Breaking markiert ein Update als nicht-automatisch installierbar
+	// (z.B. DB-Schema-Migration, Config-Format geaendert). Auto-Update
+	// ueberspringt solche Updates; das UI zeigt sie als "manuell bestaetigen".
+	Breaking bool `yaml:"breaking,omitempty"`
+
 	// Secrets to auto-generate on install.
 	Secrets []SecretSpec `yaml:"secrets,omitempty"`
 

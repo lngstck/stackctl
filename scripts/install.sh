@@ -19,6 +19,8 @@ GITHUB_REPO="lngstck/stackctl"
 INSTALL_DIR="/opt/stackctl"
 DATA_DIR="/opt/learningstack"
 SERVICE_FILE="/etc/systemd/system/stackctl.service"
+AUTOUPDATE_SERVICE_FILE="/etc/systemd/system/stackctl-autoupdate.service"
+AUTOUPDATE_TIMER_FILE="/etc/systemd/system/stackctl-autoupdate.timer"
 SYMLINK="/usr/local/bin/stackctl"
 USER="learningstack"
 GROUP="learningstack"
@@ -134,11 +136,47 @@ RestartSec=3
 WantedBy=multi-user.target
 UNIT
 
+info "Installiere systemd-Auto-Update-Timer..."
+cat > "$AUTOUPDATE_SERVICE_FILE" << 'UNIT'
+[Unit]
+Description=stackctl nightly app auto-update
+After=docker.service network-online.target stackctl.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=learningstack
+Group=learningstack
+SupplementaryGroups=docker
+ExecStart=/opt/stackctl/stackctl autoupdate
+UNIT
+
+cat > "$AUTOUPDATE_TIMER_FILE" << 'UNIT'
+[Unit]
+Description=stackctl nightly app auto-update (timer)
+
+[Timer]
+# 03:00 nominal mit bis zu einer Stunde Jitter, damit nicht alle Schulen
+# zur selben Sekunde catalog.learningstack.online + registry hammern.
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+
 systemctl daemon-reload
 systemctl enable stackctl
 systemctl start stackctl
+# Timer ist immer aktiv; der eigentliche Auto-Update-Lauf prueft den
+# globalen Schalter aus config.yaml (auto_update.enabled) und exit-ed
+# ohne Aenderungen, wenn der Admin ihn nicht eingeschaltet hat.
+systemctl enable --now stackctl-autoupdate.timer
 
 info "stackctl-Service gestartet."
+info "Auto-Update-Timer aktiviert (laeuft naechtlich 03:00 +/- 1h)."
 
 # --- Detect server IP -----------------------------------------------------
 SERVER_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[\d.]+' || hostname -I | awk '{print $1}' || echo "localhost")

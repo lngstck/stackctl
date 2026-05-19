@@ -1,0 +1,15 @@
+# /etc/systemd/system/stackctl-autoupdate.service
+# Installed by scripts/install.sh — do not edit manually.
+
+[Unit]
+Description=stackctl nightly app auto-update
+After=docker.service network-online.target stackctl.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=learningstack
+Group=learningstack
+SupplementaryGroups=docker
+ExecStart=/opt/stackctl/stackctl autoupdate

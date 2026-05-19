@@ -1,0 +1,15 @@
+# /etc/systemd/system/stackctl-autoupdate.timer
+# Installed by scripts/install.sh — do not edit manually.
+
+[Unit]
+Description=stackctl nightly app auto-update (timer)
+
+[Timer]
+# 03:00 nominal mit bis zu einer Stunde Jitter, damit nicht alle Schulen
+# zur selben Sekunde catalog.learningstack.online + registry hammern.
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

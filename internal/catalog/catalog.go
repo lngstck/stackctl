@@ -281,6 +281,45 @@ func HasUpdate(installedVersion, catalogVersion string) bool {
 		installedVersion != catalogVersion
 }
 
+// UpdateInfo beschreibt ein verfuegbares Update fuer eine installierte App.
+type UpdateInfo struct {
+	AppID    string
+	Name     string
+	From     string // installierte Version (state)
+	To       string // Katalog-Version
+	Breaking bool
+}
+
+// AvailableUpdates vergleicht jede installierte App gegen die aktuell
+// gecachte Katalog-Definition. Liefert sortiert die Apps, deren
+// Katalog-Version von der installierten Version abweicht.
+//
+// Setzt voraus, dass der Caller vorher Sync() aufgerufen hat, damit die
+// gecachten Definitionen aktuell sind. Definitionen, die nicht geladen
+// werden koennen, werden uebersprungen (kein Fehler — Sync hat das bereits
+// behandelt).
+func AvailableUpdates(installed map[string]string) []UpdateInfo {
+	var out []UpdateInfo
+	for appID, installedVer := range installed {
+		def, err := LoadDefinition(appID)
+		if err != nil {
+			continue
+		}
+		if !HasUpdate(installedVer, def.Version) {
+			continue
+		}
+		out = append(out, UpdateInfo{
+			AppID:    appID,
+			Name:     def.Name,
+			From:     installedVer,
+			To:       def.Version,
+			Breaking: def.Breaking,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].AppID < out[j].AppID })
+	return out
+}
+
 // -- internals --------------------------------------------------------------
 
 func parseDefinition(data []byte) (*Definition, error) {

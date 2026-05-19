@@ -28,13 +28,16 @@ type appsData struct {
 
 // appListEntry holds one entry in the app catalog list.
 type appListEntry struct {
-	ID          string
-	Name        string
-	Category    string
-	Description string
-	Version     string
-	IsInstalled bool
-	Status      string // "running" | "stopped" | "unknown" | "" (not installed)
+	ID              string
+	Name            string
+	Category        string
+	Description     string
+	Version         string
+	IsInstalled     bool
+	Status          string // "running" | "stopped" | "unknown" | "" (not installed)
+	UpdateAvailable bool
+	UpdateTo        string
+	UpdateBreaking  bool
 }
 
 // appDetailData is the template context for app_detail.html.tmpl.
@@ -58,9 +61,13 @@ type appDetailData struct {
 	Homepage        string
 	Docs            string
 	IsMandatory     bool
-	AdminLogin      string
-	AdminPassword   string
-	AdminNotes      string
+	AdminLogin         string
+	AdminPassword      string
+	AdminNotes         string
+	UpdateAvailable    bool
+	UpdateTo           string
+	UpdateBreaking     bool
+	AutoUpdateDisabled bool
 }
 
 // appInstallData is the template context for app_install.html.tmpl.
@@ -144,6 +151,14 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 			} else {
 				entry.Status = "stopped"
 			}
+			// Update-Verfuegbarkeit aus gecachter Definition ableiten.
+			if def, err := catalog.LoadDefinition(app.ID); err == nil {
+				if catalog.HasUpdate(cs.VersionInstalled, def.Version) {
+					entry.UpdateAvailable = true
+					entry.UpdateTo = def.Version
+					entry.UpdateBreaking = def.Breaking
+				}
+			}
 			data.Installed = append(data.Installed, entry)
 		} else {
 			entry.Status = ""
@@ -195,7 +210,8 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		TunnelSubdomain: cs.TunnelSubdomain,
 		ContainerName:   "ls-" + appID,
 		InstalledAt:     cs.InstalledAt,
-		IsMandatory:     appID == "postgres" || appID == "dex",
+		IsMandatory:        appID == "postgres" || appID == "dex",
+		AutoUpdateDisabled: cs.AutoUpdateDisabled,
 	}
 
 	// Load definition for extra info (OIDC, links, category, description).
@@ -203,6 +219,11 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		data.Category = def.Category
 		data.Description = def.Description
+		if catalog.HasUpdate(cs.VersionInstalled, def.Version) {
+			data.UpdateAvailable = true
+			data.UpdateTo = def.Version
+			data.UpdateBreaking = def.Breaking
+		}
 		if def.OIDC != nil {
 			data.HasOIDC = true
 			data.OIDCClientID = def.OIDC.ClientID
@@ -411,6 +432,24 @@ func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 		PageData: s.pageData("apps"),
 		Result:   result,
 	})
+}
+
+func (s *Server) handleAppAutoUpdateToggle(w http.ResponseWriter, r *http.Request) {
+	appID := r.PathValue("id")
+	cs, ok := s.state.Containers[appID]
+	if !ok {
+		http.Redirect(w, r, "/apps?msg=Nicht+installiert&err=1", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+		return
+	}
+	cs.AutoUpdateDisabled = r.FormValue("disabled") == "on"
+	if err := s.state.Save(); err != nil {
+		log.Printf("web: save state after autoupdate toggle: %v", err)
+	}
+	http.Redirect(w, r, fmt.Sprintf("/apps/%s", appID), http.StatusSeeOther)
 }
 
 func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
