@@ -112,6 +112,36 @@ func RestartContainer(name string) error {
 	return nil
 }
 
+// SendSignal sends a Unix signal to a container's main process via
+// `docker kill --signal=<sig>`. signal must be a bare name like "HUP" or
+// "TERM" (no leading "SIG"). Used for graceful config-reload of daemons
+// that watch for SIGHUP (llmd, nginx, ...).
+func SendSignal(name, signal string) error {
+	if name == "" {
+		return fmt.Errorf("kill: empty container name")
+	}
+	if !validSignal(signal) {
+		return fmt.Errorf("kill: invalid signal %q", signal)
+	}
+	_, out, err := run(nil, "docker", "kill", "--signal="+signal, name)
+	if err != nil {
+		return fmt.Errorf("kill -s %s %s: %s", signal, name, strings.TrimSpace(out))
+	}
+	return nil
+}
+
+func validSignal(s string) bool {
+	if s == "" || len(s) > 10 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= 'A' && c <= 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
 // IsRunning checks whether the named container is in "running" state.
 func IsRunning(name string) bool {
 	_, out, err := run(nil, "docker", "inspect", "-f", "{{.State.Running}}", name)
