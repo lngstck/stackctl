@@ -9,6 +9,7 @@
 package update
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -151,11 +152,34 @@ func Apply(rel *ReleaseInfo) (string, error) {
 	return newVersion, nil
 }
 
-// RestartService attempts to restart the stackctl systemd service.
-// This will terminate the current process.
+// RestartService restarts the stackctl systemd service via sudo. The service
+// runs as the unpriv. `learningstack` user, which has no polkit/sudoers right
+// for arbitrary systemctl actions — install.sh ships /etc/sudoers.d/stackctl
+// with a NOPASSWD rule for exactly this command (see Issue #6).
+//
+// We DON'T fire-and-forget: cmd.Start() returns nil as soon as the fork
+// succeeds, regardless of whether systemctl was actually allowed to run.
+// That's how Issue #6 manifested — the handler reported "Update erfolgreich,
+// Neustart…" while the old process kept running because sudoers was missing.
+//
+// Instead we cmd.Run() with a short timeout. Two outcomes:
+//   - sudo/systemctl fails (no sudoers, wrong path, …) → non-zero exit, error
+//     propagates to the handler and the UI shows the real reason.
+//   - restart succeeds → systemd kills us mid-Run a few ms after systemctl
+//     finishes its job. The HTTP client sees a connection reset — that's the
+//     expected success path.
 func RestartService() error {
-	cmd := exec.Command("systemctl", "restart", "stackctl")
-	return cmd.Start() // fire and forget — we'll be killed
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// -n: nicht-interaktiv. Wenn sudoers fehlt, schlaegt sudo sofort fehl
+	// statt nach einem Passwort zu fragen (das das Web-UI ohnehin nicht
+	// liefern kann).
+	cmd := exec.CommandContext(ctx, "sudo", "-n", "systemctl", "restart", "stackctl")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("restart stackctl: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // fetchLatestRelease calls the GitHub API.

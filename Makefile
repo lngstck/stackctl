@@ -63,10 +63,16 @@ deploy-devbox:
 
 ## release: Tag setzen, Linux-Binaries bauen, GitHub Release erstellen
 ## Nutzung: make release TAG=v0.1.0
-release: build-all
+##
+## WICHTIG: Tag MUSS vor build-all gesetzt werden, sonst trägt
+## `git describe --tags --dirty` (s. VERSION oben) einen Pre-Tag-String und
+## die hochgeladenen Binaries laufen mit der falschen Version.
+release:
 	@test -n "$(TAG)" || (echo "Nutzung: make release TAG=v0.1.0" && exit 1)
+	@git diff --quiet || (echo "Working tree dirty — commit/stash erst." && exit 1)
 	git tag -a $(TAG) -m "Release $(TAG)"
 	git push origin $(TAG)
+	$(MAKE) build-all
 	gh release create $(TAG) \
 		$(DIST)/stackctl-linux-amd64 \
 		$(DIST)/stackctl-linux-arm64 \

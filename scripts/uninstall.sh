@@ -56,6 +56,9 @@ systemctl daemon-reload 2>/dev/null || true
 # Remove symlink.
 rm -f /usr/local/bin/stackctl
 
+# Remove sudoers snippet (Self-Update, s. install.sh / Issue #6).
+rm -f /etc/sudoers.d/stackctl
+
 # Remove program directory.
 info "Entferne /opt/stackctl/..."
 rm -rf /opt/stackctl

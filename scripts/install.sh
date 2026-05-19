@@ -22,6 +22,7 @@ SERVICE_FILE="/etc/systemd/system/stackctl.service"
 AUTOUPDATE_SERVICE_FILE="/etc/systemd/system/stackctl-autoupdate.service"
 AUTOUPDATE_TIMER_FILE="/etc/systemd/system/stackctl-autoupdate.timer"
 SYMLINK="/usr/local/bin/stackctl"
+SUDOERS_FILE="/etc/sudoers.d/stackctl"
 USER="learningstack"
 GROUP="learningstack"
 
@@ -188,6 +189,29 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 UNIT
+
+# --- sudoers snippet for self-update --------------------------------------
+# Der Service laeuft als unpriv. learningstack-User und kann von sich aus
+# kein System-Unit neustarten. Self-Update (siehe internal/update/update.go,
+# Issue #6) braucht genau diesen einen Befehl als root. NOPASSWD, weil das
+# Web-UI nicht interaktiv ein Passwort eingeben kann. Minimaler Blast Radius
+# durch volle Pfad-Bindung auf /bin/systemctl + festes Argument.
+info "Installiere sudoers-Snippet fuer Self-Update..."
+# Hinweis: systemctl liegt je nach Distro unter /bin oder /usr/bin — beide
+# Pfade auflisten (sudoers matcht den vollen Pfad). Auf Debian/Ubuntu ist
+# /bin meist ein Symlink auf /usr/bin (usrmerge), aber sudoers prueft Pfade
+# nicht resolved sondern als String. Daher beide Varianten erlauben.
+cat > "$SUDOERS_FILE" << 'SUDO'
+learningstack ALL=(root) NOPASSWD: /bin/systemctl restart stackctl
+learningstack ALL=(root) NOPASSWD: /usr/bin/systemctl restart stackctl
+SUDO
+chmod 0440 "$SUDOERS_FILE"
+# visudo -c -f als Safety-Net: bei Syntaxfehler den Snippet wieder loeschen,
+# damit der ganze sudoers-Stack nicht kaputtgeht.
+if ! visudo -c -f "$SUDOERS_FILE" >/dev/null 2>&1; then
+    rm -f "$SUDOERS_FILE"
+    die "sudoers-Snippet ist ungueltig (visudo -c failed) — abgebrochen."
+fi
 
 systemctl daemon-reload
 systemctl enable stackctl
