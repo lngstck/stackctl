@@ -91,19 +91,31 @@ info "Lade stackctl herunter..."
 ASSET_NAME="stackctl-linux-${GOARCH}"
 DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${ASSET_NAME}"
 
-HTTP_CODE=$(curl -fsSL -w "%{http_code}" -o "${INSTALL_DIR}/stackctl" "$DOWNLOAD_URL" 2>/dev/null || true)
-if [ ! -f "${INSTALL_DIR}/stackctl" ] || [ "${HTTP_CODE}" != "200" ]; then
+# Erst in eine Temp-Datei laden, dann atomar nach ${INSTALL_DIR}/stackctl
+# umbenennen. Direktes Schreiben auf ein laufendes Binary scheitert auf
+# Linux mit ETXTBSY (Text file busy) — curl meldet das aber nicht ueber
+# HTTP_CODE, das wuerde stumm bleiben. `mv` ueber das laufende Binary ist
+# safe: der Kernel haengt den neuen Inode unter den Namen, der laufende
+# Prozess behaelt seinen alten Inode bis zum Restart.
+TMP_BIN="${INSTALL_DIR}/stackctl.new"
+rm -f "$TMP_BIN"
+HTTP_CODE=$(curl -fSL -w "%{http_code}" -o "$TMP_BIN" "$DOWNLOAD_URL" 2>&1 | tail -1 || true)
+if [ ! -s "$TMP_BIN" ] || [ "${HTTP_CODE}" != "200" ]; then
+    rm -f "$TMP_BIN"
     die "Download fehlgeschlagen (HTTP ${HTTP_CODE}). URL: ${DOWNLOAD_URL}"
 fi
 
-chmod 755 "${INSTALL_DIR}/stackctl"
-chown "$USER:$GROUP" "${INSTALL_DIR}/stackctl"
+chmod 755 "$TMP_BIN"
+chown "$USER:$GROUP" "$TMP_BIN"
 
-# Verify binary works.
-VERSION=$("${INSTALL_DIR}/stackctl" version 2>/dev/null || echo "")
+# Verify binary works BEFORE replacing the running one.
+VERSION=$("$TMP_BIN" version 2>/dev/null || echo "")
 if [ -z "$VERSION" ]; then
+    rm -f "$TMP_BIN"
     die "Heruntergeladenes Binary ist nicht ausfuehrbar."
 fi
+
+mv -f "$TMP_BIN" "${INSTALL_DIR}/stackctl"
 info "Installiert: ${VERSION}"
 
 # Write version file.
@@ -169,7 +181,10 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable stackctl
-systemctl start stackctl
+# restart statt start: bei einem Upgrade laeuft der Service schon, sonst
+# wuerde der alte Prozess mit dem alten Inode weiterlaufen und das neu
+# installierte Binary erst beim naechsten Neustart aktiv werden.
+systemctl restart stackctl
 # Timer ist immer aktiv; der eigentliche Auto-Update-Lauf prueft den
 # globalen Schalter aus config.yaml (auto_update.enabled) und exit-ed
 # ohne Aenderungen, wenn der Admin ihn nicht eingeschaltet hat.
