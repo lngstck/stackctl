@@ -54,6 +54,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdHashpw(rest, stdout, stderr)
 	case "autoupdate":
 		return cmdAutoupdate(rest, stdout, stderr)
+	case "llm":
+		return cmdLLM(rest, stdout, stderr)
 	case "help", "-h", "--help":
 		usage(stdout)
 		return 0
@@ -179,6 +181,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  web            Start the admin web UI")
 	fmt.Fprintln(w, "  hashpw         Print a bcrypt hash for admin.password_hash")
 	fmt.Fprintln(w, "  autoupdate     Sync catalog and install non-breaking app updates")
+	fmt.Fprintln(w, "  llm            Manage the local LLM gateway (providers, personas, keys)")
 	fmt.Fprintln(w, "  help           Show this help")
 }
 
