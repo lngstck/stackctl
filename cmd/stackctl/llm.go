@@ -1,10 +1,15 @@
-// stackctl llm — CLI fuer die llmd-Konfiguration (Provider, Modelle,
-// Personas, API-Keys). Schreibt config.yaml + prompts/ in
-// /opt/learningstack/llmd/config/ und schickt SIGHUP an ls-llmd.
+// stackctl llm — CLI fuer die llmd-Konfiguration (Provider, Personas, API-Keys).
+// Schreibt config.yaml in /opt/learningstack/llmd/config/ und schickt SIGHUP
+// an ls-llmd.
 //
-// Alle schreibenden Subbefehle sind flag-basiert (skript-freundlich).
-// Einzige Ausnahme: `persona edit` oeffnet $EDITOR fuer den Prompt-Text —
-// Multiline-Prompts via CLI-Flag sind nicht praktikabel.
+// Schema v2: kein models[] mehr, Personas zeigen direkt auf (provider,
+// upstream_id), Provider tragen api_key inline, kein api_key_env. Prompts
+// sind inline am Persona-Objekt.
+//
+// Design-Hinweis: die meisten Admins arbeiten via Web-UI. Diese CLI deckt
+// Day-0-Setup und SSH-Recovery ab (list/show/dump/revoke). Add/Edit-Pfade
+// existieren fuer Skripting, sollen aber kein dauerhafter Daily-Driver
+// werden — UI ist der Default-Workflow.
 
 package main
 
@@ -34,8 +39,6 @@ func cmdLLM(args []string, stdout, stderr io.Writer) int {
 
 	case "provider":
 		return dispatchProvider(rest, stdout, stderr)
-	case "model":
-		return dispatchModel(rest, stdout, stderr)
 	case "persona":
 		return dispatchPersona(rest, stdout, stderr)
 	case "key":
@@ -58,12 +61,11 @@ func llmUsage(w io.Writer) {
 	fmt.Fprintln(w, "  stackctl llm <subcommand> [args]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  status                             Show counts and readiness")
-	fmt.Fprintln(w, "  reload                             Re-render + SIGHUP llmd")
-	fmt.Fprintln(w, "  provider add|list|rm|show          Upstream provider config")
-	fmt.Fprintln(w, "  model    add|list|rm|show          Model definitions")
-	fmt.Fprintln(w, "  persona  add|edit|list|rm|show     Schul-eigene Personas")
-	fmt.Fprintln(w, "  key      create|list|revoke        API-Keys fuer Clients")
+	fmt.Fprintln(w, "  status                                   Counts + readiness summary")
+	fmt.Fprintln(w, "  reload                                   SIGHUP llmd")
+	fmt.Fprintln(w, "  provider add|list|rm|show|set-key        Upstream-Provider inkl. API-Keys")
+	fmt.Fprintln(w, "  persona  add|edit|list|rm|show|set       Schul-eigene Personas")
+	fmt.Fprintln(w, "  key      create|list|revoke              API-Keys fuer Clients (Open WebUI etc.)")
 }
 
 // === status / reload =======================================================
@@ -74,17 +76,26 @@ func cmdLLMStatus(_ []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "llm: load: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "providers:  %d\n", len(f.Providers))
-	fmt.Fprintf(stdout, "models:     %d\n", len(f.Models))
-	fmt.Fprintf(stdout, "personas:   %d", len(f.Personas))
+	missingKey := 0
+	for _, p := range f.Providers {
+		if p.APIKey == "" {
+			missingKey++
+		}
+	}
+	fmt.Fprintf(stdout, "providers:  %d", len(f.Providers))
+	if missingKey > 0 {
+		fmt.Fprintf(stdout, " (%d ohne api_key)", missingKey)
+	}
+	fmt.Fprintln(stdout)
 	inactive := 0
 	for _, p := range f.Personas {
-		if p.Model == "" {
+		if p.Provider == "" || p.UpstreamID == "" {
 			inactive++
 		}
 	}
+	fmt.Fprintf(stdout, "personas:   %d", len(f.Personas))
 	if inactive > 0 {
-		fmt.Fprintf(stdout, " (%d ohne Modell)", inactive)
+		fmt.Fprintf(stdout, " (%d inaktiv)", inactive)
 	}
 	fmt.Fprintln(stdout)
 	fmt.Fprintf(stdout, "api_keys:   %d\n", len(f.APIKeys))
@@ -104,7 +115,7 @@ func cmdLLMReload(_ []string, stdout, stderr io.Writer) int {
 
 func dispatchProvider(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: stackctl llm provider <add|list|rm|show>")
+		fmt.Fprintln(stderr, "usage: stackctl llm provider <add|list|rm|show|set-key>")
 		return 2
 	}
 	switch args[0] {
@@ -116,10 +127,41 @@ func dispatchProvider(args []string, stdout, stderr io.Writer) int {
 		return cmdProviderRm(args[1:], stdout, stderr)
 	case "show":
 		return cmdProviderShow(args[1:], stdout, stderr)
+	case "set-key":
+		return cmdProviderSetKey(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown: provider %s\n", args[0])
 		return 2
 	}
+}
+
+// readAPIKey loest die drei moeglichen Quellen auf: --api-key flag, stdin
+// (wenn --api-key-stdin gesetzt), oder leer (Provider wird ohne Key
+// angelegt). Liefert (key, error). Shell-History-safe wenn --api-key-stdin.
+func readAPIKey(flagValue string, fromStdin bool, stderr io.Writer) (string, error) {
+	if fromStdin && flagValue != "" {
+		return "", fmt.Errorf("--api-key and --api-key-stdin are mutually exclusive")
+	}
+	if fromStdin {
+		raw, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("read stdin: %w", err)
+		}
+		return strings.TrimSpace(string(raw)), nil
+	}
+	return flagValue, nil
+}
+
+// maskKey gibt einen sicheren Display-String fuer API-Keys zurueck.
+// "" -> "(not set)", sonst erstes 4 Zeichen + "..." + letzte 4.
+func maskKey(k string) string {
+	if k == "" {
+		return "(not set)"
+	}
+	if len(k) <= 8 {
+		return strings.Repeat("*", len(k))
+	}
+	return k[:4] + "..." + k[len(k)-4:]
 }
 
 func cmdProviderAdd(args []string, stdout, stderr io.Writer) int {
@@ -128,20 +170,27 @@ func cmdProviderAdd(args []string, stdout, stderr io.Writer) int {
 	id := fs.String("id", "", "provider id (lowercase slug)")
 	kind := fs.String("kind", "openai", "provider kind")
 	baseURL := fs.String("base-url", "", "upstream base URL (without /v1)")
-	apiKeyEnv := fs.String("api-key-env", "", "name of env var holding the upstream API key")
+	apiKey := fs.String("api-key", "", "upstream API key (use --api-key-stdin to avoid shell history)")
+	apiKeyStdin := fs.Bool("api-key-stdin", false, "read API key from stdin instead of --api-key")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *id == "" || *baseURL == "" || *apiKeyEnv == "" {
-		fmt.Fprintln(stderr, "provider add: --id, --base-url and --api-key-env are required")
+	if *id == "" || *baseURL == "" {
+		fmt.Fprintln(stderr, "provider add: --id and --base-url are required")
 		return 2
 	}
+	key, err := readAPIKey(*apiKey, *apiKeyStdin, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "api-key: %v\n", err)
+		return 2
+	}
+
 	f, err := llm.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "load: %v\n", err)
 		return 1
 	}
-	if err := f.AddProvider(llm.Provider{ID: *id, Kind: *kind, BaseURL: *baseURL, APIKeyEnv: *apiKeyEnv}); err != nil {
+	if err := f.AddProvider(llm.Provider{ID: *id, Kind: *kind, BaseURL: *baseURL, APIKey: key}); err != nil {
 		fmt.Fprintf(stderr, "add: %v\n", err)
 		return 1
 	}
@@ -150,6 +199,59 @@ func cmdProviderAdd(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "added provider %s\n", *id)
+	if key == "" {
+		fmt.Fprintln(stdout, "  (no api_key set — set later with 'stackctl llm provider set-key')")
+	}
+	return 0
+}
+
+func cmdProviderSetKey(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("provider set-key", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	apiKey := fs.String("api-key", "", "new API key (use --api-key-stdin to avoid shell history)")
+	apiKeyStdin := fs.Bool("api-key-stdin", false, "read API key from stdin")
+	clear := fs.Bool("clear", false, "remove the key (sets it to empty)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "usage: stackctl llm provider set-key <id> [--api-key X | --api-key-stdin | --clear]")
+		return 2
+	}
+	id := fs.Arg(0)
+
+	var key string
+	if !*clear {
+		var err error
+		key, err = readAPIKey(*apiKey, *apiKeyStdin, stderr)
+		if err != nil {
+			fmt.Fprintf(stderr, "api-key: %v\n", err)
+			return 2
+		}
+		if key == "" {
+			fmt.Fprintln(stderr, "provider set-key: provide --api-key, --api-key-stdin, or --clear")
+			return 2
+		}
+	}
+
+	f, err := llm.Load()
+	if err != nil {
+		fmt.Fprintf(stderr, "load: %v\n", err)
+		return 1
+	}
+	if err := f.SetProviderKey(id, key); err != nil {
+		fmt.Fprintf(stderr, "set-key: %v\n", err)
+		return 1
+	}
+	if err := llm.SaveAndReload(f); err != nil {
+		fmt.Fprintf(stderr, "save: %v\n", err)
+		return 1
+	}
+	if key == "" {
+		fmt.Fprintf(stdout, "%s: api_key cleared\n", id)
+	} else {
+		fmt.Fprintf(stdout, "%s: api_key updated (%s)\n", id, maskKey(key))
+	}
 	return 0
 }
 
@@ -160,9 +262,9 @@ func cmdProviderList(_ []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tKIND\tBASE_URL\tAPI_KEY_ENV")
+	fmt.Fprintln(tw, "ID\tKIND\tBASE_URL\tAPI_KEY")
 	for _, p := range f.Providers {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.ID, p.Kind, p.BaseURL, p.APIKeyEnv)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.ID, p.Kind, p.BaseURL, maskKey(p.APIKey))
 	}
 	tw.Flush()
 	return 0
@@ -205,125 +307,10 @@ func cmdProviderShow(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "provider %q not found\n", args[0])
 		return 1
 	}
-	fmt.Fprintf(stdout, "id:           %s\n", p.ID)
-	fmt.Fprintf(stdout, "kind:         %s\n", p.Kind)
-	fmt.Fprintf(stdout, "base_url:     %s\n", p.BaseURL)
-	fmt.Fprintf(stdout, "api_key_env:  %s", p.APIKeyEnv)
-	if os.Getenv(p.APIKeyEnv) == "" {
-		fmt.Fprintln(stdout, "  (NOT SET in environment)")
-	} else {
-		fmt.Fprintln(stdout, "  (set)")
-	}
-	return 0
-}
-
-// === model =================================================================
-
-func dispatchModel(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: stackctl llm model <add|list|rm|show>")
-		return 2
-	}
-	switch args[0] {
-	case "add":
-		return cmdModelAdd(args[1:], stdout, stderr)
-	case "list":
-		return cmdModelList(args[1:], stdout, stderr)
-	case "rm", "remove":
-		return cmdModelRm(args[1:], stdout, stderr)
-	case "show":
-		return cmdModelShow(args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "unknown: model %s\n", args[0])
-		return 2
-	}
-}
-
-func cmdModelAdd(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("model add", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	id := fs.String("id", "", "local model id")
-	provider := fs.String("provider", "", "provider id")
-	upstreamID := fs.String("upstream-id", "", "upstream model name (as provider expects it)")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	if *id == "" || *provider == "" || *upstreamID == "" {
-		fmt.Fprintln(stderr, "model add: --id, --provider and --upstream-id are required")
-		return 2
-	}
-	f, err := llm.Load()
-	if err != nil {
-		fmt.Fprintf(stderr, "load: %v\n", err)
-		return 1
-	}
-	if err := f.AddModel(llm.Model{ID: *id, Provider: *provider, UpstreamID: *upstreamID}); err != nil {
-		fmt.Fprintf(stderr, "add: %v\n", err)
-		return 1
-	}
-	if err := llm.SaveAndReload(f); err != nil {
-		fmt.Fprintf(stderr, "save: %v\n", err)
-		return 1
-	}
-	fmt.Fprintf(stdout, "added model %s\n", *id)
-	return 0
-}
-
-func cmdModelList(_ []string, stdout, stderr io.Writer) int {
-	f, err := llm.Load()
-	if err != nil {
-		fmt.Fprintf(stderr, "load: %v\n", err)
-		return 1
-	}
-	tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tPROVIDER\tUPSTREAM_ID")
-	for _, m := range f.Models {
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", m.ID, m.Provider, m.UpstreamID)
-	}
-	tw.Flush()
-	return 0
-}
-
-func cmdModelRm(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: stackctl llm model rm <id>")
-		return 2
-	}
-	f, err := llm.Load()
-	if err != nil {
-		fmt.Fprintf(stderr, "load: %v\n", err)
-		return 1
-	}
-	if err := f.RemoveModel(args[0]); err != nil {
-		fmt.Fprintf(stderr, "rm: %v\n", err)
-		return 1
-	}
-	if err := llm.SaveAndReload(f); err != nil {
-		fmt.Fprintf(stderr, "save: %v\n", err)
-		return 1
-	}
-	fmt.Fprintf(stdout, "removed model %s\n", args[0])
-	return 0
-}
-
-func cmdModelShow(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: stackctl llm model show <id>")
-		return 2
-	}
-	f, err := llm.Load()
-	if err != nil {
-		fmt.Fprintf(stderr, "load: %v\n", err)
-		return 1
-	}
-	m := f.GetModel(args[0])
-	if m == nil {
-		fmt.Fprintf(stderr, "model %q not found\n", args[0])
-		return 1
-	}
-	fmt.Fprintf(stdout, "id:           %s\n", m.ID)
-	fmt.Fprintf(stdout, "provider:     %s\n", m.Provider)
-	fmt.Fprintf(stdout, "upstream_id:  %s\n", m.UpstreamID)
+	fmt.Fprintf(stdout, "id:        %s\n", p.ID)
+	fmt.Fprintf(stdout, "kind:      %s\n", p.Kind)
+	fmt.Fprintf(stdout, "base_url:  %s\n", p.BaseURL)
+	fmt.Fprintf(stdout, "api_key:   %s\n", maskKey(p.APIKey))
 	return 0
 }
 
@@ -331,7 +318,7 @@ func cmdModelShow(args []string, stdout, stderr io.Writer) int {
 
 func dispatchPersona(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: stackctl llm persona <add|edit|list|rm|show>")
+		fmt.Fprintln(stderr, "usage: stackctl llm persona <add|edit|list|rm|show|set>")
 		return 2
 	}
 	switch args[0] {
@@ -345,22 +332,54 @@ func dispatchPersona(args []string, stdout, stderr io.Writer) int {
 		return cmdPersonaRm(args[1:], stdout, stderr)
 	case "show":
 		return cmdPersonaShow(args[1:], stdout, stderr)
-	case "set-model":
-		return cmdPersonaSetModel(args[1:], stdout, stderr)
+	case "set":
+		return cmdPersonaSet(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown: persona %s\n", args[0])
 		return 2
 	}
 }
 
+// readPrompt loest die drei Prompt-Quellen auf: --prompt-file <path>,
+// --prompt-stdin, oder $EDITOR (mit optionalem Initial-Text). Leer = leerer
+// Prompt (Passthrough-Persona).
+func readPrompt(promptFile string, fromStdin bool, editorInitial string) (string, error) {
+	if promptFile != "" && fromStdin {
+		return "", fmt.Errorf("--prompt-file and --prompt-stdin are mutually exclusive")
+	}
+	if promptFile != "" {
+		raw, err := os.ReadFile(promptFile)
+		if err != nil {
+			return "", fmt.Errorf("read %s: %w", promptFile, err)
+		}
+		return string(raw), nil
+	}
+	if fromStdin {
+		raw, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("read stdin: %w", err)
+		}
+		return string(raw), nil
+	}
+	// kein Quellen-Flag => $EDITOR
+	c, err := openInEditor(editorInitial)
+	if err != nil {
+		return "", err
+	}
+	return stripEditorComments(c), nil
+}
+
 func cmdPersonaAdd(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("persona add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	id := fs.String("id", "", "persona id (lowercase slug)")
-	model := fs.String("model", "", "model id (leave empty to add as inactive)")
+	provider := fs.String("provider", "", "provider id (leave empty to add as inactive)")
+	upstreamID := fs.String("upstream-id", "", "upstream model id (required if --provider is set)")
 	temperature := fs.Float64("temperature", -1, "default temperature (negative = unset)")
 	maxTokens := fs.Int("max-tokens", -1, "default max_tokens (negative = unset)")
-	promptFromFile := fs.String("prompt-file", "", "read system prompt from this file (otherwise opens $EDITOR after creation)")
+	promptFile := fs.String("prompt-file", "", "read system prompt from file (empty = $EDITOR or --prompt-stdin)")
+	promptStdin := fs.Bool("prompt-stdin", false, "read system prompt from stdin")
+	noPrompt := fs.Bool("no-prompt", false, "create persona without any system prompt (passthrough)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -375,7 +394,22 @@ func cmdPersonaAdd(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	p := llm.Persona{ID: *id, Model: *model}
+	var prompt string
+	if !*noPrompt {
+		prompt, err = readPrompt(*promptFile, *promptStdin,
+			"# System-Prompt fuer Persona "+*id+"\n# Kommentarzeilen mit # werden entfernt. Leer lassen = Passthrough.\n")
+		if err != nil {
+			fmt.Fprintf(stderr, "prompt: %v\n", err)
+			return 1
+		}
+	}
+
+	p := llm.Persona{
+		ID:         *id,
+		Provider:   *provider,
+		UpstreamID: *upstreamID,
+		Prompt:     strings.TrimSpace(prompt),
+	}
 	params := map[string]any{}
 	if *temperature >= 0 {
 		params["temperature"] = *temperature
@@ -391,76 +425,61 @@ func cmdPersonaAdd(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// Prompt entweder aus Datei, oder $EDITOR
-	var promptContent string
-	if *promptFromFile != "" {
-		raw, err := os.ReadFile(*promptFromFile)
-		if err != nil {
-			fmt.Fprintf(stderr, "read prompt-file: %v\n", err)
-			return 1
-		}
-		promptContent = string(raw)
-	} else {
-		c, err := openInEditor("# System-Prompt fuer Persona " + *id + "\n# Speichern und schliessen, um zu uebernehmen. Leer lassen, um spaeter zu editieren.\n")
-		if err != nil {
-			fmt.Fprintf(stderr, "editor: %v\n", err)
-			return 1
-		}
-		promptContent = stripEditorComments(c)
-	}
-	if strings.TrimSpace(promptContent) != "" {
-		if err := llm.SavePrompt(*id, promptContent); err != nil {
-			fmt.Fprintf(stderr, "save prompt: %v\n", err)
-			return 1
-		}
-	}
-
 	if err := llm.SaveAndReload(f); err != nil {
 		fmt.Fprintf(stderr, "save: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "added persona %s\n", *id)
-	if *model == "" {
-		fmt.Fprintln(stdout, "  (no model assigned — persona is inactive)")
+	if *provider == "" {
+		fmt.Fprintln(stdout, "  (no provider assigned — persona is inactive)")
 	}
 	return 0
 }
 
 func cmdPersonaEdit(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: stackctl llm persona edit <id>")
+	fs := flag.NewFlagSet("persona edit", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	promptFile := fs.String("prompt-file", "", "replace prompt from file (otherwise opens $EDITOR)")
+	promptStdin := fs.Bool("prompt-stdin", false, "replace prompt from stdin")
+	noPrompt := fs.Bool("no-prompt", false, "clear the system prompt")
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	id := args[0]
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "usage: stackctl llm persona edit <id> [--prompt-file F | --prompt-stdin | --no-prompt]")
+		return 2
+	}
+	id := fs.Arg(0)
 	f, err := llm.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "load: %v\n", err)
 		return 1
 	}
-	if f.GetPersona(id) == nil {
+	persona := f.GetPersona(id)
+	if persona == nil {
 		fmt.Fprintf(stderr, "persona %q not found\n", id)
 		return 1
 	}
-	existing, err := llm.LoadPrompt(id)
-	if err != nil {
-		fmt.Fprintf(stderr, "load prompt: %v\n", err)
+
+	var prompt string
+	if !*noPrompt {
+		prompt, err = readPrompt(*promptFile, *promptStdin, persona.Prompt)
+		if err != nil {
+			fmt.Fprintf(stderr, "prompt: %v\n", err)
+			return 1
+		}
+		prompt = strings.TrimSpace(prompt)
+		if prompt == strings.TrimSpace(persona.Prompt) {
+			fmt.Fprintln(stdout, "no change")
+			return 0
+		}
+	}
+	if err := f.SetPersonaPrompt(id, prompt); err != nil {
+		fmt.Fprintf(stderr, "set prompt: %v\n", err)
 		return 1
 	}
-	edited, err := openInEditor(existing)
-	if err != nil {
-		fmt.Fprintf(stderr, "editor: %v\n", err)
-		return 1
-	}
-	if edited == existing {
-		fmt.Fprintln(stdout, "no change")
-		return 0
-	}
-	if err := llm.SavePrompt(id, edited); err != nil {
-		fmt.Fprintf(stderr, "save prompt: %v\n", err)
-		return 1
-	}
-	if err := llm.Reload(); err != nil {
-		fmt.Fprintf(stderr, "reload: %v\n", err)
+	if err := llm.SaveAndReload(f); err != nil {
+		fmt.Fprintf(stderr, "save: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "updated prompt for %s\n", id)
@@ -474,17 +493,20 @@ func cmdPersonaList(_ []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tMODEL\tSTATUS")
+	fmt.Fprintln(tw, "ID\tPROVIDER\tUPSTREAM\tPROMPT\tSTATUS")
 	for _, p := range f.Personas {
 		status := "active"
-		if p.Model == "" {
-			status = "inactive (no model)"
+		switch {
+		case p.Provider == "":
+			status = "inactive (no provider)"
+		case p.UpstreamID == "":
+			status = "inactive (no upstream_id)"
 		}
-		model := p.Model
-		if model == "" {
-			model = "-"
+		hasPrompt := "-"
+		if strings.TrimSpace(p.Prompt) != "" {
+			hasPrompt = "yes"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", p.ID, model, status)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.ID, coalesce(p.Provider, "-"), coalesce(p.UpstreamID, "-"), hasPrompt, status)
 	}
 	tw.Flush()
 	return 0
@@ -503,10 +525,6 @@ func cmdPersonaRm(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := f.RemovePersona(id); err != nil {
 		fmt.Fprintf(stderr, "rm: %v\n", err)
-		return 1
-	}
-	if err := llm.RemovePrompt(id); err != nil {
-		fmt.Fprintf(stderr, "remove prompt: %v\n", err)
 		return 1
 	}
 	if err := llm.SaveAndReload(f); err != nil {
@@ -534,8 +552,8 @@ func cmdPersonaShow(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "id:           %s\n", p.ID)
-	fmt.Fprintf(stdout, "model:        %s\n", coalesce(p.Model, "(none)"))
-	fmt.Fprintf(stdout, "prompt_file:  %s\n", p.PromptFile)
+	fmt.Fprintf(stdout, "provider:     %s\n", coalesce(p.Provider, "(none)"))
+	fmt.Fprintf(stdout, "upstream_id:  %s\n", coalesce(p.UpstreamID, "(none)"))
 	if len(p.Params) > 0 {
 		fmt.Fprintf(stdout, "params:       ")
 		first := true
@@ -548,45 +566,57 @@ func cmdPersonaShow(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stdout)
 	}
-	prompt, _ := llm.LoadPrompt(id)
-	if prompt != "" {
+	if strings.TrimSpace(p.Prompt) != "" {
 		fmt.Fprintln(stdout, "---")
-		fmt.Fprint(stdout, prompt)
-		if !strings.HasSuffix(prompt, "\n") {
+		fmt.Fprint(stdout, p.Prompt)
+		if !strings.HasSuffix(p.Prompt, "\n") {
 			fmt.Fprintln(stdout)
 		}
 	}
 	return 0
 }
 
-func cmdPersonaSetModel(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 2 {
-		fmt.Fprintln(stderr, "usage: stackctl llm persona set-model <persona-id> <model-id|->")
-		fmt.Fprintln(stderr, "  use '-' as model-id to deactivate")
+// cmdPersonaSet weist (provider, upstream-id) zu, oder leert beides.
+func cmdPersonaSet(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("persona set", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	provider := fs.String("provider", "", "provider id (or empty + --clear to deactivate)")
+	upstreamID := fs.String("upstream-id", "", "upstream model id (required when --provider is set)")
+	clear := fs.Bool("clear", false, "deactivate persona (clears provider + upstream_id)")
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	id := args[0]
-	model := args[1]
-	if model == "-" {
-		model = ""
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "usage: stackctl llm persona set <id> --provider X --upstream-id Y | --clear")
+		return 2
 	}
+	id := fs.Arg(0)
+
+	if *clear {
+		*provider = ""
+		*upstreamID = ""
+	} else if *provider == "" || *upstreamID == "" {
+		fmt.Fprintln(stderr, "persona set: provide both --provider and --upstream-id (or use --clear)")
+		return 2
+	}
+
 	f, err := llm.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "load: %v\n", err)
 		return 1
 	}
-	if err := f.SetPersonaModel(id, model); err != nil {
-		fmt.Fprintf(stderr, "set-model: %v\n", err)
+	if err := f.SetPersonaUpstream(id, *provider, *upstreamID); err != nil {
+		fmt.Fprintf(stderr, "set: %v\n", err)
 		return 1
 	}
 	if err := llm.SaveAndReload(f); err != nil {
 		fmt.Fprintf(stderr, "save: %v\n", err)
 		return 1
 	}
-	if model == "" {
-		fmt.Fprintf(stdout, "%s: model cleared (persona inactive)\n", id)
+	if *provider == "" {
+		fmt.Fprintf(stdout, "%s: cleared (persona inactive)\n", id)
 	} else {
-		fmt.Fprintf(stdout, "%s: model set to %s\n", id, model)
+		fmt.Fprintf(stdout, "%s: provider=%s, upstream_id=%s\n", id, *provider, *upstreamID)
 	}
 	return 0
 }
@@ -714,8 +744,7 @@ func coalesce(a, b string) string {
 }
 
 // openInEditor schreibt initial in eine temp-Datei, oeffnet $EDITOR (oder
-// vi als Fallback), liest den geaenderten Inhalt zurueck. Wird fuer
-// Prompt-Editing genutzt.
+// vi als Fallback), liest den geaenderten Inhalt zurueck.
 func openInEditor(initial string) (string, error) {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
@@ -761,4 +790,3 @@ func stripEditorComments(s string) string {
 	}
 	return strings.Join(out, "\n")
 }
-

@@ -21,19 +21,19 @@ func setupTmpDir(t *testing.T) string {
 
 func TestValidSlug(t *testing.T) {
 	cases := map[string]bool{
-		"openai":          true,
-		"gpt-4o-mini":     true,
-		"minimax-m2.5":    true,
-		"a":               true,
-		"a1":              true,
-		"a_b":             true,
-		"":                false,
-		"-bad":            false,
-		"BAD":             false,
-		".bad":            false,
-		"with/slash":      false,
-		"with space":      false,
-		"with$dollar":     false,
+		"openai":       true,
+		"gpt-4o-mini":  true,
+		"minimax-m2.5": true,
+		"a":            true,
+		"a1":           true,
+		"a_b":          true,
+		"":             false,
+		"-bad":         false,
+		"BAD":          false,
+		".bad":         false,
+		"with/slash":   false,
+		"with space":   false,
+		"with$dollar":  false,
 	}
 	for in, want := range cases {
 		if got := ValidSlug(in); got != want {
@@ -60,16 +60,20 @@ func TestRoundtrip(t *testing.T) {
 	configDir := setupTmpDir(t)
 
 	f := &File{}
-	mustNoErr(t, f.AddProvider(Provider{ID: "openai", Kind: "openai", BaseURL: "https://api.openai.com", APIKeyEnv: "PROVIDER_OPENAI_KEY"}))
-	mustNoErr(t, f.AddModel(Model{ID: "gpt-4o-mini", Provider: "openai", UpstreamID: "gpt-4o-mini"}))
-	mustNoErr(t, f.AddPersona(Persona{ID: "schnell", Model: "gpt-4o-mini", Params: map[string]any{"temperature": 0.4}}))
+	mustNoErr(t, f.AddProvider(Provider{ID: "openai", Kind: "openai", BaseURL: "https://api.openai.com", APIKey: "sk-test"}))
+	mustNoErr(t, f.AddPersona(Persona{
+		ID:         "schnell",
+		Provider:   "openai",
+		UpstreamID: "gpt-4o-mini",
+		Prompt:     "Du bist hilfreich.\n",
+		Params:     map[string]any{"temperature": 0.4},
+	}))
 	mustNoErr(t, f.AddAPIKey(APIKey{ID: "open-webui", Prefix: "llm-abc12345", Hash: "$2a$12$x"}))
 
 	if err := Save(f); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
-	// File da, header da, content da
 	data, err := os.ReadFile(filepath.Join(configDir, "config.yaml"))
 	if err != nil {
 		t.Fatalf("read back: %v", err)
@@ -82,55 +86,84 @@ func TestRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if len(got.Providers) != 1 || got.Providers[0].ID != "openai" {
-		t.Errorf("provider lost: %+v", got.Providers)
+	if len(got.Providers) != 1 || got.Providers[0].ID != "openai" || got.Providers[0].APIKey != "sk-test" {
+		t.Errorf("provider roundtrip: %+v", got.Providers)
 	}
-	if len(got.Personas) != 1 || got.Personas[0].PromptFile != "schnell.md" {
-		t.Errorf("persona default prompt_file wrong: %+v", got.Personas)
+	if len(got.Personas) != 1 {
+		t.Fatalf("persona count = %d", len(got.Personas))
+	}
+	p := got.Personas[0]
+	if p.Provider != "openai" || p.UpstreamID != "gpt-4o-mini" || !strings.HasPrefix(p.Prompt, "Du bist hilfreich") {
+		t.Errorf("persona roundtrip: %+v", p)
 	}
 }
 
 func TestAddProviderDuplicate(t *testing.T) {
 	setupTmpDir(t)
 	f := &File{}
-	mustNoErr(t, f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKeyEnv: "Y"}))
-	if err := f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKeyEnv: "Y"}); err == nil {
+	mustNoErr(t, f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKey: "y"}))
+	if err := f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKey: "y"}); err == nil {
 		t.Error("expected duplicate error")
 	}
 }
 
-func TestRemoveProviderBlockedByModel(t *testing.T) {
+func TestAddProviderAllowsEmptyKey(t *testing.T) {
+	// Admin darf einen Provider ohne Key anlegen und ihn spaeter via
+	// SetProviderKey nachreichen. Personas darauf bleiben llmd-seitig
+	// inaktiv bis der Key da ist.
 	setupTmpDir(t)
 	f := &File{}
-	_ = f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKeyEnv: "Y"})
-	_ = f.AddModel(Model{ID: "m1", Provider: "openai", UpstreamID: "u"})
-	if err := f.RemoveProvider("openai"); err == nil {
-		t.Error("expected block from referencing model")
+	if err := f.AddProvider(Provider{ID: "openai", BaseURL: "https://x"}); err != nil {
+		t.Errorf("empty key should be allowed at stackctl layer: %v", err)
 	}
 }
 
-func TestRemoveModelBlockedByPersona(t *testing.T) {
+func TestSetProviderKey(t *testing.T) {
 	setupTmpDir(t)
 	f := &File{}
-	_ = f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKeyEnv: "Y"})
-	_ = f.AddModel(Model{ID: "m1", Provider: "openai", UpstreamID: "u"})
-	_ = f.AddPersona(Persona{ID: "p1", Model: "m1"})
-	if err := f.RemoveModel("m1"); err == nil {
+	_ = f.AddProvider(Provider{ID: "openai", BaseURL: "x"})
+	if err := f.SetProviderKey("openai", "sk-new"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if f.GetProvider("openai").APIKey != "sk-new" {
+		t.Errorf("key not set")
+	}
+	if err := f.SetProviderKey("ghost", "x"); err == nil {
+		t.Error("expected not-found")
+	}
+}
+
+func TestRemoveProviderBlockedByPersona(t *testing.T) {
+	setupTmpDir(t)
+	f := &File{}
+	_ = f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKey: "y"})
+	_ = f.AddPersona(Persona{ID: "p1", Provider: "openai", UpstreamID: "u"})
+	if err := f.RemoveProvider("openai"); err == nil {
 		t.Error("expected block from referencing persona")
 	}
 }
 
-func TestAddPersonaUnknownModel(t *testing.T) {
+func TestAddPersonaUnknownProvider(t *testing.T) {
 	setupTmpDir(t)
 	f := &File{}
-	if err := f.AddPersona(Persona{ID: "p1", Model: "ghost"}); err == nil {
-		t.Error("expected unknown-model error")
+	if err := f.AddPersona(Persona{ID: "p1", Provider: "ghost", UpstreamID: "u"}); err == nil {
+		t.Error("expected unknown-provider error")
 	}
 }
 
-func TestAddPersonaWithoutModelOK(t *testing.T) {
-	// Persona ohne Modell ist explizit erlaubt — sie ist dann inaktiv,
-	// llmd zeigt sie nicht in /v1/models.
+func TestAddPersonaRequiresUpstreamWhenProviderSet(t *testing.T) {
+	setupTmpDir(t)
+	f := &File{}
+	_ = f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKey: "y"})
+	if err := f.AddPersona(Persona{ID: "p1", Provider: "openai"}); err == nil {
+		t.Error("expected upstream_id required error")
+	}
+}
+
+func TestAddPersonaWithoutProviderOK(t *testing.T) {
+	// Persona ohne Provider ist explizit erlaubt — sie ist dann inaktiv,
+	// llmd zeigt sie nicht in /v1/models. Wichtig fuer Seed-Personas, die
+	// erst spaeter vom Admin zugeordnet werden.
 	setupTmpDir(t)
 	f := &File{}
 	if err := f.AddPersona(Persona{ID: "p1"}); err != nil {
@@ -138,29 +171,54 @@ func TestAddPersonaWithoutModelOK(t *testing.T) {
 	}
 }
 
-func TestSetPersonaModel(t *testing.T) {
+func TestSetPersonaUpstream(t *testing.T) {
 	setupTmpDir(t)
 	f := &File{}
-	_ = f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKeyEnv: "Y"})
-	_ = f.AddModel(Model{ID: "m1", Provider: "openai", UpstreamID: "u"})
+	_ = f.AddProvider(Provider{ID: "openai", BaseURL: "x", APIKey: "y"})
 	_ = f.AddPersona(Persona{ID: "p1"})
 
-	if err := f.SetPersonaModel("p1", "m1"); err != nil {
+	if err := f.SetPersonaUpstream("p1", "openai", "gpt-4o"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if f.GetPersona("p1").Model != "m1" {
-		t.Errorf("model not set")
+	p := f.GetPersona("p1")
+	if p.Provider != "openai" || p.UpstreamID != "gpt-4o" {
+		t.Errorf("not set: %+v", p)
 	}
+
 	// Auf "" zuruecksetzen = deaktivieren
-	if err := f.SetPersonaModel("p1", ""); err != nil {
+	if err := f.SetPersonaUpstream("p1", "", ""); err != nil {
 		t.Fatalf("unset: %v", err)
 	}
-	if f.GetPersona("p1").Model != "" {
-		t.Errorf("model not cleared")
+	if f.GetPersona("p1").Provider != "" {
+		t.Errorf("provider not cleared")
 	}
-	// Ungueltige Referenz schlaegt fehl
-	if err := f.SetPersonaModel("p1", "ghost"); err == nil {
-		t.Error("expected unknown-model error")
+
+	// provider gesetzt, upstream leer => Fehler
+	if err := f.SetPersonaUpstream("p1", "openai", ""); err == nil {
+		t.Error("expected upstream-required error")
+	}
+	// unbekannter Provider => Fehler
+	if err := f.SetPersonaUpstream("p1", "ghost", "u"); err == nil {
+		t.Error("expected unknown-provider error")
+	}
+}
+
+func TestSetPersonaPrompt(t *testing.T) {
+	setupTmpDir(t)
+	f := &File{}
+	_ = f.AddPersona(Persona{ID: "p1"})
+	if err := f.SetPersonaPrompt("p1", "Du bist freundlich."); err != nil {
+		t.Fatal(err)
+	}
+	if f.GetPersona("p1").Prompt != "Du bist freundlich." {
+		t.Errorf("prompt not set")
+	}
+	// Leer ist erlaubt (= Passthrough)
+	if err := f.SetPersonaPrompt("p1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if f.GetPersona("p1").Prompt != "" {
+		t.Errorf("prompt not cleared")
 	}
 }
 
@@ -173,77 +231,11 @@ func TestAPIKeyPrefixCollision(t *testing.T) {
 	}
 }
 
-func TestPromptRoundtrip(t *testing.T) {
-	setupTmpDir(t)
-	if err := SavePrompt("p1", "Hallo Welt\n"); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-	got, err := LoadPrompt("p1")
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if got != "Hallo Welt\n" {
-		t.Errorf("content: %q", got)
-	}
-}
-
-func TestPromptNewlineNormalisation(t *testing.T) {
-	setupTmpDir(t)
-	// Mehrfache trailing newlines werden auf eine reduziert.
-	if err := SavePrompt("p1", "Inhalt\n\n\n"); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := LoadPrompt("p1")
-	if got != "Inhalt\n" {
-		t.Errorf("newline norm failed: %q", got)
-	}
-	// Ohne newline am Ende — eine wird ergaenzt.
-	_ = SavePrompt("p2", "Ohne")
-	got2, _ := LoadPrompt("p2")
-	if got2 != "Ohne\n" {
-		t.Errorf("no-newline norm failed: %q", got2)
-	}
-}
-
-func TestPromptMissing(t *testing.T) {
-	setupTmpDir(t)
-	got, err := LoadPrompt("missing")
-	if err != nil {
-		t.Fatalf("expected no error for missing, got %v", err)
-	}
-	if got != "" {
-		t.Errorf("expected empty, got %q", got)
-	}
-}
-
-func TestPromptInvalidSlug(t *testing.T) {
-	setupTmpDir(t)
-	if err := SavePrompt("../etc/passwd", "boom"); err == nil {
-		t.Error("expected slug validation to block path traversal")
-	}
-}
-
-func TestRemovePromptIdempotent(t *testing.T) {
-	setupTmpDir(t)
-	// Auf eine nie-existierende Persona angewendet => kein Fehler.
-	if err := RemovePrompt("never-existed"); err != nil {
-		t.Errorf("expected idempotent, got %v", err)
-	}
-	// Erstellen, loeschen, nochmal loeschen — alles ok.
-	_ = SavePrompt("p1", "x")
-	if err := RemovePrompt("p1"); err != nil {
-		t.Errorf("first remove: %v", err)
-	}
-	if err := RemovePrompt("p1"); err != nil {
-		t.Errorf("second remove: %v", err)
-	}
-}
-
 func TestSaveSortsListsDeterministically(t *testing.T) {
 	setupTmpDir(t)
 	f := &File{}
-	_ = f.AddProvider(Provider{ID: "zzz", BaseURL: "x", APIKeyEnv: "Z"})
-	_ = f.AddProvider(Provider{ID: "aaa", BaseURL: "x", APIKeyEnv: "A"})
+	_ = f.AddProvider(Provider{ID: "zzz", BaseURL: "x", APIKey: "y"})
+	_ = f.AddProvider(Provider{ID: "aaa", BaseURL: "x", APIKey: "y"})
 	if err := Save(f); err != nil {
 		t.Fatal(err)
 	}

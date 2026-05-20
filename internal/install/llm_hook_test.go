@@ -43,14 +43,20 @@ func TestSeedLLMConfigFirstRun(t *testing.T) {
 		t.Errorf("expected one key with id %q, got %+v", LLMDefaultKeyID, f.APIKeys)
 	}
 
-	// Prompts auf der Platte
+	// Inline-Prompts an den Personas
 	for _, id := range []string{"grundschul-erklaerer", "sek2-helfer"} {
-		content, err := llm.LoadPrompt(id)
-		if err != nil {
-			t.Errorf("load prompt %s: %v", id, err)
+		p := f.GetPersona(id)
+		if p == nil {
+			t.Errorf("persona %s missing", id)
+			continue
 		}
-		if len(content) < 50 {
-			t.Errorf("prompt %s suspiciously short: %d chars", id, len(content))
+		if len(strings.TrimSpace(p.Prompt)) < 50 {
+			t.Errorf("prompt for %s suspiciously short: %d chars", id, len(p.Prompt))
+		}
+		// Seed-Personas haben absichtlich noch keinen Provider — der Admin
+		// haengt sie nach dem Anlegen eines Providers per UI/CLI dran.
+		if p.Provider != "" {
+			t.Errorf("seed persona %s should ship without provider, got %q", id, p.Provider)
 		}
 	}
 }

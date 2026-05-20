@@ -3,6 +3,7 @@ package install
 import (
 	"embed"
 	"fmt"
+	"strings"
 
 	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/llm"
@@ -22,11 +23,11 @@ const LLMDefaultKeyID = "default"
 var seedPromptsFS embed.FS
 
 // seedPersonas listet die Personas, die beim Erstinstall von llmd angelegt
-// werden. Modell-Zuweisung bleibt leer — der Admin muss erst Provider/
-// Modelle anlegen und dann zuweisen (`stackctl llm persona set-model`).
+// werden. Provider/UpstreamID bleiben leer — der Admin verbindet sie via
+// UI/CLI mit einem Provider, sobald er einen angelegt hat.
 var seedPersonas = []struct {
 	ID         string
-	PromptFile string
+	PromptFile string // im embed FS unter seed/prompts/
 	Params     map[string]any
 }{
 	{
@@ -42,8 +43,9 @@ var seedPersonas = []struct {
 }
 
 // seedLLMConfig bereitet die llmd-Installation vor: schreibt eine initiale
-// config.yaml mit Beispiel-Personas und generiert einen Default-API-Key,
-// dessen Klartext als LLM_API_KEY in die globale Section von .env wandert.
+// config.yaml mit Beispiel-Personas (inkl. inline Prompts) und generiert
+// einen Default-API-Key, dessen Klartext als LLM_API_KEY in die globale
+// Section von .env wandert.
 //
 // Idempotent: existiert bereits eine config.yaml mit mindestens einem
 // API-Key, wird nichts ueberschrieben. Damit kann llmd jederzeit ohne
@@ -68,19 +70,18 @@ func seedLLMConfig(env *envfile.File) (newEnvKeys []string, err error) {
 	// haette anlegen koennen).
 	if len(f.Personas) == 0 {
 		for _, sp := range seedPersonas {
-			if err := f.AddPersona(llm.Persona{
-				ID:         sp.ID,
-				PromptFile: sp.PromptFile,
-				Params:     sp.Params,
-			}); err != nil {
-				return nil, fmt.Errorf("seed persona %s: %w", sp.ID, err)
-			}
-			content, err := seedPromptsFS.ReadFile("seed/prompts/" + sp.PromptFile)
+			prompt, err := seedPromptsFS.ReadFile("seed/prompts/" + sp.PromptFile)
 			if err != nil {
 				return nil, fmt.Errorf("read seed prompt %s: %w", sp.PromptFile, err)
 			}
-			if err := llm.SavePrompt(sp.ID, string(content)); err != nil {
-				return nil, fmt.Errorf("write seed prompt %s: %w", sp.ID, err)
+			if err := f.AddPersona(llm.Persona{
+				ID:     sp.ID,
+				Prompt: strings.TrimSpace(string(prompt)),
+				Params: sp.Params,
+				// Provider + UpstreamID bewusst leer — Admin haengt nach
+				// dem Anlegen eines Providers eine Persona dran.
+			}); err != nil {
+				return nil, fmt.Errorf("seed persona %s: %w", sp.ID, err)
 			}
 		}
 	}
