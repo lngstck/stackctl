@@ -94,6 +94,47 @@ func TestSeedLLMConfigIdempotent(t *testing.T) {
 	}
 }
 
+func TestSeedLLMConfigReusesExistingEnvKey(t *testing.T) {
+	// Recovery-Pfad: config.yaml ist weg, .env hat aber noch LLM_API_KEY.
+	// Erwartung: seed re-bcryptet den bestehenden Klartext und schreibt
+	// .env NICHT um — Open WebUI muss mit demselben Plaintext weiter
+	// authentisieren koennen.
+	root := t.TempDir()
+	t.Setenv(paths.EnvLearningstackDir, root)
+
+	// Echten Key generieren (statt was Plaintextes zu erfinden), damit
+	// das Format zu HashAPIKey passt.
+	plaintext, _, _, err := llm.GenerateAPIKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	env := envfile.New()
+	env.Set(envfile.GlobalSection, LLMAPIKeyEnv, plaintext)
+
+	added, err := seedLLMConfig(env)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if contains(added, LLMAPIKeyEnv) {
+		t.Errorf("expected LLM_API_KEY NOT to be reported as new env key (was reused), got %v", added)
+	}
+
+	// .env-Plaintext unveraendert
+	if got, _ := env.Get(LLMAPIKeyEnv); got != plaintext {
+		t.Errorf("plaintext was rewritten: %q -> %q", plaintext, got)
+	}
+
+	// Config-Datei hat einen Key, dessen Prefix zu plaintext passt
+	f, _ := llm.Load()
+	if len(f.APIKeys) != 1 {
+		t.Fatalf("expected 1 api key, got %d", len(f.APIKeys))
+	}
+	if !strings.HasPrefix(plaintext, f.APIKeys[0].Prefix+"-") {
+		t.Errorf("prefix %q does not match plaintext %q", f.APIKeys[0].Prefix, plaintext)
+	}
+}
+
 func TestSeedLLMConfigPreservesAdminPersonas(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(paths.EnvLearningstackDir, root)

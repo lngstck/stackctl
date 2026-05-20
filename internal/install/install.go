@@ -346,6 +346,20 @@ func Update(
 		}
 	}
 
+	// Heile fehlende llmd-Config beim Update mit. Idempotent (skip wenn
+	// bereits API-Keys existieren), aber rettet den Fall "Admin hat
+	// config.yaml weggeworfen + UI-Update geklickt" — vorher startete
+	// der Container danach ohne Config und log-spammte.
+	// Wiederverwendung des bestehenden LLM_API_KEY aus .env passiert in
+	// seedLLMConfig, also keine .env-Disruption.
+	if def.ID == "llmd" {
+		added, err := seedLLMConfig(env)
+		if err != nil {
+			return fail(res, "llmd seed: %v", err)
+		}
+		cs.EnvKeys = append(cs.EnvKeys, added...)
+	}
+
 	if def.OIDC != nil {
 		oidcSecretKey := strings.ToUpper(strings.ReplaceAll(def.ID, "-", "_")) + "_OIDC_SECRET"
 		if _, ok := env.Get(oidcSecretKey); !ok {

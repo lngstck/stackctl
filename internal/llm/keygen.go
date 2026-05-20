@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -38,4 +39,32 @@ func GenerateAPIKey() (plaintext, prefix, hashStr string, err error) {
 	}
 	hashStr = string(h)
 	return plaintext, prefix, hashStr, nil
+}
+
+// HashAPIKey nimmt einen bestehenden Klartext-Key im Format
+//   llm-<8hex>-<secret>
+// und liefert (prefix, bcrypt-hash) — analog zu GenerateAPIKey, aber ohne
+// neuen Zufall. Wird beim Re-Seed von llmd genutzt: wenn LLM_API_KEY schon
+// in .env steht (z.B. von einem vorherigen Install), darf seedLLMConfig den
+// Klartext nicht neu generieren — sonst muesste Open WebUI ueber den
+// .env-Eintrag nachjustiert + neu gestartet werden. Statt dessen
+// re-bcrypten wir dieselbe Plaintext-Sekrete (bcrypt liefert bei gleicher
+// Eingabe einen anderen Hash, validiert aber dieselbe Plaintext).
+func HashAPIKey(plaintext string) (prefix, hashStr string, err error) {
+	if !strings.HasPrefix(plaintext, "llm-") {
+		return "", "", fmt.Errorf("invalid key format (missing llm- prefix)")
+	}
+	rest := plaintext[len("llm-"):]
+	dash := strings.IndexByte(rest, '-')
+	if dash <= 0 || dash == len(rest)-1 {
+		return "", "", fmt.Errorf("invalid key format (expected llm-<prefix>-<secret>)")
+	}
+	prefix = "llm-" + rest[:dash]
+	secret := rest[dash+1:]
+
+	h, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	if err != nil {
+		return "", "", fmt.Errorf("bcrypt: %w", err)
+	}
+	return prefix, string(h), nil
 }

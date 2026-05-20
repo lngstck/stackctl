@@ -86,28 +86,48 @@ func seedLLMConfig(env *envfile.File) (newEnvKeys []string, err error) {
 		}
 	}
 
-	// Schul-Default-Key generieren. Klartext landet in .env, Hash in
-	// llm.yaml. Der Klartext ist nach diesem Moment nicht mehr
-	// rekonstruierbar — bei Verlust per `stackctl llm key revoke default`
-	// + `key create` neu erzeugen.
-	plaintext, prefix, hash, err := llm.GenerateAPIKey()
-	if err != nil {
-		return nil, fmt.Errorf("generate api key: %w", err)
+	// Schul-Default-Key besorgen.
+	//
+	// Zwei Pfade:
+	//
+	// (a) LLM_API_KEY existiert bereits in .env — typischer Recovery-Fall,
+	//     z.B. wenn der Admin /opt/learningstack/llmd/config/config.yaml
+	//     geloescht hat (oder ein App-Update den Seed neu triggert).
+	//     Wir re-bcrypten den BESTEHENDEN Klartext, damit Open WebUI mit
+	//     seinem schon-gespeicherten ${LLM_API_KEY} weiter authentisieren
+	//     kann — kein .env-Update, kein open-webui-Recreate noetig.
+	//
+	// (b) Frischer Install — neuer Klartext + neuer Hash, Klartext in
+	//     .env schreiben. Nach diesem Moment ist der Klartext nicht mehr
+	//     rekonstruierbar; bei Verlust nur per `key revoke` + `key create`
+	//     wieder zu beschaffen.
+	if existing, ok := env.Get(LLMAPIKeyEnv); ok && existing != "" {
+		prefix, hash, err := llm.HashAPIKey(existing)
+		if err != nil {
+			return nil, fmt.Errorf("reuse existing LLM_API_KEY: %w", err)
+		}
+		if err := f.AddAPIKey(llm.APIKey{ID: LLMDefaultKeyID, Prefix: prefix, Hash: hash}); err != nil {
+			return nil, fmt.Errorf("add api key (reused): %w", err)
+		}
+		// Bewusst kein newEnvKeys-Eintrag — wir haben .env nicht veraendert,
+		// also auch nichts fuer Rollback einzutragen.
+	} else {
+		plaintext, prefix, hash, err := llm.GenerateAPIKey()
+		if err != nil {
+			return nil, fmt.Errorf("generate api key: %w", err)
+		}
+		if err := f.AddAPIKey(llm.APIKey{
+			ID:     LLMDefaultKeyID,
+			Prefix: prefix,
+			Hash:   hash,
+			// AllowedPersonas leer = Zugriff auf alle Personas. Open WebUI
+			// (und ggf. andere Apps) filtert die User-Sichtbarkeit selbst.
+		}); err != nil {
+			return nil, fmt.Errorf("add api key: %w", err)
+		}
+		env.Set(envfile.GlobalSection, LLMAPIKeyEnv, plaintext)
+		newEnvKeys = append(newEnvKeys, LLMAPIKeyEnv)
 	}
-	if err := f.AddAPIKey(llm.APIKey{
-		ID:     LLMDefaultKeyID,
-		Prefix: prefix,
-		Hash:   hash,
-		// AllowedPersonas leer = Zugriff auf alle Personas. Open WebUI
-		// (und ggf. andere Apps) filtert die User-Sichtbarkeit selbst.
-	}); err != nil {
-		return nil, fmt.Errorf("add api key: %w", err)
-	}
-
-	// Klartext in die globale Section schreiben, damit alle Apps ihn
-	// als ${LLM_API_KEY} referenzieren koennen.
-	env.Set(envfile.GlobalSection, LLMAPIKeyEnv, plaintext)
-	newEnvKeys = append(newEnvKeys, LLMAPIKeyEnv)
 
 	if err := llm.Save(f); err != nil {
 		return newEnvKeys, fmt.Errorf("save llm config: %w", err)
