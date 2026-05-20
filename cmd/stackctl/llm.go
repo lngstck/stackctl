@@ -135,6 +135,23 @@ func dispatchProvider(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
+// splitPositional zieht das erste Argument als ID ab und gibt den Rest
+// fuer fs.Parse zurueck. Workaround fuer Go's flag-Package, das beim
+// ersten Positional aufhoert zu parsen — damit Aufrufe wie
+//   stackctl llm persona set my-id --provider X --upstream-id Y
+// funktionieren.
+//
+// Konvention fuer alle Subbefehle mit ID-Argument: ID MUSS unmittelbar
+// nach dem Subbefehl stehen, vor allen Flags. ID-am-Ende ist nicht
+// unterstuetzt, weil ein generischer Parser ohne Wissen ueber die Flag-
+// Signaturen Werte falsch zuordnen wuerde.
+func splitPositional(args []string) (id string, rest []string) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return "", args
+	}
+	return args[0], args[1:]
+}
+
 // readAPIKey loest die drei moeglichen Quellen auf: --api-key flag, stdin
 // (wenn --api-key-stdin gesetzt), oder leer (Provider wird ohne Key
 // angelegt). Liefert (key, error). Shell-History-safe wenn --api-key-stdin.
@@ -206,19 +223,23 @@ func cmdProviderAdd(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdProviderSetKey(args []string, stdout, stderr io.Writer) int {
+	id, rest := splitPositional(args)
+	if id == "" {
+		fmt.Fprintln(stderr, "usage: stackctl llm provider set-key <id> [--api-key X | --api-key-stdin | --clear]")
+		return 2
+	}
 	fs := flag.NewFlagSet("provider set-key", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	apiKey := fs.String("api-key", "", "new API key (use --api-key-stdin to avoid shell history)")
 	apiKeyStdin := fs.Bool("api-key-stdin", false, "read API key from stdin")
 	clear := fs.Bool("clear", false, "remove the key (sets it to empty)")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: stackctl llm provider set-key <id> [--api-key X | --api-key-stdin | --clear]")
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "provider set-key: unexpected extra args: %v\n", fs.Args())
 		return 2
 	}
-	id := fs.Arg(0)
 
 	var key string
 	if !*clear {
@@ -437,19 +458,23 @@ func cmdPersonaAdd(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdPersonaEdit(args []string, stdout, stderr io.Writer) int {
+	id, rest := splitPositional(args)
+	if id == "" {
+		fmt.Fprintln(stderr, "usage: stackctl llm persona edit <id> [--prompt-file F | --prompt-stdin | --no-prompt]")
+		return 2
+	}
 	fs := flag.NewFlagSet("persona edit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	promptFile := fs.String("prompt-file", "", "replace prompt from file (otherwise opens $EDITOR)")
 	promptStdin := fs.Bool("prompt-stdin", false, "replace prompt from stdin")
 	noPrompt := fs.Bool("no-prompt", false, "clear the system prompt")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: stackctl llm persona edit <id> [--prompt-file F | --prompt-stdin | --no-prompt]")
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "persona edit: unexpected extra args: %v\n", fs.Args())
 		return 2
 	}
-	id := fs.Arg(0)
 	f, err := llm.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "load: %v\n", err)
@@ -578,19 +603,23 @@ func cmdPersonaShow(args []string, stdout, stderr io.Writer) int {
 
 // cmdPersonaSet weist (provider, upstream-id) zu, oder leert beides.
 func cmdPersonaSet(args []string, stdout, stderr io.Writer) int {
+	id, rest := splitPositional(args)
+	if id == "" {
+		fmt.Fprintln(stderr, "usage: stackctl llm persona set <id> --provider X --upstream-id Y | --clear")
+		return 2
+	}
 	fs := flag.NewFlagSet("persona set", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	provider := fs.String("provider", "", "provider id (or empty + --clear to deactivate)")
 	upstreamID := fs.String("upstream-id", "", "upstream model id (required when --provider is set)")
 	clear := fs.Bool("clear", false, "deactivate persona (clears provider + upstream_id)")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: stackctl llm persona set <id> --provider X --upstream-id Y | --clear")
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "persona set: unexpected extra args: %v\n", fs.Args())
 		return 2
 	}
-	id := fs.Arg(0)
 
 	if *clear {
 		*provider = ""
