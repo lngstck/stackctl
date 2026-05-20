@@ -1,14 +1,15 @@
-// Package llm verwaltet die llmd-Konfiguration (Provider, Modelle, Personas,
-// API-Keys) und schreibt sie direkt in das Verzeichnis, das die llmd-Container
+// Package llm verwaltet die llmd-Konfiguration (Provider, Personas, API-Keys)
+// und schreibt sie direkt in das Verzeichnis, das die llmd-Container
 // bind-mounted als /etc/llmd liest. stackctl ist die einzige schreibende
 // Instanz; llmd liest read-only und reagiert auf SIGHUP.
 //
-// Daten leben in /opt/learningstack/llmd/config/:
-//   config.yaml          — Hauptdatei (von llmd erwartet)
-//   prompts/<id>.md      — System-Prompts pro Persona
+// Daten leben in /opt/learningstack/llmd/config/config.yaml. Schema v2:
+// Provider tragen ihren API-Key direkt im Feld api_key, Personas zeigen
+// direkt auf (provider, upstream_id) — kein separater models[]-Block und
+// kein prompt_file mehr. System-Prompts sitzen inline am Persona-Objekt.
 //
 // Es gibt absichtlich keine separate "Quell"-Datei im stackctl-Tree: die
-// in /opt/learningstack/llmd/config/ liegenden Files SIND die Quelle.
+// in /opt/learningstack/llmd/config/ liegende config.yaml IST die Quelle.
 package llm
 
 // File bildet das exakte YAML-Schema ab, das llmd erwartet. Aenderungen
@@ -17,7 +18,6 @@ type File struct {
 	Version   string     `yaml:"version"`
 	Server    Server     `yaml:"server"`
 	Providers []Provider `yaml:"providers"`
-	Models    []Model    `yaml:"models"`
 	Personas  []Persona  `yaml:"personas"`
 	APIKeys   []APIKey   `yaml:"api_keys"`
 }
@@ -27,30 +27,25 @@ type Server struct {
 	CORSOrigins []string `yaml:"cors_origins"`
 }
 
-// Provider beschreibt einen Upstream-LLM-Anbieter. Der eigentliche API-Key
-// wird NICHT hier gespeichert, sondern als Env-Variable ueber den .env-File
-// von docker-compose injiziert. APIKeyEnv ist der NAME dieser Variable.
+// Provider beschreibt einen Upstream-LLM-Anbieter inkl. API-Key.
+// APIKey wird im Klartext gespeichert; die Datei liegt mit 0o644 unter
+// /opt/learningstack/llmd/config/ — gleicher Blast-Radius wie .env auf
+// einem Single-Tenant-Schulserver (siehe llmd ARCHITECTURE.md §3).
 type Provider struct {
-	ID        string `yaml:"id"`
-	Kind      string `yaml:"kind"`
-	BaseURL   string `yaml:"base_url"`
-	APIKeyEnv string `yaml:"api_key_env"`
+	ID      string `yaml:"id"`
+	Kind    string `yaml:"kind"`
+	BaseURL string `yaml:"base_url"`
+	APIKey  string `yaml:"api_key,omitempty"`
 }
 
-// Model verknuepft eine schul-lokale Model-ID mit dem Provider und der
-// echten Upstream-Bezeichnung.
-type Model struct {
-	ID         string `yaml:"id"`
-	Provider   string `yaml:"provider"`
-	UpstreamID string `yaml:"upstream_id"`
-}
-
-// Persona ist das, was Clients als "Modell" sehen. PromptFile referenziert
-// eine Datei unter prompts/. Params sind Default-Parameter (temperature etc).
+// Persona ist das, was Clients als "Modell" sehen. Verweist direkt auf
+// einen Provider + Upstream-Modellnamen. Prompt ist inline; leer = kein
+// System-Prompt (Passthrough).
 type Persona struct {
 	ID         string         `yaml:"id"`
-	Model      string         `yaml:"model"`
-	PromptFile string         `yaml:"prompt_file,omitempty"`
+	Provider   string         `yaml:"provider,omitempty"`
+	UpstreamID string         `yaml:"upstream_id,omitempty"`
+	Prompt     string         `yaml:"prompt,omitempty"`
 	Params     map[string]any `yaml:"params,omitempty"`
 }
 
@@ -64,4 +59,4 @@ type APIKey struct {
 }
 
 // CurrentVersion ist die Schema-Version, die stackctl schreibt.
-const CurrentVersion = "1"
+const CurrentVersion = "2"
