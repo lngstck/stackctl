@@ -139,12 +139,21 @@ info "Symlink: ${SYMLINK} -> ${INSTALL_DIR}/stackctl"
 
 # --- systemd service ------------------------------------------------------
 info "Installiere systemd-Service..."
+# WICHTIG: Diese Unit-Datei MUSS mit systemd/stackctl.service im Repo
+# synchron bleiben. Restart=always + RestartSec=1 ist Voraussetzung fuer
+# den Self-Update-Mechanismus aus Issue #10 (Prozess macht os.Exit(0),
+# systemd bringt ihn mit dem neuen Binary wieder hoch). Vorgaenger-
+# Strategie war Restart=on-failure + sudo systemctl restart — das wuerde
+# auf Exit 0 NICHT neu starten, der Service bliebe tot.
+# StartLimitBurst gehoert auf Unit-Ebene (nicht in [Service]).
 cat > "$SERVICE_FILE" << 'UNIT'
 [Unit]
 Description=stackctl – learningstack control plane
 After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
+StartLimitBurst=3
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -152,8 +161,8 @@ User=learningstack
 Group=learningstack
 SupplementaryGroups=docker
 ExecStart=/opt/stackctl/stackctl web --host 0.0.0.0 --port 8090
-Restart=on-failure
-RestartSec=3
+Restart=always
+RestartSec=1
 
 [Install]
 WantedBy=multi-user.target
