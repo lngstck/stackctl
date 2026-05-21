@@ -6,6 +6,10 @@ Description=stackctl – learningstack control plane
 After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
+# Crashloop-Schutz: 3 Starts in 60s = stop. Setzt voraus, dass StartLimitBurst
+# auf Unit-Ebene (hier) und nicht im [Service] steht.
+StartLimitBurst=3
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -13,10 +17,11 @@ User=learningstack
 Group=learningstack
 SupplementaryGroups=docker
 ExecStart=/opt/stackctl/stackctl web --host 0.0.0.0 --port 8090
-Restart=on-failure
-RestartSec=3
-# Self-update: stackctl replaces its own binary and restarts via systemctl.
-# No NoNewPrivileges because docker CLI may need it.
+# Restart=always + os.Exit(0) ist der Self-Update-Restart-Mechanismus (#10):
+# der Prozess beendet sich kontrolliert, systemd bringt ihn mit dem neuen
+# Binary wieder hoch. Kein sudoers noetig.
+Restart=always
+RestartSec=1
 
 [Install]
 WantedBy=multi-user.target

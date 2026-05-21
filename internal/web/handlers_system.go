@@ -32,16 +32,16 @@ func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("web: updated to %s, restarting...", newVersion)
 
-	// Im Dev-Modus (kein systemd-Wrapper) wuerde os.Exit den Prozess tot
-	// lassen — Hinweis statt Restart. Siehe PR #11 (Issue #10). In der
-	// Vor-PR-#11-Welt gab RestartService einen sudo-Fehler zurueck und
-	// dieser Pfad hat die "manuell neu starten"-Meldung gezeigt; das
-	// bleibt funktional aequivalent, nur Dev-spezifischer formuliert.
+	// Im Dev-Modus laeuft stackctl ohne systemd-Wrapper — os.Exit wuerde den
+	// Prozess tot lassen. Stattdessen Hinweis "manuell starten" zeigen.
 	if s.devMode {
 		http.Redirect(w, r, "/settings?update="+fmt.Sprintf("Update auf %s erfolgreich. Im Dev-Modus bitte manuell neu starten.", newVersion), http.StatusSeeOther)
 		return
 	}
 
+	// Produktion: RestartService spawnt eine Goroutine, die nach kurzer
+	// Pause os.Exit(0) ruft — systemd bringt uns mit dem neuen Binary
+	// wieder hoch (Restart=always). Diese Antwort sieht der Browser noch.
 	_ = update.RestartService()
 	http.Redirect(w, r, "/settings?update="+fmt.Sprintf("Update auf %s — Neustart...", newVersion), http.StatusSeeOther)
 }
