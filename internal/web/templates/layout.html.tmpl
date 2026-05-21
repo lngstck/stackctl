@@ -43,6 +43,21 @@ window.stackctlCopy = function(text) {
     }
   });
 };
+
+// Loading-State fuer synchrone, lang laufende POSTs (Install, Update,
+// Remove — docker compose pull kann Minuten dauern, siehe #1). Forms,
+// die `data-loading-msg="..."` setzen, bekommen ihren Submit-Button auf
+// disabled und den Button-Text auf die Nachricht — verhindert Doppel-
+// Submit und macht das Warten erklaerlich. Greift erst nach onsubmit-
+// confirm(), weil der 'submit'-Event nur feuert wenn confirm true ergab.
+document.addEventListener('submit', function(ev) {
+  var form = ev.target;
+  if (!form.matches || !form.matches('form[data-loading-msg]')) return;
+  var btn = form.querySelector('button[type=submit], button:not([type])');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = form.getAttribute('data-loading-msg');
+});
 </script>
 {{block "scripts" .}}{{end}}
 </body>
