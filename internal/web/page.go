@@ -2,7 +2,7 @@ package web
 
 // PageData holds common data passed to all layout templates.
 type PageData struct {
-	NavActive  string // "dashboard", "apps", "settings", "tunnel", "system"
+	NavActive  string // "dashboard", "apps", "settings", "tunnel"
 	SchoolName string
 	SchoolSlug string
 }
