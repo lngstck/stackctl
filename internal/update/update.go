@@ -9,11 +9,11 @@
 package update
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -152,35 +152,31 @@ func Apply(rel *ReleaseInfo) (string, error) {
 	return newVersion, nil
 }
 
-// RestartService restarts the stackctl systemd service via sudo. The service
-// runs as the unpriv. `learningstack` user, which has no polkit/sudoers right
-// for arbitrary systemctl actions — install.sh ships /etc/sudoers.d/stackctl
-// with a NOPASSWD rule for exactly this command (see Issue #6).
+// RestartService veranlasst einen Neustart des Prozesses durch kontrollierten
+// Self-Exit. Die systemd-Unit (Restart=always, RestartSec=1) bringt stackctl
+// innerhalb ~1s mit dem neuen Binary wieder hoch. Kein sudo, kein sudoers,
+// keine Privilege-Escalation — siehe ARCHITECTURE.md §11.5 und Issue #10.
 //
-// We DON'T fire-and-forget: cmd.Start() returns nil as soon as the fork
-// succeeds, regardless of whether systemctl was actually allowed to run.
-// That's how Issue #6 manifested — the handler reported "Update erfolgreich,
-// Neustart…" while the old process kept running because sudoers was missing.
+// Die Funktion kehrt sofort zurueck (return nil), damit der HTTP-Handler dem
+// Browser noch eine "Neustart…"-Antwort schicken kann. Nach RestartDelay
+// killt eine Goroutine den Prozess via os.Exit(0); systemd uebernimmt.
 //
-// Instead we cmd.Run() with a short timeout. Two outcomes:
-//   - sudo/systemctl fails (no sudoers, wrong path, …) → non-zero exit, error
-//     propagates to the handler and the UI shows the real reason.
-//   - restart succeeds → systemd kills us mid-Run a few ms after systemctl
-//     finishes its job. The HTTP client sees a connection reset — that's the
-//     expected success path.
+// In Dev-Modus (kein systemd-Wrapper) wuerde os.Exit den Prozess tot lassen.
+// Aufrufer (handlers_system) pruefen devMode und rufen RestartService dort
+// nicht auf, sondern zeigen den "manuell starten"-Hinweis.
 func RestartService() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	// -n: nicht-interaktiv. Wenn sudoers fehlt, schlaegt sudo sofort fehl
-	// statt nach einem Passwort zu fragen (das das Web-UI ohnehin nicht
-	// liefern kann).
-	cmd := exec.CommandContext(ctx, "sudo", "-n", "systemctl", "restart", "stackctl")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("restart stackctl: %w\n%s", err, strings.TrimSpace(string(out)))
-	}
+	go func() {
+		time.Sleep(RestartDelay)
+		log.Printf("update: self-exit for systemd restart")
+		os.Exit(0)
+	}()
 	return nil
 }
+
+// RestartDelay ist die Pause zwischen HTTP-Antwort und os.Exit. Lang genug,
+// damit der Browser die Redirect-Antwort vollstaendig empfaengt; kurz genug,
+// dass der User den Restart unmittelbar wahrnimmt.
+var RestartDelay = 500 * time.Millisecond
 
 // fetchLatestRelease calls the GitHub API.
 func fetchLatestRelease() (*ReleaseInfo, error) {
