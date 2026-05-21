@@ -76,14 +76,17 @@ func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("web: updated to %s, restarting...", newVersion)
 
-	// Try systemd restart. If it fails (dev mode, no systemd), just redirect.
-	if err := update.RestartService(); err != nil {
-		http.Redirect(w, r, "/system?update="+fmt.Sprintf("Update auf %s erfolgreich. Bitte manuell neu starten.", newVersion), http.StatusSeeOther)
+	// Im Dev-Modus laeuft stackctl ohne systemd-Wrapper — os.Exit wuerde den
+	// Prozess tot lassen. Stattdessen Hinweis "manuell starten" zeigen.
+	if s.devMode {
+		http.Redirect(w, r, "/system?update="+fmt.Sprintf("Update auf %s erfolgreich. Im Dev-Modus bitte manuell neu starten.", newVersion), http.StatusSeeOther)
 		return
 	}
 
-	// If systemctl restart works, this process will be killed.
-	// The browser will briefly see an error, then the new version serves.
+	// Produktion: RestartService spawnt eine Goroutine, die nach kurzer
+	// Pause os.Exit(0) ruft — systemd bringt uns mit dem neuen Binary
+	// wieder hoch (Restart=always). Diese Antwort sieht der Browser noch.
+	_ = update.RestartService()
 	http.Redirect(w, r, "/system?update="+fmt.Sprintf("Update auf %s — Neustart...", newVersion), http.StatusSeeOther)
 }
 
