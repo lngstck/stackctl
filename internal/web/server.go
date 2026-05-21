@@ -131,6 +131,21 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.requireAuth(s.handleAppTunnelEnable))
 	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.requireAuth(s.handleAppTunnelDisable))
 
+	// LLM-Admin (ready + auth). UI sitzt unter /llm mit Tabs (Provider,
+	// Personas, API-Keys); POST-Endpunkte mutieren die config.yaml und
+	// schicken SIGHUP an ls-llmd. Modelle-Endpoint liefert JSON fuer den
+	// Persona-Tab-Dropdown.
+	s.mux.HandleFunc("GET /llm", s.requireAuth(s.handleLLM))
+	s.mux.HandleFunc("POST /llm/providers", s.requireAuth(s.handleLLMProviderCreate))
+	s.mux.HandleFunc("POST /llm/providers/{id}/key", s.requireAuth(s.handleLLMProviderSetKey))
+	s.mux.HandleFunc("POST /llm/providers/{id}/delete", s.requireAuth(s.handleLLMProviderDelete))
+	s.mux.HandleFunc("GET /llm/providers/{id}/models", s.requireAuth(s.handleLLMProviderModels))
+	s.mux.HandleFunc("POST /llm/personas", s.requireAuth(s.handleLLMPersonaCreate))
+	s.mux.HandleFunc("POST /llm/personas/{id}/update", s.requireAuth(s.handleLLMPersonaUpdate))
+	s.mux.HandleFunc("POST /llm/personas/{id}/delete", s.requireAuth(s.handleLLMPersonaDelete))
+	s.mux.HandleFunc("POST /llm/keys", s.requireAuth(s.handleLLMKeyCreate))
+	s.mux.HandleFunc("POST /llm/keys/{id}/delete", s.requireAuth(s.handleLLMKeyDelete))
+
 	// System POST-Endpunkte (ready + auth). Die /system-GET-Seite wurde in
 	// /settings integriert (Issue #4); die POST-Routen bleiben, damit das
 	// apps.html.tmpl + die System-Tab in settings.html.tmpl unveraendert
