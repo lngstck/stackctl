@@ -20,7 +20,7 @@
   {{end}}
 
   <form method="post" action="/apps/{{.ID}}/install"
-        onsubmit="var b=this.querySelector('button[type=submit]');b.disabled=true;b.textContent='Installiere… (kann einen Moment dauern)';">
+        data-loading-msg="Installiere… (compose pull kann ein paar Minuten dauern)">
     {{if .Prompts}}
     <h4 class="mb-1">Einstellungen</h4>
 

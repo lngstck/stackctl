@@ -148,6 +148,7 @@
         </form>
         {{end}}
         <form method="post" action="/apps/{{.ID}}/update" style="display:inline"
+              data-loading-msg="Aktualisiere… (compose pull kann ein paar Minuten dauern)"
               onsubmit="return confirm('Katalog-Definition neu laden und Image aktualisieren? Der Container wird kurz neu gestartet.')">
           <button class="ghost small">Aktualisieren</button>
         </form>
@@ -193,6 +194,7 @@
         Default erhalten und werden bei einer Neuinstallation wiederverwendet.
       </p>
       <form method="post" action="/apps/{{.ID}}/remove"
+            data-loading-msg="Entferne… (Container stoppen, Image loeschen)"
             onsubmit="return confirm(this.wipe_data.checked
               ? 'App {{.Name}} entfernen UND alle Daten loeschen? Das ist nicht umkehrbar.'
               : 'App {{.Name}}{{if .IsMandatory}} (Pflicht-Container!){{end}} wirklich entfernen?')">
