@@ -43,11 +43,32 @@ window.stackctlCopy = function(text) {
     }
   });
 };
+
+// Delegierter Handler fuer <button data-copy="...">: kopiert den Wert ins
+// Clipboard und zeigt kurzes "Kopiert ✓"-Feedback. Wert kommt aus dem
+// data-Attribut — kein onclick-Inlining, das spart manuelles Escapen.
+document.addEventListener('click', function(ev) {
+  var btn = ev.target.closest('[data-copy]');
+  if (!btn) return;
+  ev.preventDefault();
+  var text = btn.getAttribute('data-copy');
+  var original = btn.textContent;
+  stackctlCopy(text).then(function() {
+    btn.textContent = 'Kopiert ✓';
+    setTimeout(function() { btn.textContent = original; }, 1500);
+  }).catch(function(err) {
+    console.error('copy failed:', err);
+    btn.textContent = 'Fehler';
+    setTimeout(function() { btn.textContent = original; }, 1500);
+  });
+});
 </script>
 {{block "scripts" .}}{{end}}
 </body>
 </html>
 {{end}}
+
+{{define "copy-btn"}}<button type="button" class="ghost small" data-copy="{{.}}" style="margin-left:0.5rem;font-size:0.75rem;padding:0.1rem 0.5rem;">Kopieren</button>{{end}}
 
 {{define "sidebar-layout-start"}}
 <div data-sidebar-layout>
