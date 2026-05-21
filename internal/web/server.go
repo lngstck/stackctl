@@ -131,8 +131,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.requireAuth(s.handleAppTunnelEnable))
 	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.requireAuth(s.handleAppTunnelDisable))
 
-	// System (ready + auth).
-	s.mux.HandleFunc("GET /system", s.requireAuth(s.handleSystem))
+	// System POST-Endpunkte (ready + auth). Die /system-GET-Seite wurde in
+	// /settings integriert (Issue #4); die POST-Routen bleiben, damit das
+	// apps.html.tmpl + die System-Tab in settings.html.tmpl unveraendert
+	// posten koennen. /system selbst gibt jetzt 404.
 	s.mux.HandleFunc("POST /system/update", s.requireAuth(s.handleSystemUpdate))
 	s.mux.HandleFunc("POST /system/catalog/sync", s.requireAuth(s.handleCatalogSync))
 
