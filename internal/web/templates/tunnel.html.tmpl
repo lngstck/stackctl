@@ -41,10 +41,15 @@
 </div>
 
 {{/* Dex tunnel */}}
-<h3 class="mb-1">Dex-Tunnel (immer aktiv)</h3>
+<h3 class="mb-1">Dex-Tunnel</h3>
+<p class="sub mb-1" style="font-size:0.85rem;">
+  Pflicht-Tunnel fuer OIDC-Login. Wird beim Start automatisch aufgebaut und
+  bei Abbruch selbsttaetig mit Backoff neu verbunden. Manuelles Stoppen/Starten
+  nur zur Fehlerbehebung.
+</p>
 <table class="mb-3" style="width:100%;">
   <thead>
-    <tr><th>Dienst</th><th>Subdomain</th><th>Status</th></tr>
+    <tr><th>Dienst</th><th>Subdomain</th><th>Status</th><th></th></tr>
   </thead>
   <tbody>
     <tr>
@@ -53,8 +58,29 @@
       <td>
         <span class="status-dot {{.DexTunnelStatus}}"></span>
         {{if eq .DexTunnelStatus "running"}}Aktiv
-        {{else if eq .DexTunnelStatus "error"}}Fehler (mehrfach abgestuerzt)
+        {{else if eq .DexTunnelStatus "error"}}Fehler (Reconnect laeuft)
         {{else}}Gestoppt
+        {{end}}
+      </td>
+      <td style="text-align:right;">
+        {{if eq .DexTunnelStatus "stopped"}}
+          <form method="POST" action="/tunnel/dex/start" style="display:inline;">
+            <button type="submit" class="small">Starten</button>
+          </form>
+        {{else if eq .DexTunnelStatus "error"}}
+          <form method="POST" action="/tunnel/dex/start" style="display:inline;"
+                title="Reconnect erzwingen">
+            <button type="submit" class="small">Neu verbinden</button>
+          </form>
+          <form method="POST" action="/tunnel/dex/stop" style="display:inline;"
+                onsubmit="return confirm('Dex-Tunnel stoppen? OIDC-Login funktioniert dann fuer ALLE Apps nicht mehr, bis er wieder gestartet wird.');">
+            <button type="submit" class="small ghost" style="color:var(--danger);">Stoppen</button>
+          </form>
+        {{else}}
+          <form method="POST" action="/tunnel/dex/stop" style="display:inline;"
+                onsubmit="return confirm('Dex-Tunnel stoppen? OIDC-Login funktioniert dann fuer ALLE Apps nicht mehr, bis er wieder gestartet wird.');">
+            <button type="submit" class="small ghost" style="color:var(--danger);">Stoppen</button>
+          </form>
         {{end}}
       </td>
     </tr>

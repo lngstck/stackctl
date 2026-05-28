@@ -128,6 +128,8 @@ func (s *Server) routes() {
 	// Tunnel (ready + auth).
 	s.mux.HandleFunc("GET /tunnel", s.requireAuth(s.handleTunnel))
 	s.mux.HandleFunc("POST /tunnel/test", s.requireAuth(s.handleTunnelTest))
+	s.mux.HandleFunc("POST /tunnel/dex/start", s.requireAuth(s.handleDexTunnelStart))
+	s.mux.HandleFunc("POST /tunnel/dex/stop", s.requireAuth(s.handleDexTunnelStop))
 	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.requireAuth(s.handleAppTunnelEnable))
 	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.requireAuth(s.handleAppTunnelDisable))
 
