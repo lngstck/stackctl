@@ -160,35 +160,8 @@
               </td>
               <td style="padding:0.4rem;">
                 <div class="llm-actions">
-                  <details>
-                    <summary class="ghost small" style="padding:0.2rem 0.6rem;">Bearbeiten</summary>
-                    <form method="post" action="/llm/personas/{{.ID}}/update" class="llm-edit-form">
-                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
-                        <label data-field>
-                          Provider
-                          <select name="provider" data-llm-provider-select>
-                            <option value="">— (inaktiv) —</option>
-                            {{$current := .Provider}}
-                            {{range $.Providers}}
-                              <option value="{{.ID}}" {{if eq .ID $current}}selected{{end}}>{{.ID}}</option>
-                            {{end}}
-                          </select>
-                        </label>
-                        <label data-field>
-                          Upstream-Modell
-                          <input type="text" name="upstream_id" value="{{.UpstreamID}}"
-                                 list="llm-models-{{.ID}}" placeholder="z.B. gpt-4o-mini" data-llm-upstream-input>
-                          <datalist id="llm-models-{{.ID}}"></datalist>
-                          <span class="hint" data-llm-models-hint></span>
-                        </label>
-                      </div>
-                      <label data-field class="mb-1">
-                        System-Prompt
-                        <textarea name="prompt" rows="5" placeholder="Leer lassen = Passthrough (kein System-Prompt)">{{.Prompt}}</textarea>
-                      </label>
-                      <button type="submit" class="small">Speichern</button>
-                    </form>
-                  </details>
+                  <button type="button" class="ghost small" style="padding:0.2rem 0.6rem;"
+                          data-llm-edit-toggle="{{.ID}}">Bearbeiten</button>
                   {{if and .Provider .UpstreamID}}
                   <form method="post" action="/llm/personas/{{.ID}}/deactivate"
                         title="Upstream-Zuordnung entfernen (Prompt bleibt erhalten)"
@@ -201,6 +174,40 @@
                     <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
                   </form>
                 </div>
+              </td>
+            </tr>
+            {{/* Edit-Zeile: eigene colspan-Zeile, damit das breite Formular
+                 NIE die Spaltenbreiten der Tabelle aufblaeht (sonst horizontaler
+                 Scroll). Per JS ueber den Bearbeiten-Button getoggelt. */}}
+            <tr class="llm-edit-row" id="llm-edit-{{.ID}}" hidden>
+              <td colspan="6" style="padding:0 0.4rem 1rem;">
+                <form method="post" action="/llm/personas/{{.ID}}/update" class="llm-edit-form">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;max-width:640px;">
+                    <label data-field>
+                      Provider
+                      <select name="provider" data-llm-provider-select>
+                        <option value="">— (inaktiv) —</option>
+                        {{$current := .Provider}}
+                        {{range $.Providers}}
+                          <option value="{{.ID}}" {{if eq .ID $current}}selected{{end}}>{{.ID}}</option>
+                        {{end}}
+                      </select>
+                    </label>
+                    <label data-field>
+                      Upstream-Modell
+                      <input type="text" name="upstream_id" value="{{.UpstreamID}}"
+                             list="llm-models-{{.ID}}" placeholder="z.B. gpt-4o-mini" data-llm-upstream-input>
+                      <datalist id="llm-models-{{.ID}}"></datalist>
+                      <span class="hint" data-llm-models-hint></span>
+                    </label>
+                  </div>
+                  <label data-field class="mb-1" style="display:block;max-width:640px;">
+                    System-Prompt
+                    <textarea name="prompt" rows="5" style="width:100%;box-sizing:border-box;"
+                              placeholder="Leer lassen = Passthrough (kein System-Prompt)">{{.Prompt}}</textarea>
+                  </label>
+                  <button type="submit" class="small">Speichern</button>
+                </form>
               </td>
             </tr>
           {{end}}
@@ -381,6 +388,18 @@
       return;
     }
     loadModels(sel.value, input, hint);
+  });
+
+  // Persona-Editor auf-/zuklappen. Der Editor lebt in einer eigenen
+  // colspan-Zeile (#llm-edit-<id>), nicht in der Aktions-Zelle — sonst
+  // wuerde sein breites Formular die Tabellenspalten aufblaehen und einen
+  // horizontalen Scrollbalken erzeugen.
+  document.addEventListener('click', function(ev) {
+    var btn = ev.target.closest('[data-llm-edit-toggle]');
+    if (!btn) return;
+    var row = document.getElementById('llm-edit-' + btn.getAttribute('data-llm-edit-toggle'));
+    if (!row) return;
+    row.hidden = !row.hidden;
   });
 })();
 </script>
