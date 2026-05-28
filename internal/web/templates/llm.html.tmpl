@@ -1,0 +1,417 @@
+{{define "page"}}
+{{template "head" .}}
+{{template "sidebar-layout-start" .PageData}}
+
+<style>
+/* Aktionen-Spalte: Buttons nebeneinander, rechtsbuendig. Das <details>
+   fuer den Inline-Editor darf nicht die ganze Zellbreite fuellen, sonst
+   wird "Bearbeiten" zu einem riesigen Kasten (display:block ist Default). */
+.llm-actions { display:flex; gap:0.4rem; justify-content:flex-end; align-items:center; flex-wrap:wrap; }
+/* Formulare sind hier nur Button-Wrapper — kein Eigenleben (Default-Margin
+   wuerde die Buttons gegeneinander versetzen). */
+.llm-actions form { margin:0; display:inline-flex; }
+.llm-actions details { display:inline-block; }
+.llm-actions summary { list-style:none; cursor:pointer; white-space:nowrap; }
+.llm-actions summary::-webkit-details-marker { display:none; }
+/* Wenn der Editor offen ist, soll das Formular die volle Zeilenbreite
+   bekommen statt im schmalen inline-block zu kleben. */
+.llm-actions details[open] { display:block; width:100%; }
+.llm-edit-form { text-align:left; margin-top:0.5rem; }
+</style>
+
+<h2 class="mb-2">LLM-Konfiguration</h2>
+<p class="sub mb-2" style="font-size:0.9rem;">
+  Verwaltet Upstream-Provider, schul-eigene Personas und API-Keys fuer den
+  lokalen <code>llmd</code>-Gateway. Aenderungen werden sofort gespeichert
+  und per SIGHUP an llmd uebergeben.
+</p>
+
+{{if .Message}}<div role="alert" data-variant="success" class="mb-2">{{.Message}}</div>{{end}}
+{{if .Error}}<div role="alert" data-variant="danger" class="mb-2">{{.Error}}</div>{{end}}
+
+{{if .NewKey}}
+<div role="alert" data-variant="success" class="mb-2">
+  <strong>Neuer API-Key fuer „{{.NewKeyID}}“ erstellt.</strong><br>
+  <span class="sub">Dieser Klartext wird nur EINMAL angezeigt. Jetzt kopieren und sicher speichern — er kann nachher nicht wieder eingesehen werden.</span>
+  <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem;">
+    <code style="flex:1;padding:0.4rem 0.6rem;background:#f5f5f5;border-radius:4px;word-break:break-all;font-size:0.9rem;">{{.NewKey}}</code>
+    {{template "copy-btn" .NewKey}}
+  </div>
+</div>
+{{end}}
+
+<ot-tabs>
+  <div role="tablist">
+    <button role="tab" {{if eq .ActiveTab "providers"}}aria-selected="true"{{end}}>Provider ({{len .Providers}})</button>
+    <button role="tab" {{if eq .ActiveTab "personas"}}aria-selected="true"{{end}}>Personas ({{len .Personas}})</button>
+    <button role="tab" {{if eq .ActiveTab "keys"}}aria-selected="true"{{end}}>API-Keys ({{len .APIKeys}})</button>
+  </div>
+
+  <!-- ====================== Tab: Provider ====================== -->
+  <div role="tabpanel">
+    <article class="card mt-2">
+      <h3 class="mb-1">Upstream-Provider</h3>
+      <p class="sub mb-2" style="font-size:0.85rem;">
+        Ein Provider ist ein OpenAI-kompatibler Endpoint (z.B. OpenAI, Azure,
+        lokales Ollama). Die Base-URL wird ohne <code>/v1</code> angegeben.
+      </p>
+
+      {{if .Providers}}
+      <table style="width:100%;border-collapse:collapse;" class="mb-2">
+        <thead>
+          <tr style="text-align:left;border-bottom:1px solid #ddd;">
+            <th style="padding:0.4rem;">ID</th>
+            <th style="padding:0.4rem;">Kind</th>
+            <th style="padding:0.4rem;">Base-URL</th>
+            <th style="padding:0.4rem;">API-Key</th>
+            <th style="padding:0.4rem;text-align:right;">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+        {{range .Providers}}
+          <tr style="border-bottom:1px solid #eee;">
+            <td style="padding:0.4rem;"><code>{{.ID}}</code></td>
+            <td style="padding:0.4rem;">{{.Kind}}</td>
+            <td style="padding:0.4rem;"><code>{{.BaseURL}}</code></td>
+            <td style="padding:0.4rem;">
+              {{if .APIKey}}<span class="sub">gesetzt</span>{{else}}<span style="color:var(--danger);">fehlt</span>{{end}}
+            </td>
+            <td style="padding:0.4rem;">
+              <div class="llm-actions">
+                <details>
+                  <summary class="ghost small" style="padding:0.2rem 0.6rem;">Key</summary>
+                  <form method="post" action="/llm/providers/{{.ID}}/key" class="llm-edit-form" style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+                    <input type="password" name="api_key" placeholder="Neuer API-Key" style="font-size:0.85rem;">
+                    <button type="submit" class="small">Setzen</button>
+                    <button type="submit" name="clear" value="1" class="ghost small"
+                            onclick="return confirm('API-Key fuer {{.ID}} entfernen?');">Loeschen</button>
+                  </form>
+                </details>
+                <form method="post" action="/llm/providers/{{.ID}}/delete"
+                      onsubmit="return confirm('Provider {{.ID}} wirklich loeschen?');">
+                  <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p class="sub mb-2">Noch kein Provider angelegt.</p>
+      {{end}}
+
+      <h4 class="mt-2 mb-1">Neuer Provider</h4>
+      <form method="post" action="/llm/providers">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <label data-field>
+            ID
+            <input type="text" name="id" required pattern="[a-z0-9][a-z0-9._-]*"
+                   placeholder="z.B. openai" title="Lowercase Slug">
+          </label>
+          <label data-field>
+            Kind
+            <input type="text" name="kind" value="openai" placeholder="openai">
+          </label>
+        </div>
+        <label data-field class="mb-1">
+          Base-URL
+          <input type="url" name="base_url" required placeholder="https://api.openai.com">
+          <span class="hint">Ohne <code>/v1</code> – wird intern angehaengt.</span>
+        </label>
+        <label data-field class="mb-1">
+          API-Key <span class="sub" style="font-size:0.85rem;">(optional, kann nachtraeglich gesetzt werden)</span>
+          <input type="password" name="api_key" placeholder="sk-...">
+        </label>
+        <button type="submit" class="mt-1">Provider anlegen</button>
+      </form>
+    </article>
+  </div>
+
+  <!-- ====================== Tab: Personas ====================== -->
+  <div role="tabpanel">
+    <article class="card mt-2">
+      <h3 class="mb-1">Personas</h3>
+      <p class="sub mb-2" style="font-size:0.85rem;">
+        Eine Persona ist das, was Clients (z.B. Open WebUI) als „Modell“ sehen.
+        Sie zeigt auf ein Upstream-Modell und kann einen festen System-Prompt
+        injizieren. Ohne Prompt = Passthrough.
+      </p>
+
+      {{if .Personas}}
+      <div class="mb-2">
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+          <colgroup>
+            <col style="width:19%;">
+            <col style="width:12%;">
+            <col style="width:17%;">
+            <col style="width:11%;">
+            <col style="width:9%;">
+            <col style="width:32%;">
+          </colgroup>
+          <thead>
+            <tr style="text-align:left;border-bottom:1px solid #ddd;">
+              <th style="padding:0.4rem;">ID</th>
+              <th style="padding:0.4rem;">Provider</th>
+              <th style="padding:0.4rem;">Upstream-Modell</th>
+              <th style="padding:0.4rem;">Prompt</th>
+              <th style="padding:0.4rem;">Status</th>
+              <th style="padding:0.4rem;text-align:right;">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+          {{range .Personas}}
+            <tr style="border-bottom:1px solid #eee;vertical-align:top;">
+              <td style="padding:0.4rem;word-break:break-word;"><code>{{.ID}}</code></td>
+              <td style="padding:0.4rem;word-break:break-word;">{{if .Provider}}<code>{{.Provider}}</code>{{else}}<span class="sub">—</span>{{end}}</td>
+              <td style="padding:0.4rem;word-break:break-word;">{{if .UpstreamID}}<code>{{.UpstreamID}}</code>{{else}}<span class="sub">—</span>{{end}}</td>
+              <td style="padding:0.4rem;">{{if .Prompt}}<span class="sub">{{len .Prompt}} Zeichen</span>{{else}}<span class="sub">passthrough</span>{{end}}</td>
+              <td style="padding:0.4rem;">
+                {{if and .Provider .UpstreamID}}<span style="color:green;">aktiv</span>{{else}}<span style="color:var(--danger);">inaktiv</span>{{end}}
+              </td>
+              <td style="padding:0.4rem;">
+                <div class="llm-actions">
+                  <button type="button" class="ghost small"
+                          data-llm-edit-toggle="{{.ID}}">Bearbeiten</button>
+                  {{if and .Provider .UpstreamID}}
+                  <form method="post" action="/llm/personas/{{.ID}}/deactivate"
+                        title="Upstream-Zuordnung entfernen (Prompt bleibt erhalten)"
+                        onsubmit="return confirm('Persona {{.ID}} deaktivieren? Sie taucht dann nicht mehr als Modell auf, bis wieder ein Provider zugewiesen wird. Der System-Prompt bleibt erhalten.');">
+                    <button type="submit" class="ghost small">Deaktivieren</button>
+                  </form>
+                  {{end}}
+                  <form method="post" action="/llm/personas/{{.ID}}/delete"
+                        onsubmit="return confirm('Persona {{.ID}} wirklich loeschen?');">
+                    <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {{/* Edit-Zeile: eigene colspan-Zeile, damit das breite Formular
+                 NIE die Spaltenbreiten der Tabelle aufblaeht (sonst horizontaler
+                 Scroll). Per JS ueber den Bearbeiten-Button getoggelt. */}}
+            <tr class="llm-edit-row" id="llm-edit-{{.ID}}" hidden>
+              <td colspan="6" style="padding:0 0.4rem 1rem;">
+                <form method="post" action="/llm/personas/{{.ID}}/update" class="llm-edit-form">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;max-width:640px;">
+                    <label data-field>
+                      Provider
+                      <select name="provider" data-llm-provider-select>
+                        <option value="">— (inaktiv) —</option>
+                        {{$current := .Provider}}
+                        {{range $.Providers}}
+                          <option value="{{.ID}}" {{if eq .ID $current}}selected{{end}}>{{.ID}}</option>
+                        {{end}}
+                      </select>
+                    </label>
+                    <label data-field>
+                      Upstream-Modell
+                      <input type="text" name="upstream_id" value="{{.UpstreamID}}"
+                             list="llm-models-{{.ID}}" placeholder="z.B. gpt-4o-mini" data-llm-upstream-input>
+                      <datalist id="llm-models-{{.ID}}"></datalist>
+                      <span class="hint" data-llm-models-hint></span>
+                    </label>
+                  </div>
+                  <label data-field class="mb-1" style="display:block;max-width:640px;">
+                    System-Prompt
+                    <textarea name="prompt" rows="5" style="width:100%;box-sizing:border-box;"
+                              placeholder="Leer lassen = Passthrough (kein System-Prompt)">{{.Prompt}}</textarea>
+                  </label>
+                  <button type="submit" class="small">Speichern</button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <p class="sub mb-2">Noch keine Persona angelegt.</p>
+      {{end}}
+
+      <h4 class="mt-2 mb-1">Neue Persona</h4>
+      <form method="post" action="/llm/personas">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;">
+          <label data-field>
+            ID
+            <input type="text" name="id" required pattern="[a-z0-9][a-z0-9._-]*"
+                   placeholder="z.B. tutor-mathe">
+          </label>
+          <label data-field>
+            Provider
+            <select name="provider" data-llm-provider-select>
+              <option value="">— (inaktiv) —</option>
+              {{range .Providers}}
+                <option value="{{.ID}}">{{.ID}}</option>
+              {{end}}
+            </select>
+          </label>
+          <label data-field>
+            Upstream-Modell
+            <input type="text" name="upstream_id" list="llm-models-new"
+                   placeholder="z.B. gpt-4o-mini" data-llm-upstream-input>
+            <datalist id="llm-models-new"></datalist>
+            <span class="hint" data-llm-models-hint></span>
+          </label>
+        </div>
+        <label data-field class="mb-1">
+          System-Prompt
+          <textarea name="prompt" rows="5" placeholder="Leer lassen = Passthrough (kein System-Prompt)"></textarea>
+          <span class="hint">Wird der Persona als System-Prompt vorangestellt. Leer = die App spricht direkt mit dem Upstream-Modell (Passthrough).</span>
+        </label>
+        <button type="submit" class="mt-1">Persona anlegen</button>
+      </form>
+    </article>
+  </div>
+
+  <!-- ====================== Tab: API-Keys ====================== -->
+  <div role="tabpanel">
+    <article class="card mt-2">
+      <h3 class="mb-1">API-Keys</h3>
+      <p class="sub mb-2" style="font-size:0.85rem;">
+        API-Keys authentifizieren Clients (z.B. Open WebUI) gegen llmd.
+        Klartext wird nur EINMAL nach der Erstellung angezeigt — danach
+        bleibt nur ein Hash. Persona-Liste leer = Zugriff auf alle Personas.
+      </p>
+
+      {{if .APIKeys}}
+      <table style="width:100%;border-collapse:collapse;" class="mb-2">
+        <thead>
+          <tr style="text-align:left;border-bottom:1px solid #ddd;">
+            <th style="padding:0.4rem;">ID</th>
+            <th style="padding:0.4rem;">Prefix</th>
+            <th style="padding:0.4rem;">Personas</th>
+            <th style="padding:0.4rem;text-align:right;">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+        {{range .APIKeys}}
+          <tr style="border-bottom:1px solid #eee;">
+            <td style="padding:0.4rem;"><code>{{.ID}}</code></td>
+            <td style="padding:0.4rem;"><code>{{.Prefix}}</code></td>
+            <td style="padding:0.4rem;">
+              {{if .AllowedPersonas}}
+                {{range $i, $p := .AllowedPersonas}}{{if $i}}, {{end}}<code>{{$p}}</code>{{end}}
+              {{else}}
+                <span class="sub">(alle)</span>
+              {{end}}
+            </td>
+            <td style="padding:0.4rem;text-align:right;">
+              <form method="post" action="/llm/keys/{{.ID}}/delete" style="display:inline;"
+                    onsubmit="return confirm('Key {{.ID}} wirklich loeschen?');">
+                <button type="submit" class="ghost small" style="color:var(--danger);">Revoke</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p class="sub mb-2">Noch kein API-Key angelegt.</p>
+      {{end}}
+
+      <h4 class="mt-2 mb-1">Neuen Key erstellen</h4>
+      <form method="post" action="/llm/keys">
+        <label data-field class="mb-1">
+          ID
+          <input type="text" name="id" required pattern="[a-z0-9][a-z0-9._-]*"
+                 placeholder="z.B. open-webui">
+          <span class="hint">Slug, dient nur der Identifizierung in der UI.</span>
+        </label>
+        <label data-field class="mb-1">
+          Erlaubte Personas
+          <select name="personas" multiple size="{{if .Personas}}{{if lt (len .Personas) 6}}{{len .Personas}}{{else}}6{{end}}{{else}}3{{end}}">
+            {{range .Personas}}
+              <option value="{{.ID}}">{{.ID}}</option>
+            {{end}}
+          </select>
+          <span class="hint">Mehrfachauswahl (Strg/Cmd-Klick). Nichts gewaehlt = Zugriff auf alle Personas.</span>
+        </label>
+        <button type="submit" class="mt-1">Key erstellen</button>
+      </form>
+    </article>
+  </div>
+</ot-tabs>
+
+{{template "sidebar-layout-end" .PageData}}
+{{template "foot" .}}
+{{end}}
+
+{{define "scripts"}}
+<script>
+// Persona-Tab: Wenn der Admin einen Provider waehlt, holen wir die
+// Upstream-Modelle live aus /llm/providers/{id}/models und fuellen das
+// passende <datalist>. Bei Fehler bleibt das Datalist leer und wir
+// zeigen eine kurze Begruendung als Hint — das Input akzeptiert dann
+// trotzdem Freitext, damit die UI nicht hart blockt.
+(function() {
+  function findUpstreamFor(select) {
+    var label = select.closest('label');
+    var grid = label && label.parentElement;
+    if (!grid) return null;
+    return grid.querySelector('input[data-llm-upstream-input]');
+  }
+  function findHintFor(input) {
+    var label = input.closest('label');
+    return label && label.querySelector('[data-llm-models-hint]');
+  }
+
+  async function loadModels(providerID, input, hint) {
+    var dl = input.list;
+    if (!dl) return;
+    dl.innerHTML = '';
+    if (hint) hint.textContent = 'Modelle werden geladen…';
+    try {
+      var resp = await fetch('/llm/providers/' + encodeURIComponent(providerID) + '/models', {
+        headers: { 'Accept': 'application/json' }
+      });
+      var body = await resp.json();
+      if (body.error) {
+        if (hint) hint.textContent = 'Konnte Modelle nicht laden: ' + body.error + ' (Freitext moeglich)';
+        return;
+      }
+      (body.models || []).forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m;
+        dl.appendChild(opt);
+      });
+      if (hint) {
+        if (body.models && body.models.length) {
+          hint.textContent = body.models.length + ' Modelle gefunden.';
+        } else {
+          hint.textContent = 'Keine Modelle geliefert (Freitext moeglich).';
+        }
+      }
+    } catch (err) {
+      if (hint) hint.textContent = 'Fehler beim Laden: ' + err + ' (Freitext moeglich)';
+    }
+  }
+
+  document.addEventListener('change', function(ev) {
+    var sel = ev.target;
+    if (!sel.matches || !sel.matches('select[data-llm-provider-select]')) return;
+    var input = findUpstreamFor(sel);
+    if (!input) return;
+    var hint = findHintFor(input);
+    if (!sel.value) {
+      if (input.list) input.list.innerHTML = '';
+      if (hint) hint.textContent = '';
+      return;
+    }
+    loadModels(sel.value, input, hint);
+  });
+
+  // Persona-Editor auf-/zuklappen. Der Editor lebt in einer eigenen
+  // colspan-Zeile (#llm-edit-<id>), nicht in der Aktions-Zelle — sonst
+  // wuerde sein breites Formular die Tabellenspalten aufblaehen und einen
+  // horizontalen Scrollbalken erzeugen.
+  document.addEventListener('click', function(ev) {
+    var btn = ev.target.closest('[data-llm-edit-toggle]');
+    if (!btn) return;
+    var row = document.getElementById('llm-edit-' + btn.getAttribute('data-llm-edit-toggle'));
+    if (!row) return;
+    row.hidden = !row.hidden;
+  });
+})();
+</script>
+{{end}}
