@@ -94,6 +94,36 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "tunnel.html.tmpl", data)
 }
 
+// handleDexTunnelStart (re)starts the Dex tunnel. Previously the Dex tunnel
+// had no manual control — once the monitor gave up on it, the only recovery
+// was restarting the whole stackctl service. Now it gets the same start/stop
+// treatment as app tunnels.
+func (s *Server) handleDexTunnelStart(w http.ResponseWriter, r *http.Request) {
+	if s.tunnelMgr == nil {
+		http.Redirect(w, r, "/tunnel?test=Tunnel-Manager+nicht+verfuegbar", http.StatusSeeOther)
+		return
+	}
+	if err := s.tunnelMgr.StartDexTunnel(); err != nil {
+		http.Redirect(w, r, "/tunnel?test="+fmt.Sprintf("Dex-Tunnel-Start fehlgeschlagen: %v", err), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/tunnel", http.StatusSeeOther)
+}
+
+// handleDexTunnelStop stops the Dex tunnel. It stays down until manually
+// started again or until stackctl restarts (EnsureDexTunnel runs at startup).
+func (s *Server) handleDexTunnelStop(w http.ResponseWriter, r *http.Request) {
+	if s.tunnelMgr == nil {
+		http.Redirect(w, r, "/tunnel?test=Tunnel-Manager+nicht+verfuegbar", http.StatusSeeOther)
+		return
+	}
+	if err := s.tunnelMgr.StopDexTunnel(); err != nil {
+		http.Redirect(w, r, "/tunnel?test="+fmt.Sprintf("Dex-Tunnel-Stop fehlgeschlagen: %v", err), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/tunnel", http.StatusSeeOther)
+}
+
 func (s *Server) handleTunnelTest(w http.ResponseWriter, r *http.Request) {
 	keyPath := paths.TunnelKeyFile()
 	err := tunnel.TestConnection(s.cfg.Tunnel.SSHHost, s.cfg.Tunnel.SSHPort, keyPath)

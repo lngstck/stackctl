@@ -29,7 +29,13 @@ type tunnelProc struct {
 	remoteHost string
 	localPort  int
 	startedAt  time.Time
-	failures   []time.Time // for failure-rate tracking in the monitor
+
+	// Reconnect bookkeeping owned by the monitor (monitor.go). consecutive
+	// Failures counts deaths since the last recovery; nextRetryAt gates the
+	// backoff so we don't retry (or log) every tick. Both are zero on a
+	// freshly started, healthy tunnel.
+	consecutiveFailures int
+	nextRetryAt         time.Time
 }
 
 // Manager owns all running tunnel processes. It is safe for concurrent use.
@@ -135,11 +141,14 @@ func (m *Manager) statusLocked(tunnelID string) string {
 	}
 	select {
 	case <-p.done:
-		return StatusStopped
+		// Dead but still tracked → the monitor is retrying it with backoff.
+		// Surface as "error" rather than "stopped" so the admin can tell the
+		// difference between "I turned it off" and "it broke".
+		return StatusError
 	default:
-		// Check for excessive recent failures.
-		recent := countRecentFailures(p.failures, 5*time.Minute)
-		if recent > 5 {
+		if p.consecutiveFailures >= errorThreshold {
+			// Alive this instant but flapping — keep the badge red so the
+			// admin notices, even though the monitor keeps healing it.
 			return StatusError
 		}
 		return StatusRunning
@@ -170,6 +179,21 @@ const RootDomain = "learningstack.online"
 func (m *Manager) EnsureDexTunnel() error {
 	remoteHost := "auth." + m.cfg.School.Slug + "." + RootDomain
 	return m.Start(DexTunnelID, remoteHost, 5556)
+}
+
+// StartDexTunnel (re)starts the Dex tunnel from the UI. Identical to
+// EnsureDexTunnel, but named for the explicit manual-control intent. If the
+// tunnel is currently in the error state (dead but tracked), Start detects the
+// closed done-channel and respawns a fresh process with reset backoff.
+func (m *Manager) StartDexTunnel() error {
+	return m.EnsureDexTunnel()
+}
+
+// StopDexTunnel stops the Dex tunnel from the UI. Because Stop removes it from
+// the tunnel map, the monitor will not resurrect it — it stays down until the
+// admin starts it again or stackctl restarts (which re-runs EnsureDexTunnel).
+func (m *Manager) StopDexTunnel() error {
+	return m.Stop(DexTunnelID)
 }
 
 // RestoreAppTunnels restarts tunnels for all apps that had tunnel_enabled=true
@@ -225,15 +249,4 @@ func (m *Manager) Shutdown() {
 	for _, p := range m.tunnels {
 		m.killProc(p)
 	}
-}
-
-func countRecentFailures(failures []time.Time, window time.Duration) int {
-	cutoff := time.Now().Add(-window)
-	n := 0
-	for _, t := range failures {
-		if t.After(cutoff) {
-			n++
-		}
-	}
-	return n
 }
