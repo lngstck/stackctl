@@ -42,6 +42,10 @@ type settingsData struct {
 	// /settings — ohne dieses Flag wuerde <ot-tabs> immer auf "Allgemein"
 	// (erster Tab) starten und der Nutzer landet gefuehlt am falschen Ort.
 	SystemTabActive bool
+
+	// Restarting schaltet das Auto-Reload-Script frei (nach Self-Update, wenn
+	// der Dienst gerade durch systemd neu gestartet wird).
+	Restarting bool
 }
 
 func (s *Server) settingsData(msg, errMsg string) settingsData {
@@ -94,6 +98,9 @@ func (s *Server) withSystemFlash(data settingsData, r *http.Request) settingsDat
 	// genau dort wieder aufmachen statt zurueck auf "Allgemein" zu springen.
 	if data.SyncResult != "" || data.SyncError != "" || data.UpdateResult != "" || data.UpdateError != "" {
 		data.SystemTabActive = true
+	}
+	if q.Get("restarting") == "1" {
+		data.Restarting = true
 	}
 	return data
 }

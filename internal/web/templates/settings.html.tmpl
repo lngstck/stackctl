@@ -94,10 +94,39 @@
       <div role="alert" data-variant="danger" class="mt-2 mb-2">{{.SyncError}}</div>
     {{end}}
     {{if .UpdateResult}}
-      <div role="alert" data-variant="success" class="mt-2 mb-2">{{.UpdateResult}}</div>
+      <div role="alert" data-variant="success" class="mt-2 mb-2">
+        {{.UpdateResult}}
+        {{if .Restarting}}<br><span class="sub">Die Seite lädt automatisch neu, sobald der Dienst wieder erreichbar ist…</span>{{end}}
+      </div>
     {{end}}
     {{if .UpdateError}}
       <div role="alert" data-variant="danger" class="mt-2 mb-2">{{.UpdateError}}</div>
+    {{end}}
+
+    {{if .Restarting}}
+    <script>
+    // Nach dem Self-Update beendet sich der Prozess (os.Exit) und systemd
+    // bringt ihn mit dem neuen Binary wieder hoch. Wir pollen /healthz und
+    // laden neu, sobald der Dienst NACH einem Ausfall wieder antwortet — so
+    // sieht der Admin direkt die neue Version statt auf "Neustart..." kleben
+    // zu bleiben. wasDown verhindert ein zu fruehes Reload, solange der alte
+    // Prozess noch antwortet.
+    (function() {
+      var wasDown = false, start = Date.now();
+      var done = '/settings?update=' + encodeURIComponent('Aktualisierung abgeschlossen.');
+      function poll() {
+        if (Date.now() - start > 60000) { window.location.href = done; return; }
+        fetch('/healthz', { cache: 'no-store' })
+          .then(function(r) {
+            if (r.ok && wasDown) { window.location.href = done; return; }
+            if (!r.ok) wasDown = true;
+            setTimeout(poll, 1000);
+          })
+          .catch(function() { wasDown = true; setTimeout(poll, 1000); });
+      }
+      setTimeout(poll, 1500);
+    })();
+    </script>
     {{end}}
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;" class="mt-2">

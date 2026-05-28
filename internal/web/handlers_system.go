@@ -43,7 +43,11 @@ func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
 	// Pause os.Exit(0) ruft — systemd bringt uns mit dem neuen Binary
 	// wieder hoch (Restart=always). Diese Antwort sieht der Browser noch.
 	_ = update.RestartService()
-	http.Redirect(w, r, "/settings?update="+fmt.Sprintf("Update auf %s — Neustart...", newVersion), http.StatusSeeOther)
+	// restarting=1 schaltet im System-Tab ein kleines Poll-Script frei, das
+	// auf /healthz wartet und die Seite neu laedt, sobald der Dienst mit dem
+	// neuen Binary wieder oben ist — sonst bliebe der Browser auf "Neustart..."
+	// stehen.
+	http.Redirect(w, r, "/settings?restarting=1&update="+fmt.Sprintf("Update auf %s — Neustart...", newVersion), http.StatusSeeOther)
 }
 
 // handleCatalogSync synchronisiert den App-Katalog. Wie zuvor entscheidet
