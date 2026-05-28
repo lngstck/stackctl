@@ -13,8 +13,8 @@
 
 <ot-tabs>
   <div role="tablist">
-    <button role="tab" aria-selected="true">Allgemein</button>
-    <button role="tab">System</button>
+    <button role="tab" {{if not .SystemTabActive}}aria-selected="true"{{end}}>Allgemein</button>
+    <button role="tab" {{if .SystemTabActive}}aria-selected="true"{{end}}>System</button>
   </div>
 
   <!-- Tab: Allgemein -->
