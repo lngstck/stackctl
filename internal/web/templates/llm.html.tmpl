@@ -73,20 +73,22 @@
             <td style="padding:0.4rem;">
               {{if .APIKey}}<span class="sub">gesetzt</span>{{else}}<span style="color:var(--danger);">fehlt</span>{{end}}
             </td>
-            <td style="padding:0.4rem;text-align:right;">
-              <details style="display:inline-block;">
-                <summary class="ghost small" style="cursor:pointer;display:inline-block;padding:0.2rem 0.6rem;">Key</summary>
-                <form method="post" action="/llm/providers/{{.ID}}/key" style="display:inline-flex;gap:0.3rem;margin-top:0.3rem;">
-                  <input type="password" name="api_key" placeholder="Neuer API-Key" style="font-size:0.85rem;">
-                  <button type="submit" class="small">Setzen</button>
-                  <button type="submit" name="clear" value="1" class="ghost small"
-                          onclick="return confirm('API-Key fuer {{.ID}} entfernen?');">Loeschen</button>
+            <td style="padding:0.4rem;">
+              <div class="llm-actions">
+                <details>
+                  <summary class="ghost small" style="padding:0.2rem 0.6rem;">Key</summary>
+                  <form method="post" action="/llm/providers/{{.ID}}/key" class="llm-edit-form" style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+                    <input type="password" name="api_key" placeholder="Neuer API-Key" style="font-size:0.85rem;">
+                    <button type="submit" class="small">Setzen</button>
+                    <button type="submit" name="clear" value="1" class="ghost small"
+                            onclick="return confirm('API-Key fuer {{.ID}} entfernen?');">Loeschen</button>
+                  </form>
+                </details>
+                <form method="post" action="/llm/providers/{{.ID}}/delete"
+                      onsubmit="return confirm('Provider {{.ID}} wirklich loeschen?');">
+                  <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
                 </form>
-              </details>
-              <form method="post" action="/llm/providers/{{.ID}}/delete" style="display:inline;"
-                    onsubmit="return confirm('Provider {{.ID}} wirklich loeschen?');">
-                <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
-              </form>
+              </div>
             </td>
           </tr>
         {{end}}
@@ -187,6 +189,13 @@
                       <button type="submit" class="small">Speichern</button>
                     </form>
                   </details>
+                  {{if and .Provider .UpstreamID}}
+                  <form method="post" action="/llm/personas/{{.ID}}/deactivate"
+                        title="Upstream-Zuordnung entfernen (Prompt bleibt erhalten)"
+                        onsubmit="return confirm('Persona {{.ID}} deaktivieren? Sie taucht dann nicht mehr als Modell auf, bis wieder ein Provider zugewiesen wird. Der System-Prompt bleibt erhalten.');">
+                    <button type="submit" class="ghost small">Deaktivieren</button>
+                  </form>
+                  {{end}}
                   <form method="post" action="/llm/personas/{{.ID}}/delete"
                         onsubmit="return confirm('Persona {{.ID}} wirklich loeschen?');">
                     <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>

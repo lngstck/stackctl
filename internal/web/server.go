@@ -142,6 +142,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /llm/providers/{id}/models", s.requireAuth(s.handleLLMProviderModels))
 	s.mux.HandleFunc("POST /llm/personas", s.requireAuth(s.handleLLMPersonaCreate))
 	s.mux.HandleFunc("POST /llm/personas/{id}/update", s.requireAuth(s.handleLLMPersonaUpdate))
+	s.mux.HandleFunc("POST /llm/personas/{id}/deactivate", s.requireAuth(s.handleLLMPersonaDeactivate))
 	s.mux.HandleFunc("POST /llm/personas/{id}/delete", s.requireAuth(s.handleLLMPersonaDelete))
 	s.mux.HandleFunc("POST /llm/keys", s.requireAuth(s.handleLLMKeyCreate))
 	s.mux.HandleFunc("POST /llm/keys/{id}/delete", s.requireAuth(s.handleLLMKeyDelete))

@@ -292,6 +292,29 @@ func (s *Server) handleLLMPersonaUpdate(w http.ResponseWriter, r *http.Request) 
 	redirectLLM(w, r, "personas", "Persona "+id+" aktualisiert.", "", nil)
 }
 
+// handleLLMPersonaDeactivate clears a persona's provider + upstream in one
+// click, leaving the prompt intact. "Inaktiv" in llmd simply means the persona
+// has no upstream to route to — so deactivating is just unlinking. Reactivating
+// needs a provider + upstream_id, which the user picks via the edit form.
+func (s *Server) handleLLMPersonaDeactivate(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	f, err := llm.Load()
+	if err != nil {
+		redirectLLM(w, r, "personas", "", "Konfiguration konnte nicht geladen werden.", nil)
+		return
+	}
+	if err := f.SetPersonaUpstream(id, "", ""); err != nil {
+		redirectLLM(w, r, "personas", "", err.Error(), nil)
+		return
+	}
+	if err := llm.SaveAndReload(f); err != nil {
+		log.Printf("web: llm save: %v", err)
+		redirectLLM(w, r, "personas", "", "Speichern fehlgeschlagen: "+err.Error(), nil)
+		return
+	}
+	redirectLLM(w, r, "personas", "Persona "+id+" deaktiviert (Upstream entfernt, Prompt bleibt).", "", nil)
+}
+
 func (s *Server) handleLLMPersonaDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	f, err := llm.Load()
