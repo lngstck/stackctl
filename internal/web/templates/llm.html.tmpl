@@ -6,7 +6,10 @@
 /* Aktionen-Spalte: Buttons nebeneinander, rechtsbuendig. Das <details>
    fuer den Inline-Editor darf nicht die ganze Zellbreite fuellen, sonst
    wird "Bearbeiten" zu einem riesigen Kasten (display:block ist Default). */
-.llm-actions { display:flex; gap:0.4rem; justify-content:flex-end; align-items:flex-start; flex-wrap:wrap; }
+.llm-actions { display:flex; gap:0.4rem; justify-content:flex-end; align-items:center; flex-wrap:wrap; }
+/* Formulare sind hier nur Button-Wrapper — kein Eigenleben (Default-Margin
+   wuerde die Buttons gegeneinander versetzen). */
+.llm-actions form { margin:0; display:inline-flex; }
 .llm-actions details { display:inline-block; }
 .llm-actions summary { list-style:none; cursor:pointer; white-space:nowrap; }
 .llm-actions summary::-webkit-details-marker { display:none; }
@@ -168,7 +171,7 @@
               </td>
               <td style="padding:0.4rem;">
                 <div class="llm-actions">
-                  <button type="button" class="ghost small" style="padding:0.2rem 0.6rem;"
+                  <button type="button" class="ghost small"
                           data-llm-edit-toggle="{{.ID}}">Bearbeiten</button>
                   {{if and .Provider .UpstreamID}}
                   <form method="post" action="/llm/personas/{{.ID}}/deactivate"
