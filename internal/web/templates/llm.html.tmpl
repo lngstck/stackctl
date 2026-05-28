@@ -136,8 +136,16 @@
       </p>
 
       {{if .Personas}}
-      <div style="overflow-x:auto;" class="mb-2">
-        <table style="width:100%;border-collapse:collapse;">
+      <div class="mb-2">
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+          <colgroup>
+            <col style="width:19%;">
+            <col style="width:12%;">
+            <col style="width:17%;">
+            <col style="width:11%;">
+            <col style="width:9%;">
+            <col style="width:32%;">
+          </colgroup>
           <thead>
             <tr style="text-align:left;border-bottom:1px solid #ddd;">
               <th style="padding:0.4rem;">ID</th>
@@ -151,9 +159,9 @@
           <tbody>
           {{range .Personas}}
             <tr style="border-bottom:1px solid #eee;vertical-align:top;">
-              <td style="padding:0.4rem;"><code>{{.ID}}</code></td>
-              <td style="padding:0.4rem;">{{if .Provider}}<code>{{.Provider}}</code>{{else}}<span class="sub">—</span>{{end}}</td>
-              <td style="padding:0.4rem;">{{if .UpstreamID}}<code>{{.UpstreamID}}</code>{{else}}<span class="sub">—</span>{{end}}</td>
+              <td style="padding:0.4rem;word-break:break-word;"><code>{{.ID}}</code></td>
+              <td style="padding:0.4rem;word-break:break-word;">{{if .Provider}}<code>{{.Provider}}</code>{{else}}<span class="sub">—</span>{{end}}</td>
+              <td style="padding:0.4rem;word-break:break-word;">{{if .UpstreamID}}<code>{{.UpstreamID}}</code>{{else}}<span class="sub">—</span>{{end}}</td>
               <td style="padding:0.4rem;">{{if .Prompt}}<span class="sub">{{len .Prompt}} Zeichen</span>{{else}}<span class="sub">passthrough</span>{{end}}</td>
               <td style="padding:0.4rem;">
                 {{if and .Provider .UpstreamID}}<span style="color:green;">aktiv</span>{{else}}<span style="color:var(--danger);">inaktiv</span>{{end}}
