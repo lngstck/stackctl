@@ -2,6 +2,20 @@
 {{template "head" .}}
 {{template "sidebar-layout-start" .PageData}}
 
+<style>
+/* Aktionen-Spalte: Buttons nebeneinander, rechtsbuendig. Das <details>
+   fuer den Inline-Editor darf nicht die ganze Zellbreite fuellen, sonst
+   wird "Bearbeiten" zu einem riesigen Kasten (display:block ist Default). */
+.llm-actions { display:flex; gap:0.4rem; justify-content:flex-end; align-items:flex-start; flex-wrap:wrap; }
+.llm-actions details { display:inline-block; }
+.llm-actions summary { list-style:none; cursor:pointer; white-space:nowrap; }
+.llm-actions summary::-webkit-details-marker { display:none; }
+/* Wenn der Editor offen ist, soll das Formular die volle Zeilenbreite
+   bekommen statt im schmalen inline-block zu kleben. */
+.llm-actions details[open] { display:block; width:100%; }
+.llm-edit-form { text-align:left; margin-top:0.5rem; }
+</style>
+
 <h2 class="mb-2">LLM-Konfiguration</h2>
 <p class="sub mb-2" style="font-size:0.9rem;">
   Verwaltet Upstream-Provider, schul-eigene Personas und API-Keys fuer den
@@ -142,44 +156,42 @@
               <td style="padding:0.4rem;">
                 {{if and .Provider .UpstreamID}}<span style="color:green;">aktiv</span>{{else}}<span style="color:var(--danger);">inaktiv</span>{{end}}
               </td>
-              <td style="padding:0.4rem;text-align:right;">
-                <details>
-                  <summary class="ghost small" style="cursor:pointer;display:inline-block;padding:0.2rem 0.6rem;">Bearbeiten</summary>
-                  <form method="post" action="/llm/personas/{{.ID}}/update" class="mt-1" style="text-align:left;">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
-                      <label data-field>
-                        Provider
-                        <select name="provider" data-llm-provider-select>
-                          <option value="">— (inaktiv) —</option>
-                          {{$current := .Provider}}
-                          {{range $.Providers}}
-                            <option value="{{.ID}}" {{if eq .ID $current}}selected{{end}}>{{.ID}}</option>
-                          {{end}}
-                        </select>
+              <td style="padding:0.4rem;">
+                <div class="llm-actions">
+                  <details>
+                    <summary class="ghost small" style="padding:0.2rem 0.6rem;">Bearbeiten</summary>
+                    <form method="post" action="/llm/personas/{{.ID}}/update" class="llm-edit-form">
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+                        <label data-field>
+                          Provider
+                          <select name="provider" data-llm-provider-select>
+                            <option value="">— (inaktiv) —</option>
+                            {{$current := .Provider}}
+                            {{range $.Providers}}
+                              <option value="{{.ID}}" {{if eq .ID $current}}selected{{end}}>{{.ID}}</option>
+                            {{end}}
+                          </select>
+                        </label>
+                        <label data-field>
+                          Upstream-Modell
+                          <input type="text" name="upstream_id" value="{{.UpstreamID}}"
+                                 list="llm-models-{{.ID}}" placeholder="z.B. gpt-4o-mini" data-llm-upstream-input>
+                          <datalist id="llm-models-{{.ID}}"></datalist>
+                          <span class="hint" data-llm-models-hint></span>
+                        </label>
+                      </div>
+                      <label data-field class="mb-1">
+                        System-Prompt
+                        <textarea name="prompt" rows="5" placeholder="Leer lassen = Passthrough (kein System-Prompt)">{{.Prompt}}</textarea>
                       </label>
-                      <label data-field>
-                        Upstream-Modell
-                        <input type="text" name="upstream_id" value="{{.UpstreamID}}"
-                               list="llm-models-{{.ID}}" placeholder="z.B. gpt-4o-mini" data-llm-upstream-input>
-                        <datalist id="llm-models-{{.ID}}"></datalist>
-                        <span class="hint" data-llm-models-hint></span>
-                      </label>
-                    </div>
-                    <label data-field class="mb-1">
-                      System-Prompt
-                      <textarea name="prompt" rows="5" placeholder="Leer = Passthrough">{{.Prompt}}</textarea>
-                    </label>
-                    <label class="mb-1" style="display:flex;gap:0.4rem;align-items:center;">
-                      <input type="checkbox" name="passthrough" value="on">
-                      Passthrough: Prompt-Feld ignorieren und leer speichern
-                    </label>
-                    <button type="submit" class="small">Speichern</button>
+                      <button type="submit" class="small">Speichern</button>
+                    </form>
+                  </details>
+                  <form method="post" action="/llm/personas/{{.ID}}/delete"
+                        onsubmit="return confirm('Persona {{.ID}} wirklich loeschen?');">
+                    <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
                   </form>
-                </details>
-                <form method="post" action="/llm/personas/{{.ID}}/delete" style="display:inline;"
-                      onsubmit="return confirm('Persona {{.ID}} wirklich loeschen?');">
-                  <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
-                </form>
+                </div>
               </td>
             </tr>
           {{end}}
@@ -217,11 +229,8 @@
         </div>
         <label data-field class="mb-1">
           System-Prompt
-          <textarea name="prompt" rows="5" placeholder="Leer = Passthrough"></textarea>
-        </label>
-        <label class="mb-1" style="display:flex;gap:0.4rem;align-items:center;">
-          <input type="checkbox" name="passthrough" value="on">
-          Passthrough: Persona ohne System-Prompt anlegen
+          <textarea name="prompt" rows="5" placeholder="Leer lassen = Passthrough (kein System-Prompt)"></textarea>
+          <span class="hint">Wird der Persona als System-Prompt vorangestellt. Leer = die App spricht direkt mit dem Upstream-Modell (Passthrough).</span>
         </label>
         <button type="submit" class="mt-1">Persona anlegen</button>
       </form>

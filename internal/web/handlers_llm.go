@@ -230,11 +230,9 @@ func (s *Server) handleLLMPersonaCreate(w http.ResponseWriter, r *http.Request) 
 	id := strings.TrimSpace(r.FormValue("id"))
 	provider := strings.TrimSpace(r.FormValue("provider"))
 	upstreamID := strings.TrimSpace(r.FormValue("upstream_id"))
-	prompt := r.FormValue("prompt")
-	passthrough := r.FormValue("passthrough") == "on"
-	if passthrough {
-		prompt = ""
-	}
+	// Leeres Prompt-Feld = Passthrough. Keine separate Checkbox mehr —
+	// das war redundant und widerspruechlich (Checkbox + "Leer = Passthrough").
+	prompt := strings.TrimSpace(r.FormValue("prompt"))
 
 	f, err := llm.Load()
 	if err != nil {
@@ -245,7 +243,7 @@ func (s *Server) handleLLMPersonaCreate(w http.ResponseWriter, r *http.Request) 
 		ID:         id,
 		Provider:   provider,
 		UpstreamID: upstreamID,
-		Prompt:     strings.TrimSpace(prompt),
+		Prompt:     prompt,
 	}
 	if err := f.AddPersona(p); err != nil {
 		redirectLLM(w, r, "personas", "", err.Error(), nil)
@@ -267,11 +265,8 @@ func (s *Server) handleLLMPersonaUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	provider := strings.TrimSpace(r.FormValue("provider"))
 	upstreamID := strings.TrimSpace(r.FormValue("upstream_id"))
-	prompt := r.FormValue("prompt")
-	passthrough := r.FormValue("passthrough") == "on"
-	if passthrough {
-		prompt = ""
-	}
+	// Leeres Prompt-Feld = Passthrough (kein System-Prompt). Keine Checkbox.
+	prompt := strings.TrimSpace(r.FormValue("prompt"))
 
 	f, err := llm.Load()
 	if err != nil {
@@ -285,7 +280,7 @@ func (s *Server) handleLLMPersonaUpdate(w http.ResponseWriter, r *http.Request) 
 		redirectLLM(w, r, "personas", "", err.Error(), nil)
 		return
 	}
-	if err := f.SetPersonaPrompt(id, strings.TrimSpace(prompt)); err != nil {
+	if err := f.SetPersonaPrompt(id, prompt); err != nil {
 		redirectLLM(w, r, "personas", "", err.Error(), nil)
 		return
 	}
