@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/lngstck/stackctl/internal/catalog"
+	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/envfile"
 )
 
 func TestDependsOn(t *testing.T) {
@@ -75,6 +77,62 @@ func TestCollectComposeDefs(t *testing.T) {
 	}
 	if !ids["postgres"] || !ids["langflow"] {
 		t.Errorf("IDs = %v", ids)
+	}
+}
+
+func TestReconstructDexClients(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.School.Slug = "demo"
+
+	owui := &catalog.Definition{}
+	owui.ID = "open-webui"
+	owui.Name = "Open WebUI"
+	owui.OIDC = &catalog.OIDCSpec{ClientID: "open-webui", RedirectPath: "/oauth/oidc/callback"}
+
+	pl := &catalog.Definition{}
+	pl.ID = "pylearn"
+	pl.Name = "PyLearn"
+	pl.OIDC = &catalog.OIDCSpec{ClientID: "pylearn", RedirectPath: "/auth/callback"}
+
+	// Hat einen oidc:-Block, aber noch KEIN Secret → muss uebersprungen werden.
+	pending := &catalog.Definition{}
+	pending.ID = "grafana"
+	pending.Name = "Grafana"
+	pending.OIDC = &catalog.OIDCSpec{ClientID: "grafana", RedirectPath: "/login/generic_oauth"}
+
+	// Keine OIDC → kein Client.
+	noOIDC := &catalog.Definition{}
+	noOIDC.ID = "postgres"
+
+	env := envfile.New()
+	env.Set("open-webui", "OPEN_WEBUI_OIDC_SECRET", "owui-secret")
+	env.Set("pylearn", "PYLEARN_OIDC_SECRET", "pl-secret")
+
+	defs := []*catalog.Definition{owui, pl, pending, noOIDC}
+	clients := ReconstructDexClients(defs, env, cfg)
+
+	if len(clients) != 2 {
+		t.Fatalf("got %d clients, want 2 (pending hat kein Secret, postgres kein oidc)", len(clients))
+	}
+	byID := map[string]string{}
+	redirects := map[string]string{}
+	for _, c := range clients {
+		byID[c.ID] = c.Secret
+		if len(c.RedirectURIs) == 1 {
+			redirects[c.ID] = c.RedirectURIs[0]
+		}
+	}
+	if byID["open-webui"] != "owui-secret" {
+		t.Errorf("open-webui secret = %q", byID["open-webui"])
+	}
+	if byID["pylearn"] != "pl-secret" {
+		t.Errorf("pylearn secret = %q", byID["pylearn"])
+	}
+	if redirects["open-webui"] != "https://open-webui.demo.learningstack.online/oauth/oidc/callback" {
+		t.Errorf("open-webui redirect = %q", redirects["open-webui"])
+	}
+	if _, ok := byID["grafana"]; ok {
+		t.Error("grafana sollte ohne Secret uebersprungen werden")
 	}
 }
 

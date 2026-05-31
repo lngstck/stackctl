@@ -341,9 +341,10 @@ func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Load existing dex clients.
-	// TODO: load from dex config file. For now, reconstruct from state.
-	var dexClients []dex.Client
+	// Bestehende OIDC-Clients rekonstruieren, damit der Install die Clients der
+	// anderen Apps nicht aus der Dex-Config wirft (dex.SaveConfig schreibt genau
+	// die uebergebene Liste, ohne Merge mit der Datei).
+	dexClients := install.ReconstructDexClients(allDefs, env, s.cfg)
 
 	// Run install.
 	result, updatedClients, installErr := install.Install(
@@ -406,7 +407,9 @@ func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var dexClients []dex.Client
+	// Bestehende OIDC-Clients rekonstruieren (sonst wirft das Regenerieren die
+	// anderen App-Clients aus der Dex-Config).
+	dexClients := install.ReconstructDexClients(allDefs, env, s.cfg)
 	result, updatedClients, updateErr := install.Update(
 		def, s.cfg, s.state, env, dexClients, allDefs,
 	)
@@ -475,7 +478,9 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	wipeData := r.FormValue("wipe_data") == "on"
 
-	var dexClients []dex.Client
+	// Dex-Clients der verbleibenden Apps rekonstruieren; Remove entfernt daraus
+	// nur den eigenen Client und schreibt die Config mit dem Rest neu.
+	dexClients := install.ReconstructDexClients(remainingDefs, env, s.cfg)
 	_, removeErr := install.Remove(appID, s.cfg, s.state, env, dexClients, remainingDefs, wipeData)
 
 	if removeErr != nil {

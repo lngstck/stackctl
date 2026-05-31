@@ -431,6 +431,53 @@ func Update(
 	return res, dexClients, nil
 }
 
+// dexClientFor builds the dex.Client for an already-configured OIDC app from
+// its stored *_OIDC_SECRET. Returns ok=false if the app has no oidc: block or
+// no secret yet (so it isn't a usable static client).
+func dexClientFor(def *catalog.Definition, env *envfile.File, cfg *config.Config) (dex.Client, bool) {
+	if def == nil || def.OIDC == nil {
+		return dex.Client{}, false
+	}
+	secretKey := strings.ToUpper(strings.ReplaceAll(def.ID, "-", "_")) + "_OIDC_SECRET"
+	secret, ok := env.Get(secretKey)
+	if !ok || secret == "" {
+		return dex.Client{}, false
+	}
+	firstPort := 0
+	if len(def.Ports) > 0 {
+		firstPort = def.Ports[0].Host
+	}
+	redirectURI := dex.BuildRedirectURI(
+		def.OIDC.RedirectPath, def.ID, cfg.School.Slug,
+		cfg.School.ServerDomain, firstPort, true,
+	)
+	return dex.Client{
+		ID:           def.OIDC.ClientID,
+		Secret:       secret,
+		Name:         def.Name,
+		RedirectURIs: []string{redirectURI},
+	}, true
+}
+
+// ReconstructDexClients rebuilds the full OIDC static-client list from all
+// currently installed apps that already hold an OIDC secret.
+//
+// This MUST be passed as the base list to Install/Update/Remove. Rationale:
+// dex.SaveConfig writes exactly the client slice it is handed — it does NOT
+// merge with the on-disk config. The callers used to pass an empty slice, so
+// installing/updating/removing ONE OIDC app silently wiped every other app's
+// client from Dex (symptom: other apps suddenly report "Invalid client_id").
+// Reconstructing from state makes each change regenerate the *complete* config.
+func ReconstructDexClients(defs []*catalog.Definition, env *envfile.File, cfg *config.Config) []dex.Client {
+	clients := make([]dex.Client, 0, len(defs))
+	for _, def := range defs {
+		if c, ok := dexClientFor(def, env, cfg); ok {
+			clients = append(clients, c)
+		}
+	}
+	return clients
+}
+
 // checkSystemEnvDeps verifies that the system-owned env vars referenced by
 // the app are present and non-empty in .env. Specifically guards against the
 // silent-failure path where ${ADMIN_PASSWORD} expands to "" and an app's
