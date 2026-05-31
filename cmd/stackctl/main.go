@@ -283,7 +283,9 @@ func runUpdate(cfg *config.Config, state *config.State, appID string) error {
 		}
 	}
 
-	var dexClients []dex.Client
+	// Bestehende OIDC-Clients aus allen installierten Apps rekonstruieren, damit
+	// das Dex-Config-Regenerieren die anderen Clients nicht wegwirft.
+	dexClients := install.ReconstructDexClients(allDefs, env, cfg)
 	_, updatedClients, updateErr := install.Update(def, cfg, state, env, dexClients, allDefs)
 
 	envfile.ApplySystemEnv(env, cfg, "")
