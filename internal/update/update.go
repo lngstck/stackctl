@@ -9,6 +9,10 @@
 package update
 
 import (
+	"bufio"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +36,9 @@ const (
 	releasesURL = "https://api.github.com/repos/" + GitHubRepo + "/releases/latest"
 	// httpTimeout is the timeout for GitHub API and download requests.
 	httpTimeout = 60 * time.Second
+	// checksumAsset is the release asset listing SHA-256 sums of the binaries,
+	// in `shasum -a 256` format (one "<hex>␣␣<filename>" line per binary).
+	checksumAsset = "SHA256SUMS"
 )
 
 // ReleaseInfo holds metadata about the latest GitHub release.
@@ -104,15 +111,23 @@ func Check() (*CheckResult, error) {
 // via systemctl restart stackctl).
 func Apply(rel *ReleaseInfo) (string, error) {
 	assetName := fmt.Sprintf("stackctl-linux-%s", runtime.GOARCH)
-	var downloadURL string
+	var downloadURL, checksumURL string
 	for _, a := range rel.Assets {
-		if a.Name == assetName {
+		switch a.Name {
+		case assetName:
 			downloadURL = a.BrowserDownloadURL
-			break
+		case checksumAsset:
+			checksumURL = a.BrowserDownloadURL
 		}
 	}
 	if downloadURL == "" {
 		return "", fmt.Errorf("no asset %q in release %s", assetName, rel.Tag)
+	}
+	// Refuse to update without a checksum to verify against. Every release from
+	// the checksummed build onward ships SHA256SUMS; a missing file means a
+	// hand-rolled or tampered release, which we will not auto-install.
+	if checksumURL == "" {
+		return "", fmt.Errorf("release %s has no %s asset — aborting for safety", rel.Tag, checksumAsset)
 	}
 
 	binaryPath := filepath.Join(paths.StackctlDir(), "stackctl")
@@ -122,6 +137,22 @@ func Apply(rel *ReleaseInfo) (string, error) {
 	if err := downloadFile(downloadURL, newPath); err != nil {
 		_ = os.Remove(newPath)
 		return "", fmt.Errorf("download: %w", err)
+	}
+
+	// Verify the SHA-256 checksum before doing anything else with the file.
+	expected, err := fetchExpectedSum(checksumURL, assetName)
+	if err != nil {
+		_ = os.Remove(newPath)
+		return "", fmt.Errorf("fetch checksum: %w", err)
+	}
+	actual, err := sha256File(newPath)
+	if err != nil {
+		_ = os.Remove(newPath)
+		return "", fmt.Errorf("hash download: %w", err)
+	}
+	if !strings.EqualFold(actual, expected) {
+		_ = os.Remove(newPath)
+		return "", fmt.Errorf("checksum mismatch for %s: expected %s, got %s", assetName, expected, actual)
 	}
 
 	// Make executable.
@@ -232,4 +263,59 @@ func downloadFile(url, dest string) error {
 		return err
 	}
 	return f.Sync()
+}
+
+// fetchExpectedSum downloads the SHA256SUMS asset and returns the hex digest
+// listed for filename. The file is the standard `shasum -a 256` format:
+// "<hex>␣␣<filename>" per line (the second space may be "*" for binary mode).
+func fetchExpectedSum(url, filename string) (string, error) {
+	client := &http.Client{Timeout: httpTimeout}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%s: %d", checksumAsset, resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return "", err
+	}
+	sums := parseChecksums(data)
+	sum, ok := sums[filename]
+	if !ok {
+		return "", fmt.Errorf("%s lists no entry for %s", checksumAsset, filename)
+	}
+	return sum, nil
+}
+
+// parseChecksums turns `shasum -a 256` output into a filename→hex map. It
+// tolerates the binary-mode "*" marker and a leading "./" on the filename.
+func parseChecksums(data []byte) map[string]string {
+	out := map[string]string{}
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) != 2 {
+			continue
+		}
+		name := strings.TrimPrefix(strings.TrimPrefix(fields[1], "*"), "./")
+		out[name] = fields[0]
+	}
+	return out
+}
+
+// sha256File returns the lower-case hex SHA-256 digest of the file at path.
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

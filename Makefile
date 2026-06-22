@@ -8,8 +8,8 @@ PKG                := ./cmd/stackctl
 DIST               := dist
 LEARNINGSTACK_DEVBOX ?= learningstack-local
 
-.PHONY: all build build-linux-amd64 build-linux-arm64 build-all dev run \
-        test vet fmt clean deploy-devbox release version
+.PHONY: all build build-linux-amd64 build-linux-arm64 build-all checksums dev run \
+        test vet fmt clean deploy-devbox release release-manual version
 
 all: build
 
@@ -28,8 +28,15 @@ build-linux-arm64:
 	@mkdir -p $(DIST)
 	GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(DIST)/stackctl-linux-arm64 $(PKG)
 
-## build-all: alle Release-Targets
-build-all: build-linux-amd64 build-linux-arm64
+## build-all: alle Release-Targets + SHA256SUMS
+build-all: build-linux-amd64 build-linux-arm64 checksums
+
+## checksums: SHA256SUMS über die Release-Binaries erzeugen (von Self-Update
+## verifiziert, s. internal/update). Dateinamen ohne dist/-Prefix, damit die
+## Einträge zu den Asset-Namen im Release passen.
+checksums:
+	cd $(DIST) && shasum -a 256 stackctl-linux-amd64 stackctl-linux-arm64 > SHA256SUMS
+	@echo "✓ $(DIST)/SHA256SUMS"
 
 ## dev: Web-UI lokal im Dev-Modus starten
 dev:
@@ -61,21 +68,28 @@ deploy-devbox:
 	rsync -avz $(DIST)/stackctl-dev $(LEARNINGSTACK_DEVBOX):/tmp/stackctl
 	ssh $(LEARNINGSTACK_DEVBOX) 'sudo mv /tmp/stackctl /opt/stackctl/stackctl && sudo systemctl restart stackctl'
 
-## release: Tag setzen, Linux-Binaries bauen, GitHub Release erstellen
+## release: Tag setzen und pushen — das Bauen + Veröffentlichen übernimmt der
+## GitHub-Actions-Workflow (.github/workflows/release.yml). Weil CI den Tag
+## auscheckt, trägt `git describe` dort exakt die Tag-Version; die frühere
+## "Tag vor Build"-Fragilität entfällt.
 ## Nutzung: make release TAG=v0.1.0
-##
-## WICHTIG: Tag MUSS vor build-all gesetzt werden, sonst trägt
-## `git describe --tags --dirty` (s. VERSION oben) einen Pre-Tag-String und
-## die hochgeladenen Binaries laufen mit der falschen Version.
 release:
 	@test -n "$(TAG)" || (echo "Nutzung: make release TAG=v0.1.0" && exit 1)
 	@git diff --quiet || (echo "Working tree dirty — commit/stash erst." && exit 1)
 	git tag -a $(TAG) -m "Release $(TAG)"
 	git push origin $(TAG)
-	$(MAKE) build-all
+	@echo "✓ Tag $(TAG) gepusht — GitHub Actions baut und veröffentlicht das Release."
+
+## release-manual: Fallback, falls CI nicht verfügbar ist. Erwartet, dass der
+## Tag bereits existiert/ausgecheckt ist (sonst stimmt die Binär-Version nicht),
+## baut lokal und lädt die Assets ins bestehende Release hoch.
+## Nutzung: make release-manual TAG=v0.1.0
+release-manual: build-all
+	@test -n "$(TAG)" || (echo "Nutzung: make release-manual TAG=v0.1.0" && exit 1)
 	gh release create $(TAG) \
 		$(DIST)/stackctl-linux-amd64 \
 		$(DIST)/stackctl-linux-arm64 \
+		$(DIST)/SHA256SUMS \
 		--title "$(TAG)" \
 		--generate-notes
 

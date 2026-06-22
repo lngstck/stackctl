@@ -1,0 +1,54 @@
+# Release-Workflow für stackctl (ARCHITECTURE.md §14, Entscheidung #10).
+#
+# Getriggert von einem Git-Tag `vX.Y.Z`. Weil der Tag ausgecheckt wird, liefert
+# `git describe --tags` im Makefile exakt die Tag-Version — das löst die frühere
+# "Tag MUSS vor Build"-Fragilität des manuellen `make release` auf.
+#
+# Schritte: Tests → Linux-Binaries + SHA256SUMS (make build-all) → GitHub
+# Release mit beiden Binaries und der Prüfsummen-Datei. SHA256SUMS wird vom
+# Self-Update zwingend verifiziert (internal/update); ohne diese Datei lehnt
+# ein Client das Update ab.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (am Tag)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # vollständige History, damit `git describe` den Tag sieht
+
+      - name: Go einrichten
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Tests
+        run: go test ./...
+
+      - name: Binaries + SHA256SUMS bauen
+        run: make build-all
+
+      - name: SHA256SUMS gegenprüfen
+        working-directory: dist
+        run: shasum -a 256 -c SHA256SUMS
+
+      - name: GitHub Release erstellen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/stackctl-linux-amd64 \
+            dist/stackctl-linux-arm64 \
+            dist/SHA256SUMS \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
