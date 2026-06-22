@@ -56,7 +56,7 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// App tunnels.
-	for id, cs := range s.state.Containers {
+	for id, cs := range s.snapState().Containers {
 		if id == "postgres" || id == "dex" {
 			continue // infrastructure, not shown in app tunnel list
 		}

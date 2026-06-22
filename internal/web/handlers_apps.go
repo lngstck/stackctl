@@ -13,6 +13,7 @@ import (
 	"github.com/lngstck/stackctl/internal/docker"
 	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/install"
+	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/paths"
 )
 
@@ -112,12 +113,6 @@ func usesAdminPassword(def *catalog.Definition) bool {
 	return false
 }
 
-// appInstallResultData is the template context for app_install_result.html.tmpl.
-type appInstallResultData struct {
-	PageData
-	Result *install.Result
-}
-
 func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 	data := appsData{
 		PageData: s.pageData("apps"),
@@ -132,8 +127,9 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	st := s.snapState()
 	for _, app := range idx.Apps {
-		cs, installed := s.state.Containers[app.ID]
+		cs, installed := st.Containers[app.ID]
 		entry := appListEntry{
 			ID:          app.ID,
 			Name:        app.Name,
@@ -182,7 +178,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cs, ok := s.state.Containers[appID]
+	cs, ok := s.snapState().Containers[appID]
 	if !ok {
 		http.Redirect(w, r, "/apps", http.StatusSeeOther)
 		return
@@ -256,7 +252,7 @@ func (s *Server) handleAppInstallForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check dependencies.
-	idSlice := s.state.InstalledIDs()
+	idSlice := s.snapState().InstalledIDs()
 	installedIDs := make(map[string]bool, len(idSlice))
 	for _, id := range idSlice {
 		installedIDs[id] = true
@@ -327,62 +323,24 @@ func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Load env file.
-	env, err := envfile.Load(paths.EnvFile())
-	if err != nil {
-		env = envfile.New()
+	// Long-running work runs asynchronously behind the op-lock so the browser
+	// gets a live progress view (issue #1) instead of a multi-minute blocking
+	// request. The handle is released by the worker goroutine.
+	h, ok := s.tryLock(w, r)
+	if !ok {
+		return
 	}
-
-	// Collect all installed definitions for compose regeneration.
-	var allDefs []*catalog.Definition
-	for id := range s.state.Containers {
-		if d, err := catalog.LoadDefinition(id); err == nil {
-			allDefs = append(allDefs, d)
-		}
-	}
-
-	// Bestehende OIDC-Clients rekonstruieren, damit der Install die Clients der
-	// anderen Apps nicht aus der Dex-Config wirft (dex.SaveConfig schreibt genau
-	// die uebergebene Liste, ohne Merge mit der Datei).
-	dexClients := install.ReconstructDexClients(allDefs, env, s.cfg)
-
-	// Run install.
-	result, updatedClients, installErr := install.Install(
-		def, s.cfg, s.state, env, dexClients, allDefs, promptValues,
-	)
-
-	if installErr != nil {
-		log.Printf("web: install %s: %v", appID, installErr)
-	}
-
-	// Refresh system-owned env keys (in case cfg changed since last save).
-	envfile.ApplySystemEnv(env, s.cfg, "")
-
-	// Save state + env regardless of partial success.
-	if err := env.Save(paths.EnvFile()); err != nil {
-		log.Printf("web: save env after install: %v", err)
-	}
-	if err := s.state.Save(); err != nil {
-		log.Printf("web: save state after install: %v", err)
-	}
-
-	// Save dex config if clients were updated.
-	if updatedClients != nil {
-		if err := dex.SaveConfig(s.cfg, updatedClients); err != nil {
-			log.Printf("web: save dex config after install: %v", err)
-		}
-	}
-
-	s.render(w, "app_install_result.html.tmpl", appInstallResultData{
-		PageData: s.pageData("apps"),
-		Result:   result,
+	job := s.jobs.create("install", appID, "Installiere "+def.Name, "/apps/"+appID)
+	go s.runAppJob(h, job, func(working *config.State, env *envfile.File, allDefs []*catalog.Definition, dexClients []dex.Client) (*install.Result, []dex.Client, error) {
+		return install.Install(def, s.cfg, working, env, dexClients, allDefs, promptValues, job)
 	})
+	http.Redirect(w, r, "/jobs/"+job.ID, http.StatusSeeOther)
 }
 
 func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 
-	if _, ok := s.state.Containers[appID]; !ok {
+	if !s.snapState().IsInstalled(appID) {
 		http.Redirect(w, r, "/apps?msg=Nicht+installiert&err=1", http.StatusSeeOther)
 		return
 	}
@@ -395,51 +353,82 @@ func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h, ok := s.tryLock(w, r)
+	if !ok {
+		return
+	}
+	job := s.jobs.create("update", appID, "Aktualisiere "+def.Name, "/apps/"+appID)
+	go s.runAppJob(h, job, func(working *config.State, env *envfile.File, allDefs []*catalog.Definition, dexClients []dex.Client) (*install.Result, []dex.Client, error) {
+		return install.Update(def, s.cfg, working, env, dexClients, allDefs, job)
+	})
+	http.Redirect(w, r, "/jobs/"+job.ID, http.StatusSeeOther)
+}
+
+// runAppJob is the shared worker body for install and update jobs. It loads a
+// fresh env, snapshots state into a private clone, reconstructs the OIDC client
+// list, runs the supplied operation (which reports progress to the job), then
+// persists env, dex config and the mutated state clone — all off the request
+// goroutine. It always releases the op-lock and finishes the job.
+func (s *Server) runAppJob(
+	h *lock.Handle,
+	job *Job,
+	op func(working *config.State, env *envfile.File, allDefs []*catalog.Definition, dexClients []dex.Client) (*install.Result, []dex.Client, error),
+) {
+	defer h.Release()
+
 	env, err := envfile.Load(paths.EnvFile())
 	if err != nil {
 		env = envfile.New()
 	}
 
+	working := s.snapState()
 	var allDefs []*catalog.Definition
-	for id := range s.state.Containers {
+	for id := range working.Containers {
 		if d, err := catalog.LoadDefinition(id); err == nil {
 			allDefs = append(allDefs, d)
 		}
 	}
-
-	// Bestehende OIDC-Clients rekonstruieren (sonst wirft das Regenerieren die
-	// anderen App-Clients aus der Dex-Config).
 	dexClients := install.ReconstructDexClients(allDefs, env, s.cfg)
-	result, updatedClients, updateErr := install.Update(
-		def, s.cfg, s.state, env, dexClients, allDefs,
-	)
 
-	if updateErr != nil {
-		log.Printf("web: update %s: %v", appID, updateErr)
+	result, updatedClients, opErr := op(working, env, allDefs, dexClients)
+	if opErr != nil {
+		log.Printf("web: job %s (%s): %v", job.ID, job.Kind, opErr)
 	}
 
+	// Persist env (incl. system keys), the mutated state clone, and — if the
+	// op touched OIDC — the dex config. On failure the clone is unchanged for
+	// installs (state is only written on success), so committing is harmless.
 	envfile.ApplySystemEnv(env, s.cfg, "")
 	if err := env.Save(paths.EnvFile()); err != nil {
-		log.Printf("web: save env after update: %v", err)
+		log.Printf("web: job %s: save env: %v", job.ID, err)
 	}
-	if err := s.state.Save(); err != nil {
-		log.Printf("web: save state after update: %v", err)
+	if err := s.commitState(working); err != nil {
+		log.Printf("web: job %s: commit state: %v", job.ID, err)
 	}
 	if updatedClients != nil {
 		if err := dex.SaveConfig(s.cfg, updatedClients); err != nil {
-			log.Printf("web: save dex config after update: %v", err)
+			log.Printf("web: job %s: save dex config: %v", job.ID, err)
 		}
 	}
 
-	s.render(w, "app_install_result.html.tmpl", appInstallResultData{
-		PageData: s.pageData("apps"),
-		Result:   result,
-	})
+	if result != nil {
+		job.setResult(result.SecretsToShow, result.Messages)
+	}
+	success := result != nil && result.Success
+	errMsg := ""
+	switch {
+	case opErr != nil:
+		errMsg = opErr.Error()
+	case result != nil && result.Error != "":
+		errMsg = result.Error
+	}
+	job.finish(success, errMsg)
 }
 
 func (s *Server) handleAppAutoUpdateToggle(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
-	cs, ok := s.state.Containers[appID]
+	working := s.snapState()
+	cs, ok := working.Containers[appID]
 	if !ok {
 		http.Redirect(w, r, "/apps?msg=Nicht+installiert&err=1", http.StatusSeeOther)
 		return
@@ -449,7 +438,7 @@ func (s *Server) handleAppAutoUpdateToggle(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	cs.AutoUpdateDisabled = r.FormValue("disabled") == "on"
-	if err := s.state.Save(); err != nil {
+	if err := s.commitState(working); err != nil {
 		log.Printf("web: save state after autoupdate toggle: %v", err)
 	}
 	http.Redirect(w, r, fmt.Sprintf("/apps/%s", appID), http.StatusSeeOther)
@@ -463,8 +452,9 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 		env = envfile.New()
 	}
 
+	working := s.snapState()
 	var remainingDefs []*catalog.Definition
-	for id := range s.state.Containers {
+	for id := range working.Containers {
 		if id != appID {
 			if d, err := catalog.LoadDefinition(id); err == nil {
 				remainingDefs = append(remainingDefs, d)
@@ -481,7 +471,7 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	// Dex-Clients der verbleibenden Apps rekonstruieren; Remove entfernt daraus
 	// nur den eigenen Client und schreibt die Config mit dem Rest neu.
 	dexClients := install.ReconstructDexClients(remainingDefs, env, s.cfg)
-	_, removeErr := install.Remove(appID, s.cfg, s.state, env, dexClients, remainingDefs, wipeData)
+	_, removeErr := install.Remove(appID, s.cfg, working, env, dexClients, remainingDefs, wipeData)
 
 	if removeErr != nil {
 		log.Printf("web: remove %s: %v", appID, removeErr)
@@ -494,7 +484,7 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	if err := env.Save(paths.EnvFile()); err != nil {
 		log.Printf("web: save env after remove: %v", err)
 	}
-	if err := s.state.Save(); err != nil {
+	if err := s.commitState(working); err != nil {
 		log.Printf("web: save state after remove: %v", err)
 	}
 

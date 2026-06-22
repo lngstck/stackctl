@@ -31,7 +31,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		PageData: s.pageData("dashboard"),
 	}
 
-	for _, cs := range s.state.Containers {
+	for _, cs := range s.snapState().Containers {
 		status := "unknown"
 		containerName := "ls-" + cs.ID
 		if docker.IsRunning(containerName) {

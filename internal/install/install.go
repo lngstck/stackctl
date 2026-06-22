@@ -32,6 +32,21 @@ import (
 	"github.com/lngstck/stackctl/internal/secrets"
 )
 
+// Reporter receives progress updates during a long-running install or update
+// so the caller can render a live view (web UI job page). Step marks a new
+// named phase; Log appends a raw output line (e.g. docker pull progress). The
+// CLI auto-update path passes NopReporter.
+type Reporter interface {
+	Step(name string)
+	Log(line string)
+}
+
+// NopReporter discards all progress updates.
+type NopReporter struct{}
+
+func (NopReporter) Step(string) {}
+func (NopReporter) Log(string)  {}
+
 // Result bundles what the caller (web UI) needs to show after install.
 type Result struct {
 	AppID         string
@@ -56,13 +71,19 @@ func Install(
 	dexClients []dex.Client,
 	allDefs []*catalog.Definition,
 	promptValues map[string]string,
+	rep Reporter,
 ) (*Result, []dex.Client, error) {
 
+	if rep == nil {
+		rep = NopReporter{}
+	}
 	res := &Result{
 		AppID:   def.ID,
 		AppName: def.Name,
 	}
 	var newEnvKeys []string
+
+	rep.Step("Vorbereitung & Secrets")
 
 	// On failure, roll back any .env keys we added in this run. Without this,
 	// a partial install (e.g. postgres setup crashes) leaves orphaned secrets
@@ -144,6 +165,7 @@ func Install(
 	// --- 4. Postgres DB (if depends_on postgres) ----------------------------
 
 	if dependsOn(def, "postgres") {
+		rep.Step("Datenbank einrichten")
 		dbKey := postgres.DBPasswordEnvKey(def.ID)
 		if _, ok := env.Get(dbKey); !ok {
 			pw, err := secrets.RandomPassword(0)
@@ -165,6 +187,7 @@ func Install(
 	// --- 5. OIDC client in Dex ----------------------------------------------
 
 	if def.OIDC != nil {
+		rep.Step("OIDC-Login einrichten")
 		oidcSecretKey := strings.ToUpper(strings.ReplaceAll(def.ID, "-", "_")) + "_OIDC_SECRET"
 		if _, ok := env.Get(oidcSecretKey); !ok {
 			sec, err := secrets.RandomHex(20)
@@ -210,6 +233,7 @@ func Install(
 
 	// --- 6. Regenerate docker-compose.yml -----------------------------------
 
+	rep.Step("Konfiguration schreiben")
 	composeDefs := collectComposeDefs(allDefs, def)
 	if err := compose.Regenerate(composeDefs); err != nil {
 		rollback()
@@ -233,7 +257,8 @@ func Install(
 		rollback()
 		return fail(res, "network: %v", err)
 	}
-	code, out := docker.ComposeUp(paths.ComposeFile(), compose.ServiceName(def.ID))
+	rep.Step("Image laden & Container starten")
+	code, out := docker.ComposeUpStreaming(paths.ComposeFile(), rep.Log, compose.ServiceName(def.ID))
 	if code != 0 {
 		rollback()
 		return fail(res, "docker up: %s", out)
@@ -241,6 +266,7 @@ func Install(
 
 	// --- 8. Post-install scripts --------------------------------------------
 
+	rep.Step("Nachbereitung")
 	if def.Scripts != nil {
 		for _, step := range def.Scripts.PostInstall {
 			if err := runScript(step); err != nil {
@@ -304,8 +330,12 @@ func Update(
 	env *envfile.File,
 	dexClients []dex.Client,
 	allDefs []*catalog.Definition,
+	rep Reporter,
 ) (*Result, []dex.Client, error) {
 
+	if rep == nil {
+		rep = NopReporter{}
+	}
 	res := &Result{AppID: def.ID, AppName: def.Name}
 
 	cs, ok := state.Containers[def.ID]
@@ -313,6 +343,7 @@ func Update(
 		return fail(res, "app %q is not installed", def.ID)
 	}
 
+	rep.Step("Vorbereitung & Secrets")
 	if err := checkSystemEnvDeps(def, env); err != nil {
 		return fail(res, "%v", err)
 	}
@@ -361,6 +392,7 @@ func Update(
 	}
 
 	if def.OIDC != nil {
+		rep.Step("OIDC-Login aktualisieren")
 		oidcSecretKey := strings.ToUpper(strings.ReplaceAll(def.ID, "-", "_")) + "_OIDC_SECRET"
 		if _, ok := env.Get(oidcSecretKey); !ok {
 			sec, err := secrets.RandomHex(20)
@@ -390,6 +422,7 @@ func Update(
 		}
 	}
 
+	rep.Step("Konfiguration schreiben")
 	composeDefs := collectComposeDefs(allDefs, def)
 	if err := compose.Regenerate(composeDefs); err != nil {
 		return fail(res, "compose: %v", err)
@@ -404,16 +437,14 @@ func Update(
 	// up a newer image — docker compose itself never re-pulls a tag it has
 	// cached. We continue on pull failure (offline / registry hiccup) so the
 	// recreate still happens against whatever image is on disk.
-	if _, pullOut := docker.ComposePull(paths.ComposeFile(), compose.ServiceName(def.ID)); pullOut != "" {
-		// Combined output includes both progress lines and errors; only surface
-		// it when something looked off. We can't reliably parse the exit code
-		// here because compose returns 0 even on partial pull failures.
-	}
+	rep.Step("Image aktualisieren & Container neu starten")
+	docker.ComposePullStreaming(paths.ComposeFile(), rep.Log, compose.ServiceName(def.ID))
 
-	if code, out := docker.ComposeUp(paths.ComposeFile(), compose.ServiceName(def.ID)); code != 0 {
+	if code, out := docker.ComposeUpStreaming(paths.ComposeFile(), rep.Log, compose.ServiceName(def.ID)); code != 0 {
 		return fail(res, "compose up: %s", out)
 	}
 
+	rep.Step("Abschluss")
 	cs.VersionInstalled = def.Version
 
 	res.SecretsToShow = map[string]string{}
