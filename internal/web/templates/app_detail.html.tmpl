@@ -121,6 +121,7 @@
         <span class="tunnel-url" style="margin-left:auto;">{{.TunnelSubdomain}}</span>
       </div>
       <form method="post" action="/apps/{{.ID}}/tunnel/disable" class="mt-2">
+        {{csrfField $.CSRFToken}}
         <button class="ghost small" data-variant="danger">Tunnel deaktivieren</button>
       </form>
       {{else}}
@@ -129,6 +130,7 @@
         <span>Inaktiv</span>
       </div>
       <form method="post" action="/apps/{{.ID}}/tunnel/enable" class="mt-2">
+        {{csrfField $.CSRFToken}}
         <button class="ghost small">Tunnel aktivieren</button>
       </form>
       {{end}}
@@ -140,16 +142,19 @@
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
         {{if eq .Status "running"}}
         <form method="post" action="/apps/{{.ID}}/stop" style="display:inline">
+        {{csrfField $.CSRFToken}}
           <button class="ghost small" data-variant="danger">Stoppen</button>
         </form>
         {{else}}
         <form method="post" action="/apps/{{.ID}}/start" style="display:inline">
+        {{csrfField $.CSRFToken}}
           <button class="ghost small">Starten</button>
         </form>
         {{end}}
         <form method="post" action="/apps/{{.ID}}/update" style="display:inline"
               data-loading-msg="Aktualisiere… (compose pull kann ein paar Minuten dauern)"
               onsubmit="return confirm('Katalog-Definition neu laden und Image aktualisieren? Der Container wird kurz neu gestartet.')">
+        {{csrfField $.CSRFToken}}
           <button class="ghost small">Aktualisieren</button>
         </form>
       </div>
@@ -168,6 +173,7 @@
     <article class="card mb-2">
       <h4 class="mb-1">Auto-Update</h4>
       <form method="post" action="/apps/{{.ID}}/autoupdate">
+        {{csrfField $.CSRFToken}}
         <label data-field class="mb-1" style="font-size:0.85rem;">
           <input type="checkbox" name="disabled" {{if .AutoUpdateDisabled}}checked{{end}}>
           Diese App vom naechtlichen Auto-Update ausnehmen
@@ -198,6 +204,7 @@
             onsubmit="return confirm(this.wipe_data.checked
               ? 'App {{.Name}} entfernen UND alle Daten loeschen? Das ist nicht umkehrbar.'
               : 'App {{.Name}}{{if .IsMandatory}} (Pflicht-Container!){{end}} wirklich entfernen?')">
+        {{csrfField $.CSRFToken}}
         <label data-field class="mb-1" style="font-size:0.85rem;">
           <input type="checkbox" name="wipe_data">
           Auch Daten loeschen (Postgres-DB + <code>/opt/learningstack/{{.ID}}/</code>)

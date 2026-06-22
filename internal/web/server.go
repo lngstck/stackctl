@@ -116,47 +116,48 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /apps", s.requireAuth(s.handleApps))
 	s.mux.HandleFunc("GET /apps/{id}", s.requireAuth(s.handleAppDetail))
 	s.mux.HandleFunc("GET /apps/{id}/install", s.requireAuth(s.handleAppInstallForm))
-	s.mux.HandleFunc("POST /apps/{id}/install", s.requireAuth(s.withOpLock(s.handleAppInstallPost)))
-	s.mux.HandleFunc("POST /apps/{id}/update", s.requireAuth(s.withOpLock(s.handleAppUpdate)))
-	s.mux.HandleFunc("POST /apps/{id}/autoupdate", s.requireAuth(s.withOpLock(s.handleAppAutoUpdateToggle)))
-	s.mux.HandleFunc("POST /apps/{id}/remove", s.requireAuth(s.withOpLock(s.handleAppRemove)))
-	s.mux.HandleFunc("POST /apps/{id}/start", s.requireAuth(s.withOpLock(s.handleAppStart)))
-	s.mux.HandleFunc("POST /apps/{id}/stop", s.requireAuth(s.withOpLock(s.handleAppStop)))
+	s.mux.HandleFunc("POST /apps/{id}/install", s.authPostLocked(s.handleAppInstallPost))
+	s.mux.HandleFunc("POST /apps/{id}/update", s.authPostLocked(s.handleAppUpdate))
+	s.mux.HandleFunc("POST /apps/{id}/autoupdate", s.authPostLocked(s.handleAppAutoUpdateToggle))
+	s.mux.HandleFunc("POST /apps/{id}/remove", s.authPostLocked(s.handleAppRemove))
+	s.mux.HandleFunc("POST /apps/{id}/start", s.authPostLocked(s.handleAppStart))
+	s.mux.HandleFunc("POST /apps/{id}/stop", s.authPostLocked(s.handleAppStop))
 
 	// Settings (ready + auth).
 	s.mux.HandleFunc("GET /settings", s.requireAuth(s.handleSettings))
-	s.mux.HandleFunc("POST /settings", s.requireAuth(s.withOpLock(s.handleSettingsPost)))
+	s.mux.HandleFunc("POST /settings", s.authPostLocked(s.handleSettingsPost))
 
 	// Tunnel (ready + auth).
 	s.mux.HandleFunc("GET /tunnel", s.requireAuth(s.handleTunnel))
-	s.mux.HandleFunc("POST /tunnel/test", s.requireAuth(s.handleTunnelTest))
-	s.mux.HandleFunc("POST /tunnel/dex/start", s.requireAuth(s.withOpLock(s.handleDexTunnelStart)))
-	s.mux.HandleFunc("POST /tunnel/dex/stop", s.requireAuth(s.withOpLock(s.handleDexTunnelStop)))
-	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.requireAuth(s.withOpLock(s.handleAppTunnelEnable)))
-	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.requireAuth(s.withOpLock(s.handleAppTunnelDisable)))
+	s.mux.HandleFunc("POST /tunnel/test", s.authPost(s.handleTunnelTest))
+	s.mux.HandleFunc("POST /tunnel/dex/start", s.authPostLocked(s.handleDexTunnelStart))
+	s.mux.HandleFunc("POST /tunnel/dex/stop", s.authPostLocked(s.handleDexTunnelStop))
+	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.authPostLocked(s.handleAppTunnelEnable))
+	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.authPostLocked(s.handleAppTunnelDisable))
 
 	// LLM-Admin (ready + auth). UI sitzt unter /llm mit Tabs (Provider,
 	// Personas, API-Keys); POST-Endpunkte mutieren die config.yaml und
 	// schicken SIGHUP an ls-llmd. Modelle-Endpoint liefert JSON fuer den
-	// Persona-Tab-Dropdown.
+	// Persona-Tab-Dropdown. Diese POSTs mutieren nur die llmd-Config (nicht
+	// state/.env/compose) — sie brauchen CSRF, aber keinen Op-Lock.
 	s.mux.HandleFunc("GET /llm", s.requireAuth(s.handleLLM))
-	s.mux.HandleFunc("POST /llm/providers", s.requireAuth(s.handleLLMProviderCreate))
-	s.mux.HandleFunc("POST /llm/providers/{id}/key", s.requireAuth(s.handleLLMProviderSetKey))
-	s.mux.HandleFunc("POST /llm/providers/{id}/delete", s.requireAuth(s.handleLLMProviderDelete))
+	s.mux.HandleFunc("POST /llm/providers", s.authPost(s.handleLLMProviderCreate))
+	s.mux.HandleFunc("POST /llm/providers/{id}/key", s.authPost(s.handleLLMProviderSetKey))
+	s.mux.HandleFunc("POST /llm/providers/{id}/delete", s.authPost(s.handleLLMProviderDelete))
 	s.mux.HandleFunc("GET /llm/providers/{id}/models", s.requireAuth(s.handleLLMProviderModels))
-	s.mux.HandleFunc("POST /llm/personas", s.requireAuth(s.handleLLMPersonaCreate))
-	s.mux.HandleFunc("POST /llm/personas/{id}/update", s.requireAuth(s.handleLLMPersonaUpdate))
-	s.mux.HandleFunc("POST /llm/personas/{id}/deactivate", s.requireAuth(s.handleLLMPersonaDeactivate))
-	s.mux.HandleFunc("POST /llm/personas/{id}/delete", s.requireAuth(s.handleLLMPersonaDelete))
-	s.mux.HandleFunc("POST /llm/keys", s.requireAuth(s.handleLLMKeyCreate))
-	s.mux.HandleFunc("POST /llm/keys/{id}/delete", s.requireAuth(s.handleLLMKeyDelete))
+	s.mux.HandleFunc("POST /llm/personas", s.authPost(s.handleLLMPersonaCreate))
+	s.mux.HandleFunc("POST /llm/personas/{id}/update", s.authPost(s.handleLLMPersonaUpdate))
+	s.mux.HandleFunc("POST /llm/personas/{id}/deactivate", s.authPost(s.handleLLMPersonaDeactivate))
+	s.mux.HandleFunc("POST /llm/personas/{id}/delete", s.authPost(s.handleLLMPersonaDelete))
+	s.mux.HandleFunc("POST /llm/keys", s.authPost(s.handleLLMKeyCreate))
+	s.mux.HandleFunc("POST /llm/keys/{id}/delete", s.authPost(s.handleLLMKeyDelete))
 
 	// System POST-Endpunkte (ready + auth). Die /system-GET-Seite wurde in
 	// /settings integriert (Issue #4); die POST-Routen bleiben, damit das
 	// apps.html.tmpl + die System-Tab in settings.html.tmpl unveraendert
 	// posten koennen. /system selbst gibt jetzt 404.
-	s.mux.HandleFunc("POST /system/update", s.requireAuth(s.handleSystemUpdate))
-	s.mux.HandleFunc("POST /system/catalog/sync", s.requireAuth(s.handleCatalogSync))
+	s.mux.HandleFunc("POST /system/update", s.authPost(s.handleSystemUpdate))
+	s.mux.HandleFunc("POST /system/catalog/sync", s.authPost(s.handleCatalogSync))
 
 	// Server IP detection (no auth — used in setup).
 	s.mux.HandleFunc("GET /api/server-ip", s.handleServerIP)
@@ -180,6 +181,11 @@ func templateFuncs() template.FuncMap {
 				return `aria-current="page"`
 			}
 			return ""
+		},
+		"csrfField": func(token string) template.HTML {
+			// token is a hex string from crypto/rand; escape defensively anyway.
+			return template.HTML(`<input type="hidden" name="csrf_token" value="` +
+				template.HTMLEscapeString(token) + `">`)
 		},
 		"jsString": func(s string) template.JS {
 			// Escape for safe embedding inside a JS string literal.
@@ -339,6 +345,40 @@ func (s *Server) withOpLock(next http.HandlerFunc) http.HandlerFunc {
 		defer h.Release()
 		next(w, r)
 	}
+}
+
+// requireCSRF validates the csrf_token form field against the current session's
+// token (ARCHITECTURE.md §16). It guards every authenticated, state-changing
+// POST. Pre-auth POSTs (/login, /setup, /setup/register/skip) cannot carry a
+// session-bound token and are intentionally not wrapped — they rely on the
+// SameSite=Lax cookie and the setup-state machine instead.
+//
+// It parses the form here so the token is available; r.ParseForm caches, so
+// handlers calling it again are unaffected. All stackctl forms are urlencoded.
+func (s *Server) requireCSRF(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+			return
+		}
+		if !s.sessions.validCSRF(r.PostFormValue("csrf_token")) {
+			log.Printf("web: CSRF token mismatch on %s %s from %s", r.Method, r.URL.Path, clientIP(r))
+			http.Error(w, "Sicherheitspruefung fehlgeschlagen (CSRF). Bitte Seite neu laden und erneut versuchen.", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// authPost wraps an authenticated, state-changing POST handler with auth and
+// CSRF validation. Use authPostLocked for handlers that also mutate
+// state.yaml/.env/compose and must serialise against the autoupdate timer.
+func (s *Server) authPost(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireAuth(s.requireCSRF(next))
+}
+
+func (s *Server) authPostLocked(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireAuth(s.requireCSRF(s.withOpLock(next)))
 }
 
 // clientIP extracts the remote IP, stripping the port.

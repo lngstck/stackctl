@@ -21,6 +21,7 @@
   <div role="tabpanel">
     <article class="card mt-2">
       <form method="post" action="/settings">
+        {{csrfField $.CSRFToken}}
         <h3 class="mb-2">Schule</h3>
 
         <label data-field class="mb-1">
@@ -160,6 +161,7 @@
           <form method="POST" action="/system/update"
                 data-loading-msg="Aktualisiere… (Download + Restart)"
                 onsubmit="return confirm('Update auf {{.LatestVersion}} installieren? stackctl wird kurz neu gestartet.');">
+        {{csrfField $.CSRFToken}}
             <button type="submit">Update installieren</button>
           </form>
         {{else if not .CheckError}}
@@ -174,6 +176,7 @@
         </p>
         <form method="POST" action="/system/catalog/sync"
               data-loading-msg="Synchronisiere…">
+        {{csrfField $.CSRFToken}}
           <button type="submit" class="small">Katalog synchronisieren</button>
         </form>
       </article>

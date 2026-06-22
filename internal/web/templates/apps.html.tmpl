@@ -5,6 +5,7 @@
 <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-2">
   <h2>Apps</h2>
   <form method="post" action="/system/catalog/sync" style="display:inline">
+        {{csrfField $.CSRFToken}}
     <input type="hidden" name="return" value="/apps">
     <button class="ghost small">Katalog aktualisieren</button>
   </form>

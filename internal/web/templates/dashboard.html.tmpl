@@ -34,10 +34,12 @@
         <a href="/apps/{{.ID}}" class="button small">Details</a>
         {{if eq .Status "running"}}
         <form method="post" action="/apps/{{.ID}}/stop" style="display:inline">
+        {{csrfField $.CSRFToken}}
           <button class="ghost small" data-variant="danger">Stop</button>
         </form>
         {{else}}
         <form method="post" action="/apps/{{.ID}}/start" style="display:inline">
+        {{csrfField $.CSRFToken}}
           <button class="ghost small">Start</button>
         </form>
         {{end}}

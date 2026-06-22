@@ -21,6 +21,7 @@
 
   <form method="post" action="/apps/{{.ID}}/install"
         data-loading-msg="Installiere… (compose pull kann ein paar Minuten dauern)">
+        {{csrfField $.CSRFToken}}
     {{if .Prompts}}
     <h4 class="mb-1">Einstellungen</h4>
 

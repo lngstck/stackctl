@@ -3,6 +3,7 @@ package web
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
 	"sync"
@@ -20,6 +21,7 @@ const (
 // session holds a single active admin session.
 type session struct {
 	token     string
+	csrf      string // per-session CSRF token, embedded in every form
 	createdAt time.Time
 }
 
@@ -34,13 +36,44 @@ func (s *sessionStore) create() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.current = &session{
+		token:     randomToken(),
+		csrf:      randomToken(),
+		createdAt: time.Now(),
+	}
+	return s.current.token
+}
+
+// csrfToken returns the CSRF token for the current session, or "" if there is
+// no session. There is exactly one admin session, so no per-request lookup is
+// needed — the template layer reads it via Server.pageData.
+func (s *sessionStore) csrfToken() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.current == nil {
+		return ""
+	}
+	return s.current.csrf
+}
+
+// validCSRF reports whether got matches the current session's CSRF token,
+// using a constant-time comparison. A missing session or empty token fails.
+func (s *sessionStore) validCSRF(got string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.current == nil || s.current.csrf == "" || got == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(s.current.csrf), []byte(got)) == 1
+}
+
+// randomToken returns 32 bytes of crypto-random data as hex.
+func randomToken() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		panic("crypto/rand failed: " + err.Error())
 	}
-	token := hex.EncodeToString(b)
-	s.current = &session{token: token, createdAt: time.Now()}
-	return token
+	return hex.EncodeToString(b)
 }
 
 func (s *sessionStore) valid(token string) bool {
@@ -50,7 +83,7 @@ func (s *sessionStore) valid(token string) bool {
 	if s.current == nil || token == "" {
 		return false
 	}
-	if s.current.token != token {
+	if subtle.ConstantTimeCompare([]byte(s.current.token), []byte(token)) != 1 {
 		return false
 	}
 	if time.Since(s.current.createdAt) > sessionLifetime {

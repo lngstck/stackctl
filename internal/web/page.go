@@ -5,7 +5,8 @@ type PageData struct {
 	NavActive    string // "dashboard", "apps", "settings", "tunnel", "llm"
 	SchoolName   string
 	SchoolSlug   string
-	LLMInstalled bool // controls whether the "LLM" sidebar entry is rendered
+	LLMInstalled bool   // controls whether the "LLM" sidebar entry is rendered
+	CSRFToken    string // per-session token, rendered into every form via {{csrfField}}
 }
 
 // pageData creates a PageData with the current config values. LLMInstalled
@@ -18,5 +19,6 @@ func (s *Server) pageData(navActive string) PageData {
 		SchoolName:   s.cfg.School.Name,
 		SchoolSlug:   s.cfg.School.Slug,
 		LLMInstalled: s.state.IsInstalled("llmd"),
+		CSRFToken:    s.sessions.csrfToken(),
 	}
 }
