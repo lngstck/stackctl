@@ -81,6 +81,7 @@
                 <details>
                   <summary class="ghost small" style="padding:0.2rem 0.6rem;">Key</summary>
                   <form method="post" action="/llm/providers/{{.ID}}/key" class="llm-edit-form" style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+        {{csrfField $.CSRFToken}}
                     <input type="password" name="api_key" placeholder="Neuer API-Key" style="font-size:0.85rem;">
                     <button type="submit" class="small">Setzen</button>
                     <button type="submit" name="clear" value="1" class="ghost small"
@@ -89,6 +90,7 @@
                 </details>
                 <form method="post" action="/llm/providers/{{.ID}}/delete"
                       onsubmit="return confirm('Provider {{.ID}} wirklich loeschen?');">
+        {{csrfField $.CSRFToken}}
                   <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
                 </form>
               </div>
@@ -103,6 +105,7 @@
 
       <h4 class="mt-2 mb-1">Neuer Provider</h4>
       <form method="post" action="/llm/providers">
+        {{csrfField $.CSRFToken}}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
           <label data-field>
             ID
@@ -177,11 +180,13 @@
                   <form method="post" action="/llm/personas/{{.ID}}/deactivate"
                         title="Upstream-Zuordnung entfernen (Prompt bleibt erhalten)"
                         onsubmit="return confirm('Persona {{.ID}} deaktivieren? Sie taucht dann nicht mehr als Modell auf, bis wieder ein Provider zugewiesen wird. Der System-Prompt bleibt erhalten.');">
+        {{csrfField $.CSRFToken}}
                     <button type="submit" class="ghost small">Deaktivieren</button>
                   </form>
                   {{end}}
                   <form method="post" action="/llm/personas/{{.ID}}/delete"
                         onsubmit="return confirm('Persona {{.ID}} wirklich loeschen?');">
+        {{csrfField $.CSRFToken}}
                     <button type="submit" class="ghost small" style="color:var(--danger);">Loeschen</button>
                   </form>
                 </div>
@@ -193,6 +198,7 @@
             <tr class="llm-edit-row" id="llm-edit-{{.ID}}" hidden>
               <td colspan="6" style="padding:0 0.4rem 1rem;">
                 <form method="post" action="/llm/personas/{{.ID}}/update" class="llm-edit-form">
+        {{csrfField $.CSRFToken}}
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;max-width:640px;">
                     <label data-field>
                       Provider
@@ -231,6 +237,7 @@
 
       <h4 class="mt-2 mb-1">Neue Persona</h4>
       <form method="post" action="/llm/personas">
+        {{csrfField $.CSRFToken}}
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;">
           <label data-field>
             ID
@@ -299,6 +306,7 @@
             <td style="padding:0.4rem;text-align:right;">
               <form method="post" action="/llm/keys/{{.ID}}/delete" style="display:inline;"
                     onsubmit="return confirm('Key {{.ID}} wirklich loeschen?');">
+        {{csrfField $.CSRFToken}}
                 <button type="submit" class="ghost small" style="color:var(--danger);">Revoke</button>
               </form>
             </td>
@@ -312,6 +320,7 @@
 
       <h4 class="mt-2 mb-1">Neuen Key erstellen</h4>
       <form method="post" action="/llm/keys">
+        {{csrfField $.CSRFToken}}
         <label data-field class="mb-1">
           ID
           <input type="text" name="id" required pattern="[a-z0-9][a-z0-9._-]*"
