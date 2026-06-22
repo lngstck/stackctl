@@ -2,6 +2,7 @@ package web
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/tunnel"
 )
 
@@ -114,24 +116,24 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /apps", s.requireAuth(s.handleApps))
 	s.mux.HandleFunc("GET /apps/{id}", s.requireAuth(s.handleAppDetail))
 	s.mux.HandleFunc("GET /apps/{id}/install", s.requireAuth(s.handleAppInstallForm))
-	s.mux.HandleFunc("POST /apps/{id}/install", s.requireAuth(s.handleAppInstallPost))
-	s.mux.HandleFunc("POST /apps/{id}/update", s.requireAuth(s.handleAppUpdate))
-	s.mux.HandleFunc("POST /apps/{id}/autoupdate", s.requireAuth(s.handleAppAutoUpdateToggle))
-	s.mux.HandleFunc("POST /apps/{id}/remove", s.requireAuth(s.handleAppRemove))
-	s.mux.HandleFunc("POST /apps/{id}/start", s.requireAuth(s.handleAppStart))
-	s.mux.HandleFunc("POST /apps/{id}/stop", s.requireAuth(s.handleAppStop))
+	s.mux.HandleFunc("POST /apps/{id}/install", s.requireAuth(s.withOpLock(s.handleAppInstallPost)))
+	s.mux.HandleFunc("POST /apps/{id}/update", s.requireAuth(s.withOpLock(s.handleAppUpdate)))
+	s.mux.HandleFunc("POST /apps/{id}/autoupdate", s.requireAuth(s.withOpLock(s.handleAppAutoUpdateToggle)))
+	s.mux.HandleFunc("POST /apps/{id}/remove", s.requireAuth(s.withOpLock(s.handleAppRemove)))
+	s.mux.HandleFunc("POST /apps/{id}/start", s.requireAuth(s.withOpLock(s.handleAppStart)))
+	s.mux.HandleFunc("POST /apps/{id}/stop", s.requireAuth(s.withOpLock(s.handleAppStop)))
 
 	// Settings (ready + auth).
 	s.mux.HandleFunc("GET /settings", s.requireAuth(s.handleSettings))
-	s.mux.HandleFunc("POST /settings", s.requireAuth(s.handleSettingsPost))
+	s.mux.HandleFunc("POST /settings", s.requireAuth(s.withOpLock(s.handleSettingsPost)))
 
 	// Tunnel (ready + auth).
 	s.mux.HandleFunc("GET /tunnel", s.requireAuth(s.handleTunnel))
 	s.mux.HandleFunc("POST /tunnel/test", s.requireAuth(s.handleTunnelTest))
-	s.mux.HandleFunc("POST /tunnel/dex/start", s.requireAuth(s.handleDexTunnelStart))
-	s.mux.HandleFunc("POST /tunnel/dex/stop", s.requireAuth(s.handleDexTunnelStop))
-	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.requireAuth(s.handleAppTunnelEnable))
-	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.requireAuth(s.handleAppTunnelDisable))
+	s.mux.HandleFunc("POST /tunnel/dex/start", s.requireAuth(s.withOpLock(s.handleDexTunnelStart)))
+	s.mux.HandleFunc("POST /tunnel/dex/stop", s.requireAuth(s.withOpLock(s.handleDexTunnelStop)))
+	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.requireAuth(s.withOpLock(s.handleAppTunnelEnable)))
+	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.requireAuth(s.withOpLock(s.handleAppTunnelDisable)))
 
 	// LLM-Admin (ready + auth). UI sitzt unter /llm mit Tabs (Provider,
 	// Personas, API-Keys); POST-Endpunkte mutieren die config.yaml und
@@ -309,6 +311,32 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
+		next(w, r)
+	}
+}
+
+// withOpLock serialises an infrastructure-mutating handler against the nightly
+// `stackctl autoupdate` process and against a second concurrent web request
+// (e.g. a double-click on "Installieren"). Without it both writers race on
+// state.yaml, the compose .env and docker-compose.yml. On contention it does
+// not queue — it redirects back with a friendly notice, because a duplicate
+// install/update is never what the admin wanted. Wrap inside requireAuth so the
+// lock is only taken for authenticated requests.
+func (s *Server) withOpLock(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h, err := lock.Acquire()
+		if err != nil {
+			if errors.Is(err, lock.ErrBusy) {
+				http.Redirect(w, r,
+					"/apps?msg=Gerade+laeuft+eine+andere+Aktion+(z.B.+das+naechtliche+Auto-Update).+Bitte+in+einem+Moment+erneut+versuchen.&err=1",
+					http.StatusSeeOther)
+				return
+			}
+			log.Printf("web: acquire op lock: %v", err)
+			http.Error(w, "Interner Fehler beim Sperren der Operation.", http.StatusInternalServerError)
+			return
+		}
+		defer h.Release()
 		next(w, r)
 	}
 }
