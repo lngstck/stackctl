@@ -1,0 +1,165 @@
+{{define "page"}}
+{{template "head" .}}
+{{template "sidebar-layout-start" .PageData}}
+
+<style>
+  .job-steps { list-style:none; padding:0; margin:0 0 1rem; }
+  .job-steps li { display:flex; align-items:center; gap:0.6rem; padding:0.35rem 0; font-size:0.95rem; }
+  .job-ic { width:1.3rem; text-align:center; flex:0 0 auto; }
+  .job-ic.done { color:var(--ok, #2e7d32); }
+  .job-ic.failed { color:var(--danger, #c62828); }
+  .job-ic.pending { color:var(--muted, #999); }
+  .job-ic.running { color:var(--primary, #555); display:inline-block; animation:jobspin 1s linear infinite; }
+  @keyframes jobspin { to { transform:rotate(360deg); } }
+  .job-step.pending { color:var(--muted, #999); }
+  .job-elapsed { color:var(--muted,#777); font-variant-numeric:tabular-nums; }
+  .job-log { margin:0.5rem 0 1rem; }
+  .job-log pre { max-height:18rem; overflow:auto; background:#1113; padding:0.6rem 0.8rem; border-radius:0.4rem; font-size:0.8rem; line-height:1.35; white-space:pre-wrap; word-break:break-all; }
+</style>
+
+<h2 class="mb-1" id="job-title">{{.Job.Title}}</h2>
+<p class="sub mb-2">Status: <span id="job-status">läuft…</span> · <span class="job-elapsed" id="job-elapsed">0:00</span></p>
+
+<ul class="job-steps" id="job-steps"></ul>
+
+<details class="job-log" id="job-log-wrap" style="display:none;">
+  <summary>Details anzeigen</summary>
+  <pre id="job-log"></pre>
+</details>
+
+<div id="job-result"></div>
+
+<script>
+(function () {
+  var jobID = {{.Job.ID | jsString}};
+  var jobKind = {{.Job.Kind | jsString}};
+  var backURL = {{.Job.BackURL | jsString}};
+  var pollTimer = null;
+
+  var ICON = { done: '✓', failed: '✗', running: '↻', pending: '○' };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function fmtElapsed(sec) {
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function renderSteps(steps) {
+    var ul = document.getElementById('job-steps');
+    ul.innerHTML = '';
+    (steps || []).forEach(function (st) {
+      var li = document.createElement('li');
+      var cls = st.status;
+      li.innerHTML = '<span class="job-ic ' + cls + '">' + ICON[cls] + '</span>' +
+                     '<span class="job-step ' + cls + '">' + esc(st.name) + '</span>';
+      ul.appendChild(li);
+    });
+  }
+
+  function renderLog(lines) {
+    var wrap = document.getElementById('job-log-wrap');
+    if (!lines || !lines.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var pre = document.getElementById('job-log');
+    var atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+    pre.textContent = lines.join('\n');
+    if (atBottom) pre.scrollTop = pre.scrollHeight;
+  }
+
+  function renderResult(job) {
+    var el = document.getElementById('job-result');
+    var html = '';
+    if (job.success) {
+      html += '<div role="alert" data-variant="success" class="mb-2">Fertig.</div>';
+    } else {
+      html += '<div role="alert" data-variant="danger" class="mb-2">Fehlgeschlagen: ' + esc(job.error || 'Unbekannter Fehler') + '</div>';
+    }
+    if (job.messages && job.messages.length) {
+      html += '<article class="card mb-2"><h4 class="mb-1">Hinweise</h4><ul>';
+      job.messages.forEach(function (m) { html += '<li>' + esc(m) + '</li>'; });
+      html += '</ul></article>';
+    }
+    if (job.secrets_to_show) {
+      var keys = Object.keys(job.secrets_to_show);
+      if (keys.length) {
+        html += '<article class="card mb-2"><h4 class="mb-1">Generierte Secrets</h4>' +
+                '<p class="sub mb-1" style="font-size:0.85rem;">Diese Werte werden nur einmal angezeigt. Bitte jetzt kopieren und sicher aufbewahren.</p><table><tbody>';
+        keys.forEach(function (k) {
+          var v = job.secrets_to_show[k];
+          html += '<tr><td class="sub">' + esc(k) + '</td><td><code style="word-break:break-all;">' + esc(v) + '</code>' +
+                  '<button type="button" class="ghost small" data-copy="' + esc(v) + '" style="margin-left:0.5rem;font-size:0.75rem;">Kopieren</button></td></tr>';
+        });
+        html += '</tbody></table></article>';
+      }
+    }
+    html += '<div style="display:flex;gap:0.5rem;"><a href="' + esc(backURL || '/apps') + '" class="button">Weiter</a>' +
+            '<a href="/apps" class="button ghost">Zum Katalog</a></div>';
+    el.innerHTML = html;
+  }
+
+  // After a self-update the server exits and systemd restarts it with the new
+  // binary. Poll /healthz until it answers, then go back to settings.
+  function waitForRestart() {
+    document.getElementById('job-status').textContent = 'Neustart läuft…';
+    document.getElementById('job-result').innerHTML =
+      '<div role="alert" data-variant="success" class="mb-2">Update installiert. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…</div>';
+    var tries = 0;
+    (function ping() {
+      tries++;
+      fetch('/healthz', { cache: 'no-store' })
+        .then(function (r) {
+          if (r.ok) { window.location = (backURL || '/settings') + '?update=stackctl+wurde+aktualisiert'; }
+          else { setTimeout(ping, 1500); }
+        })
+        .catch(function () { if (tries < 200) setTimeout(ping, 1500); });
+    })();
+  }
+
+  function apply(job) {
+    document.getElementById('job-title').textContent = job.title;
+    document.getElementById('job-elapsed').textContent = fmtElapsed(job.elapsed_sec || 0);
+    renderSteps(job.steps);
+    renderLog(job.log);
+    if (!job.done) {
+      document.getElementById('job-status').textContent = 'läuft…';
+      return false;
+    }
+    // Done.
+    if (job.restarting) { waitForRestart(); return true; }
+    document.getElementById('job-status').textContent = job.success ? 'fertig' : 'fehlgeschlagen';
+    renderResult(job);
+    return true;
+  }
+
+  function poll() {
+    fetch('/jobs/' + jobID + '/status', { cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('status ' + r.status);
+        return r.json();
+      })
+      .then(function (job) {
+        var finished = apply(job);
+        if (finished && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      })
+      .catch(function () {
+        // A failing poll during a self-update means the server is restarting.
+        if (jobKind === 'selfupdate') {
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          waitForRestart();
+        }
+      });
+  }
+
+  poll();
+  pollTimer = setInterval(poll, 1200);
+})();
+</script>
+
+{{template "sidebar-layout-end" .PageData}}
+{{template "foot" .}}
+{{end}}

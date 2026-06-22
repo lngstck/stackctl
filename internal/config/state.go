@@ -91,6 +91,32 @@ func (s *State) Save() error {
 	return paths.AtomicWrite(paths.StateFile(), data, FilePerm)
 }
 
+// Clone returns a deep copy of the state: the Containers and Ports maps and
+// each ContainerState (incl. its Ports/EnvKeys slices) are duplicated, so a
+// caller can mutate the copy without racing readers of the original. The web
+// UI uses this to run a long install/update on a clone and merge the result
+// back under a lock (see Server.commitState).
+func (s *State) Clone() *State {
+	if s == nil {
+		return NewState()
+	}
+	ns := &State{
+		Version:    s.Version,
+		Containers: make(map[string]*ContainerState, len(s.Containers)),
+		Ports:      make(map[int]string, len(s.Ports)),
+	}
+	for id, cs := range s.Containers {
+		cp := *cs
+		cp.Ports = append([]int(nil), cs.Ports...)
+		cp.EnvKeys = append([]string(nil), cs.EnvKeys...)
+		ns.Containers[id] = &cp
+	}
+	for p, id := range s.Ports {
+		ns.Ports[p] = id
+	}
+	return ns
+}
+
 // IsInstalled reports whether appID is registered in the state file.
 func (s *State) IsInstalled(appID string) bool {
 	_, ok := s.Containers[appID]

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/lock"
@@ -32,6 +33,8 @@ type Server struct {
 	limiter   *rateLimiter
 	pages     map[string]*template.Template // page name → compiled template
 	tunnelMgr *tunnel.Manager
+	jobs      *jobStore
+	stateMu   sync.Mutex // guards s.state access against background job commits
 	devMode   bool
 	devDir    string // path to internal/web/ for dev-mode FS reload
 	mux       *http.ServeMux
@@ -61,6 +64,7 @@ func New(cfg *config.Config, state *config.State, opts ...Option) (*Server, erro
 		state:    state,
 		sessions: &sessionStore{},
 		limiter:  newRateLimiter(),
+		jobs:     newJobStore(),
 		mux:      http.NewServeMux(),
 	}
 
@@ -116,8 +120,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /apps", s.requireAuth(s.handleApps))
 	s.mux.HandleFunc("GET /apps/{id}", s.requireAuth(s.handleAppDetail))
 	s.mux.HandleFunc("GET /apps/{id}/install", s.requireAuth(s.handleAppInstallForm))
-	s.mux.HandleFunc("POST /apps/{id}/install", s.authPostLocked(s.handleAppInstallPost))
-	s.mux.HandleFunc("POST /apps/{id}/update", s.authPostLocked(s.handleAppUpdate))
+	// Install/Update run asynchronously and manage the op-lock themselves
+	// (handed to the worker goroutine), so they use authPost, not
+	// authPostLocked — wrapping them in withOpLock would double-acquire.
+	s.mux.HandleFunc("POST /apps/{id}/install", s.authPost(s.handleAppInstallPost))
+	s.mux.HandleFunc("POST /apps/{id}/update", s.authPost(s.handleAppUpdate))
 	s.mux.HandleFunc("POST /apps/{id}/autoupdate", s.authPostLocked(s.handleAppAutoUpdateToggle))
 	s.mux.HandleFunc("POST /apps/{id}/remove", s.authPostLocked(s.handleAppRemove))
 	s.mux.HandleFunc("POST /apps/{id}/start", s.authPostLocked(s.handleAppStart))
@@ -158,6 +165,11 @@ func (s *Server) routes() {
 	// posten koennen. /system selbst gibt jetzt 404.
 	s.mux.HandleFunc("POST /system/update", s.authPost(s.handleSystemUpdate))
 	s.mux.HandleFunc("POST /system/catalog/sync", s.authPost(s.handleCatalogSync))
+
+	// Job progress (ready + auth). The page polls the status endpoint while a
+	// long-running install/update/self-update runs in the background (issue #1).
+	s.mux.HandleFunc("GET /jobs/{id}", s.requireAuth(s.handleJobPage))
+	s.mux.HandleFunc("GET /jobs/{id}/status", s.requireAuth(s.handleJobStatus))
 
 	// Server IP detection (no auth — used in setup).
 	s.mux.HandleFunc("GET /api/server-ip", s.handleServerIP)
@@ -330,21 +342,57 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 // lock is only taken for authenticated requests.
 func (s *Server) withOpLock(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		h, err := lock.Acquire()
-		if err != nil {
-			if errors.Is(err, lock.ErrBusy) {
-				http.Redirect(w, r,
-					"/apps?msg=Gerade+laeuft+eine+andere+Aktion+(z.B.+das+naechtliche+Auto-Update).+Bitte+in+einem+Moment+erneut+versuchen.&err=1",
-					http.StatusSeeOther)
-				return
-			}
-			log.Printf("web: acquire op lock: %v", err)
-			http.Error(w, "Interner Fehler beim Sperren der Operation.", http.StatusInternalServerError)
+		h, ok := s.tryLock(w, r)
+		if !ok {
 			return
 		}
 		defer h.Release()
 		next(w, r)
 	}
+}
+
+// tryLock acquires the op-lock or, on contention, writes a friendly busy
+// redirect and returns ok=false. Async handlers (install/update/self-update)
+// use it directly and hand the returned handle to their worker goroutine,
+// which releases it when the job finishes — the lock must outlive the request.
+func (s *Server) tryLock(w http.ResponseWriter, r *http.Request) (*lock.Handle, bool) {
+	h, err := lock.Acquire()
+	if err != nil {
+		if errors.Is(err, lock.ErrBusy) {
+			http.Redirect(w, r,
+				"/apps?msg=Gerade+laeuft+eine+andere+Aktion+(z.B.+das+naechtliche+Auto-Update).+Bitte+in+einem+Moment+erneut+versuchen.&err=1",
+				http.StatusSeeOther)
+			return nil, false
+		}
+		log.Printf("web: acquire op lock: %v", err)
+		http.Error(w, "Interner Fehler beim Sperren der Operation.", http.StatusInternalServerError)
+		return nil, false
+	}
+	return h, true
+}
+
+// snapState returns a deep copy of the current state for read-only use. A
+// background install/update job mutates a clone and commits it via
+// commitState; readers must therefore work from a snapshot taken under the
+// lock, never iterate s.state directly, or they race the commit (a concurrent
+// map access crashes the process).
+func (s *Server) snapState() *config.State {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	return s.state.Clone()
+}
+
+// commitState publishes a mutated state clone back as the live state and saves
+// it. The struct's map fields are reassigned in place so the shared pointer
+// held by the tunnel manager stays coherent. Callers hold the op-lock, so two
+// commits never overlap.
+func (s *Server) commitState(working *config.State) error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.state.Version = working.Version
+	s.state.Containers = working.Containers
+	s.state.Ports = working.Ports
+	return s.state.Save()
 }
 
 // requireCSRF validates the csrf_token form field against the current session's

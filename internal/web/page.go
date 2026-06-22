@@ -18,7 +18,7 @@ func (s *Server) pageData(navActive string) PageData {
 		NavActive:    navActive,
 		SchoolName:   s.cfg.School.Name,
 		SchoolSlug:   s.cfg.School.Slug,
-		LLMInstalled: s.state.IsInstalled("llmd"),
+		LLMInstalled: s.snapState().IsInstalled("llmd"),
 		CSRFToken:    s.sessions.csrfToken(),
 	}
 }

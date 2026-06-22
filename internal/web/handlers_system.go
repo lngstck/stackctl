@@ -6,48 +6,67 @@ import (
 	"net/http"
 
 	"github.com/lngstck/stackctl/internal/catalog"
+	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/update"
 )
 
-// handleSystemUpdate fuehrt den stackctl-Self-Update durch. Die ehemals
-// eigene /system-Seite ist in /settings (Tab "System") integriert (Issue #4),
-// daher landen Erfolg/Fehler dort als Flash-Message.
+// handleSystemUpdate fuehrt den stackctl-Self-Update als asynchronen Job durch,
+// sodass die Settings-Seite auf eine Live-Verlaufsanzeige (/jobs/{id}) umleitet
+// statt den Request minutenlang zu blocken (Issue #1). Der Job haelt den
+// Op-Lock (Binary-Replace vs. App-Install); in Produktion endet er mit einem
+// Self-Exit, den systemd auffaengt.
 func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.tryLock(w, r)
+	if !ok {
+		return
+	}
+	job := s.jobs.create("selfupdate", "", "stackctl aktualisieren", "/settings")
+	go s.runSelfUpdateJob(h, job)
+	http.Redirect(w, r, "/jobs/"+job.ID, http.StatusSeeOther)
+}
+
+// runSelfUpdateJob is the worker for a stackctl self-update. In production a
+// successful update schedules a process exit (systemd restarts with the new
+// binary); the job page detects the restart and waits on /healthz.
+func (s *Server) runSelfUpdateJob(h *lock.Handle, job *Job) {
+	defer h.Release()
+
+	job.Step("Nach Updates suchen")
 	result, err := update.Check()
 	if err != nil {
-		http.Redirect(w, r, "/settings?update="+fmt.Sprintf("Update-Check fehlgeschlagen: %v", err)+"&err=1", http.StatusSeeOther)
+		job.finish(false, fmt.Sprintf("Update-Check fehlgeschlagen: %v", err))
 		return
 	}
 	if !result.UpdateAvailable {
-		http.Redirect(w, r, "/settings?update=Bereits+aktuell", http.StatusSeeOther)
+		job.setResult(nil, []string{"stackctl ist bereits aktuell — kein Update noetig."})
+		job.finish(true, "")
 		return
 	}
 
+	job.Step("Herunterladen & Pruefsumme verifizieren")
 	newVersion, err := update.Apply(result.Release)
 	if err != nil {
 		log.Printf("web: self-update: %v", err)
-		http.Redirect(w, r, "/settings?update="+fmt.Sprintf("Update fehlgeschlagen: %v", err)+"&err=1", http.StatusSeeOther)
+		job.finish(false, fmt.Sprintf("Update fehlgeschlagen: %v", err))
 		return
 	}
+	log.Printf("web: updated to %s", newVersion)
 
-	log.Printf("web: updated to %s, restarting...", newVersion)
-
-	// Im Dev-Modus laeuft stackctl ohne systemd-Wrapper — os.Exit wuerde den
-	// Prozess tot lassen. Stattdessen Hinweis "manuell starten" zeigen.
 	if s.devMode {
-		http.Redirect(w, r, "/settings?update="+fmt.Sprintf("Update auf %s erfolgreich. Im Dev-Modus bitte manuell neu starten.", newVersion), http.StatusSeeOther)
+		// Im Dev-Modus laeuft stackctl ohne systemd-Wrapper — kein os.Exit.
+		job.setResult(nil, []string{fmt.Sprintf("Update auf %s erfolgreich. Im Dev-Modus bitte manuell neu starten.", newVersion)})
+		job.setSelfUpdate(newVersion, false)
+		job.finish(true, "")
 		return
 	}
 
-	// Produktion: RestartService spawnt eine Goroutine, die nach kurzer
-	// Pause os.Exit(0) ruft — systemd bringt uns mit dem neuen Binary
-	// wieder hoch (Restart=always). Diese Antwort sieht der Browser noch.
+	job.Step("Neustart")
+	job.setSelfUpdate(newVersion, true)
+	job.finish(true, "")
+	// RestartService schedules os.Exit(0); systemd brings stackctl back up with
+	// the new binary. The job page switches to /healthz polling on the
+	// restarting flag (or when polls start failing).
 	_ = update.RestartService()
-	// restarting=1 schaltet im System-Tab ein kleines Poll-Script frei, das
-	// auf /healthz wartet und die Seite neu laedt, sobald der Dienst mit dem
-	// neuen Binary wieder oben ist — sonst bliebe der Browser auf "Neustart..."
-	// stehen.
-	http.Redirect(w, r, "/settings?restarting=1&update="+fmt.Sprintf("Update auf %s — Neustart...", newVersion), http.StatusSeeOther)
 }
 
 // handleCatalogSync synchronisiert den App-Katalog. Wie zuvor entscheidet

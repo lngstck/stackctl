@@ -7,9 +7,11 @@
 package docker
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -55,6 +57,25 @@ func ComposeUp(composeFile string, services ...string) (int, string) {
 	args = append(args, services...)
 	code, out, _ := run(nil, "docker", args...)
 	return code, out
+}
+
+// ComposeUpStreaming runs `docker compose up -d` like ComposeUp but forwards
+// each output line to onLine as it arrives (for a live progress view), while
+// still returning the exit code and the full combined output. onLine may be
+// nil. The long pole is the image pull, whose progress lines surface here.
+func ComposeUpStreaming(composeFile string, onLine func(string), services ...string) (int, string) {
+	args := composeArgs(composeFile, "up", "-d")
+	args = append(args, services...)
+	return runStreaming(onLine, "docker", args...)
+}
+
+// ComposePullStreaming runs `docker compose pull` streaming each line to
+// onLine. Used by the update flow so a cached tag actually gets re-fetched
+// and the admin sees the download progress.
+func ComposePullStreaming(composeFile string, onLine func(string), services ...string) (int, string) {
+	args := composeArgs(composeFile, "pull")
+	args = append(args, services...)
+	return runStreaming(onLine, "docker", args...)
 }
 
 // ComposeDown stops and removes the given services (or all if empty).
@@ -272,6 +293,52 @@ func composeArgs(composeFile, subCmd string, extra ...string) []string {
 	args := []string{"compose", "-f", composeFile, subCmd}
 	args = append(args, extra...)
 	return args
+}
+
+// runStreaming executes a command, forwarding each combined stdout/stderr line
+// to onLine as it is produced, and returns the exit code plus the full output.
+// It applies the same default timeout as run. onLine may be nil.
+func runStreaming(onLine func(string), name string, args ...string) (int, string) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sc := bufio.NewScanner(pr)
+		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for sc.Scan() {
+			line := sc.Text()
+			buf.WriteString(line)
+			buf.WriteByte('\n')
+			if onLine != nil {
+				onLine(line)
+			}
+		}
+	}()
+
+	runErr := cmd.Run()
+	_ = pw.Close() // unblock the scanner
+	<-done
+
+	code := 0
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			code = exitErr.ExitCode()
+		} else {
+			code = -1
+			if buf.Len() == 0 {
+				buf.WriteString(runErr.Error())
+			}
+		}
+	}
+	return code, buf.String()
 }
 
 // run executes a binary with args and returns exit code + combined output.
