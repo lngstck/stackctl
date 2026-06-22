@@ -2,7 +2,7 @@
 // learningstack container stack.
 //
 // The AppDefinition types here mirror the container definition YAML schema
-// (see CLAUDE.md and docs/catalog-spec.md) — but only the fields needed for
+// (see APP-GUIDE.md §14 in the repo root) — but only the fields needed for
 // compose generation. The catalog package loads them from YAML; compose only
 // reads them.
 package compose
