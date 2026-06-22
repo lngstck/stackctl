@@ -7,6 +7,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/lngstck/stackctl/internal/dex"
 	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/install"
+	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/paths"
 	"github.com/lngstck/stackctl/internal/secrets"
 	"github.com/lngstck/stackctl/internal/tunnel"
@@ -221,6 +223,21 @@ func cmdAutoupdate(args []string, stdout, stderr io.Writer) int {
 	if !cfg.AutoUpdate.Enabled && !*force {
 		fmt.Fprintln(stdout, "autoupdate: disabled in settings, skipping")
 		return 0
+	}
+
+	// Serialise the mutating run against the web server. A dry-run only lists
+	// updates (no state/.env/compose writes), so it does not take the lock.
+	if !*dryRun {
+		h, err := lock.Acquire()
+		if err != nil {
+			if errors.Is(err, lock.ErrBusy) {
+				fmt.Fprintln(stdout, "autoupdate: another operation is running (web UI), skipping this cycle")
+				return 0
+			}
+			fmt.Fprintf(stderr, "autoupdate: acquire lock: %v\n", err)
+			return 1
+		}
+		defer h.Release()
 	}
 
 	if _, err := catalog.Sync(cfg.Catalog.URL); err != nil {
