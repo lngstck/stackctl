@@ -46,6 +46,9 @@ type settingsData struct {
 	// Restarting schaltet das Auto-Reload-Script frei (nach Self-Update, wenn
 	// der Dienst gerade durch systemd neu gestartet wird).
 	Restarting bool
+
+	// Sys ist die System-Auslastung (RAM/Platte/Last) fuer den System-Tab.
+	Sys sysView
 }
 
 func (s *Server) settingsData(msg, errMsg string) settingsData {
@@ -62,6 +65,7 @@ func (s *Server) settingsData(msg, errMsg string) settingsData {
 		Message:        msg,
 		Error:          errMsg,
 		CurrentVersion: update.CurrentVersion(),
+		Sys:            buildSysView(),
 	}
 }
 

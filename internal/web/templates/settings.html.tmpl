@@ -130,6 +130,46 @@
     </script>
     {{end}}
 
+    <style>
+      .sysmeter { background:var(--surface-2,#e8e8e8); border-radius:0.4rem; height:0.7rem; overflow:hidden; }
+      .sysmeter > span { display:block; height:100%; border-radius:0.4rem; transition:width .3s ease; }
+      .sysmeter > span.ok { background:var(--ok,#2e7d32); }
+      .sysmeter > span.warn { background:#c8860b; }
+      .sysmeter > span.crit { background:var(--danger,#c62828); }
+      .sysrow { margin-bottom:1rem; }
+      .sysrow:last-child { margin-bottom:0; }
+      .sysrow .lbl { display:flex; justify-content:space-between; align-items:baseline; font-size:0.92rem; margin-bottom:0.3rem; }
+      .sysrow .lbl .val { font-variant-numeric:tabular-nums; color:var(--muted,#777); font-size:0.85rem; }
+      .sysrow .free { font-size:0.8rem; color:var(--muted,#777); margin-top:0.25rem; }
+    </style>
+
+    <article class="card mt-2">
+      <h4 class="mb-2">System-Auslastung</h4>
+      {{if .Sys.Available}}
+        {{if .Sys.RAMOK}}
+        <div class="sysrow">
+          <div class="lbl"><span>Arbeitsspeicher</span><span class="val">{{.Sys.RAMUsed}} / {{.Sys.RAMTotal}} · {{.Sys.RAMPercent}}%</span></div>
+          <div class="sysmeter"><span class="{{.Sys.RAMLevel}}" style="width:{{.Sys.RAMPercent}}%"></span></div>
+          <div class="free">{{.Sys.RAMFree}} frei</div>
+        </div>
+        {{end}}
+        {{if .Sys.DiskOK}}
+        <div class="sysrow">
+          <div class="lbl"><span>Speicherplatz</span><span class="val">{{.Sys.DiskUsed}} / {{.Sys.DiskTotal}} · {{.Sys.DiskPercent}}%</span></div>
+          <div class="sysmeter"><span class="{{.Sys.DiskLevel}}" style="width:{{.Sys.DiskPercent}}%"></span></div>
+          <div class="free">{{.Sys.DiskFree}} frei{{if .Sys.DiskPath}} · {{.Sys.DiskPath}}{{end}}</div>
+        </div>
+        {{end}}
+        {{if or .Sys.CPUCount .Sys.LoadOK}}
+        <p class="free" style="margin-top:0.8rem;">
+          {{if .Sys.CPUCount}}{{.Sys.CPUCount}} CPU-Kerne{{end}}{{if .Sys.LoadOK}} · Auslastung (1 min): {{.Sys.Load1}}{{end}}
+        </p>
+        {{end}}
+      {{else}}
+        <p class="sub" style="margin:0;">Systeminformationen sind auf dieser Plattform nicht verfügbar.</p>
+      {{end}}
+    </article>
+
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;" class="mt-2">
       <article class="card">
         <h4 class="mb-1">stackctl</h4>
