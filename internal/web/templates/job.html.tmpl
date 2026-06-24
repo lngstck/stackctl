@@ -100,8 +100,13 @@
         html += '</tbody></table></article>';
       }
     }
-    html += '<div style="display:flex;gap:0.5rem;"><a href="' + esc(backURL || '/apps') + '" class="button">Weiter</a>' +
-            '<a href="/apps" class="button ghost">Zum Katalog</a></div>';
+    var actions = '<a href="' + esc(backURL || '/apps') + '" class="button">Weiter</a>';
+    // "Zum Katalog" only makes sense for app installs/updates; a backup, restore
+    // or self-update has nothing to do with the app catalog.
+    if (jobKind === 'install' || jobKind === 'update') {
+      actions += '<a href="/apps" class="button ghost">Zum Katalog</a>';
+    }
+    html += '<div style="display:flex;gap:0.5rem;">' + actions + '</div>';
     el.innerHTML = html;
   }
 
