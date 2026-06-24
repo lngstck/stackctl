@@ -6,8 +6,42 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+// TestRenderJobPageQuotesValues guards against the regression where the job
+// page emitted `var jobID = c635…;` (jsString escapes but does not quote), so a
+// hex id starting with a letter was read as an undefined identifier and crashed
+// the whole polling script — freezing every job page at "läuft… 0:00".
+func TestRenderJobPageQuotesValues(t *testing.T) {
+	s := &Server{}
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loadTemplates: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	s.render(rec, "job.html.tmpl", jobPageData{
+		PageData: PageData{NavActive: "apps", CSRFToken: "tok"},
+		Job:      jobSnapshot{ID: "c635f878815ad543", Kind: "backup", Title: "Backup erstellen", BackURL: "/backups"},
+	})
+	if rec.Code != 200 {
+		t.Fatalf("render status = %d; body:\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "var jobID = 'c635f878815ad543';") {
+		t.Errorf("job id not emitted as a quoted JS string literal")
+	}
+	if strings.Contains(body, "var jobID = c635f878815ad543;") {
+		t.Errorf("job id emitted unquoted — would crash the polling script")
+	}
+	// backURL may contain html/template's defensive \/ escaping (valid JS); just
+	// assert each is opened with a quote rather than a bare token.
+	for _, want := range []string{"var jobKind = '", "var backURL = '"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing quoted assignment %q", want)
+		}
+	}
+}
 
 func TestHandleJobStatusNotFound(t *testing.T) {
 	s := &Server{jobs: newJobStore()}
