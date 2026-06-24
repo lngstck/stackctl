@@ -43,6 +43,22 @@ func TestRenderJobPageQuotesValues(t *testing.T) {
 	}
 }
 
+func TestNavForJobKind(t *testing.T) {
+	cases := map[string]string{
+		"backup":     "backups",
+		"restore":    "backups",
+		"selfupdate": "settings",
+		"install":    "apps",
+		"update":     "apps",
+		"":           "apps",
+	}
+	for kind, want := range cases {
+		if got := navForJobKind(kind); got != want {
+			t.Errorf("navForJobKind(%q) = %q, want %q", kind, got, want)
+		}
+	}
+}
+
 func TestHandleJobStatusNotFound(t *testing.T) {
 	s := &Server{jobs: newJobStore()}
 	rec := httptest.NewRecorder()
