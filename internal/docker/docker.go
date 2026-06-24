@@ -79,6 +79,18 @@ func ComposePullStreaming(composeFile string, onLine func(string), services ...s
 	return runStreaming(onLine, "docker", args...)
 }
 
+// ComposeUpRemoveOrphans runs `docker compose up -d --remove-orphans` for all
+// services, removing containers that are no longer part of the compose file.
+// Used by restore: after the backed-up compose is in place, the running set
+// must converge to exactly the backup's apps. A long timeout applies because
+// missing images may be pulled.
+func ComposeUpRemoveOrphans(composeFile string) (int, string) {
+	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
+	defer cancel()
+	code, out, _ := run(ctx, "docker", composeArgs(composeFile, "up", "-d", "--remove-orphans")...)
+	return code, out
+}
+
 // ComposeDown stops and removes the given services (or all if empty).
 func ComposeDown(composeFile string, services ...string) (int, string) {
 	args := composeArgs(composeFile, "down")

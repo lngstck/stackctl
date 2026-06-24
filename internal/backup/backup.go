@@ -281,6 +281,58 @@ func Delete(file string) error {
 	return nil
 }
 
+// WriteSidecarFor (re)builds the metadata sidecar for an archive already in
+// BackupsDir that has none — i.e. after an upload. For an unencrypted archive
+// the manifest is read from inside; for an encrypted one (no passphrase
+// available here) a minimal sidecar is written so it still lists, with details
+// filled in at restore time. Refuses to clobber an existing sidecar.
+func WriteSidecarFor(file string) error {
+	if !ValidName(file) {
+		return fmt.Errorf("invalid backup name")
+	}
+	archivePath := filepath.Join(paths.BackupsDir(), file)
+	fi, err := os.Stat(archivePath)
+	if err != nil {
+		return err
+	}
+	sidecar := archivePath + ".meta.json"
+	if _, err := os.Stat(sidecar); err == nil {
+		return nil // already has metadata (e.g. our own backup)
+	}
+	sum, err := sha256File(archivePath)
+	if err != nil {
+		return err
+	}
+
+	var info Info
+	if strings.HasSuffix(file, ".age") {
+		info = Info{Schema: SchemaVersion, Encrypted: true, CreatedAt: createdAtFromName(file, fi.ModTime())}
+	} else {
+		m, err := readManifest(archivePath)
+		if err != nil {
+			return fmt.Errorf("read manifest from upload: %w", err)
+		}
+		info = m
+	}
+	info.File = file
+	info.SizeBytes = fi.Size()
+	info.SHA256 = sum
+	return writeSidecar(info)
+}
+
+// createdAtFromName parses the timestamp embedded in a backup filename
+// (backup-<slug>-YYYYMMDD-HHMMSS...), falling back to the file mtime.
+func createdAtFromName(file string, fallback time.Time) string {
+	if m := timestampRe.FindStringSubmatch(file); m != nil {
+		if t, err := time.ParseInLocation("20060102-150405", m[1], time.Local); err == nil {
+			return t.UTC().Format(time.RFC3339)
+		}
+	}
+	return fallback.UTC().Format(time.RFC3339)
+}
+
+var timestampRe = regexp.MustCompile(`(\d{8}-\d{6})`)
+
 // -- internals --------------------------------------------------------------
 
 func writeSidecar(info Info) error {

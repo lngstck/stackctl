@@ -19,7 +19,7 @@ func TestRenderBackupsPage(t *testing.T) {
 	}
 
 	data := backupsData{
-		PageData: PageData{NavActive: "backups", SchoolName: "Musterschule", CSRFToken: "tok"},
+		PageData: PageData{NavActive: "backups", SchoolName: "Musterschule", SchoolSlug: "musterschule", CSRFToken: "tok"},
 		Backups: []backupRow{{
 			File:       "backup-musterschule-20260624-143000.tar.gz.age",
 			CreatedAt:  "24.06.2026, 14:30",
@@ -38,7 +38,17 @@ func TestRenderBackupsPage(t *testing.T) {
 		t.Fatalf("render status = %d, want 200; body:\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Backup erstellen", "backup-musterschule-20260624-143000.tar.gz.age", "/download", "tok"} {
+	for _, want := range []string{
+		"Backup erstellen",
+		"backup-musterschule-20260624-143000.tar.gz.age",
+		"/download",
+		"tok",
+		"/restore",        // restore form action
+		"confirm_slug",    // slug confirmation field
+		"musterschule",    // promoted SchoolSlug from embedded PageData
+		"name=\"passphrase\"", // shown because the backup is encrypted
+		"/backups/upload", // upload form
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("rendered page missing %q", want)
 		}

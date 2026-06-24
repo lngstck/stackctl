@@ -105,6 +105,15 @@ func (j *Job) setSelfUpdate(newVersion string, restarting bool) {
 	j.restarting = restarting
 }
 
+// setRestarting flags that a stackctl restart follows this job (used by
+// restore, which restarts so the process reloads config/state from disk). The
+// job page then polls /healthz and returns once the service is back.
+func (j *Job) setRestarting(restarting bool) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.restarting = restarting
+}
+
 // finish closes out the job, marking the trailing step done or failed.
 func (j *Job) finish(success bool, errMsg string) {
 	j.mu.Lock()

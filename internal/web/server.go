@@ -140,8 +140,12 @@ func (s *Server) routes() {
 	// takes the lock via authPostLocked.
 	s.mux.HandleFunc("GET /backups", s.requireAuth(s.handleBackupsPage))
 	s.mux.HandleFunc("POST /backups/create", s.authPost(s.handleBackupCreate))
+	s.mux.HandleFunc("POST /backups/upload", s.authPost(s.handleBackupUpload))
 	s.mux.HandleFunc("GET /backups/{name}/download", s.requireAuth(s.handleBackupDownload))
 	s.mux.HandleFunc("POST /backups/{name}/delete", s.authPostLocked(s.handleBackupDelete))
+	// Restore runs asynchronously and manages the op-lock itself (handed to the
+	// worker), so it uses authPost like install — not authPostLocked.
+	s.mux.HandleFunc("POST /backups/{name}/restore", s.authPost(s.handleBackupRestore))
 
 	// Tunnel (ready + auth).
 	s.mux.HandleFunc("GET /tunnel", s.requireAuth(s.handleTunnel))
