@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -177,6 +178,62 @@ func Exec(container string, cmd []string) (int, string, error) {
 	return run(nil, "docker", args...)
 }
 
+// longTimeout applies to backup/restore operations whose data volume can run
+// into gigabytes (postgres dump, tar of all app data) — the 5-minute
+// defaultTimeout is far too short there.
+const longTimeout = 60 * time.Minute
+
+// ExecToFile runs a command inside a container and streams its stdout into the
+// file at destPath (truncating it). stderr is captured and returned for error
+// reporting. Used for `pg_dumpall`, whose output must not be buffered in memory.
+// A long timeout is applied because the dump can be large.
+func ExecToFile(container string, cmd []string, destPath string) error {
+	out, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", destPath, err)
+	}
+	defer out.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
+	defer cancel()
+
+	args := append([]string{"exec", container}, cmd...)
+	c := exec.CommandContext(ctx, "docker", args...)
+	var stderr bytes.Buffer
+	c.Stdout = out
+	c.Stderr = &stderr
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("docker exec %s: %v: %s", container, err, strings.TrimSpace(stderr.String()))
+	}
+	if err := out.Sync(); err != nil {
+		return fmt.Errorf("sync %s: %w", destPath, err)
+	}
+	return nil
+}
+
+// ExecFromFile runs a command inside a container feeding the file at srcPath to
+// its stdin (the `docker exec -i` form). Returns combined stdout/stderr for
+// error reporting. Used to replay a `pg_dumpall` SQL stream via psql on restore.
+func ExecFromFile(container string, cmd []string, srcPath string) (string, error) {
+	in, err := os.Open(srcPath)
+	if err != nil {
+		return "", fmt.Errorf("open %s: %w", srcPath, err)
+	}
+	defer in.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
+	defer cancel()
+
+	args := append([]string{"exec", "-i", container}, cmd...)
+	c := exec.CommandContext(ctx, "docker", args...)
+	var buf bytes.Buffer
+	c.Stdin = in
+	c.Stdout = &buf
+	c.Stderr = &buf
+	err = c.Run()
+	return buf.String(), err
+}
+
 // Pull pulls an image. Returns combined output.
 func Pull(image string) (string, error) {
 	_, out, err := run(nil, "docker", "pull", image)
@@ -268,6 +325,29 @@ func RemoveHostPath(hostPath string) error {
 		return fmt.Errorf("rm %s: %s", hostPath, out)
 	}
 	return nil
+}
+
+// RunLong executes `docker run --rm` with the given bind mounts and command,
+// applying the long timeout because backup/restore container work (tar/cp of
+// gigabytes) easily exceeds the default 5 minutes. Each mount is a
+// "hostPath:containerPath[:ro]" spec passed verbatim to -v. The command goes
+// through an args slice — never `sh -c` — to keep the no-shell injection
+// guarantee (ARCHITECTURE.md §16). Returns combined stdout/stderr.
+func RunLong(mounts []string, image string, cmd ...string) (string, error) {
+	args := []string{"run", "--rm"}
+	for _, m := range mounts {
+		args = append(args, "-v", m)
+	}
+	args = append(args, image)
+	args = append(args, cmd...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
+	defer cancel()
+	_, out, err := run(ctx, "docker", args...)
+	if err != nil {
+		return out, fmt.Errorf("docker run %s: %v: %s", image, err, strings.TrimSpace(out))
+	}
+	return out, nil
 }
 
 // validOwner checkt "uid:gid" — nur Ziffern + ein einziger Doppelpunkt.

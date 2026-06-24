@@ -97,6 +97,7 @@ document.addEventListener('submit', function(ev) {
         <li><a href="/apps" {{activeNav .NavActive "apps"}}>Apps</a></li>
         <li><a href="/settings" {{activeNav .NavActive "settings"}}>Einstellungen</a></li>
         <li><a href="/tunnel" {{activeNav .NavActive "tunnel"}}>Tunnel</a></li>
+        <li><a href="/backups" {{activeNav .NavActive "backups"}}>Sicherung</a></li>
         {{if .LLMInstalled}}<li><a href="/llm" {{activeNav .NavActive "llm"}}>LLM</a></li>{{end}}
       </ul>
     </nav>
