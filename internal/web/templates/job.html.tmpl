@@ -104,16 +104,26 @@
 
   // After a self-update the server exits and systemd restarts it with the new
   // binary. Poll /healthz until it answers, then go back to settings.
+  function restartDone() {
+    if (jobKind === 'restore') {
+      return (backURL || '/backups') + '?msg=' + encodeURIComponent('Wiederherstellung abgeschlossen.');
+    }
+    return (backURL || '/settings') + '?update=stackctl+wurde+aktualisiert';
+  }
+
   function waitForRestart() {
+    var msg = jobKind === 'restore'
+      ? 'Wiederherstellung abgeschlossen. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…'
+      : 'Update installiert. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…';
     document.getElementById('job-status').textContent = 'Neustart läuft…';
     document.getElementById('job-result').innerHTML =
-      '<div role="alert" data-variant="success" class="mb-2">Update installiert. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…</div>';
+      '<div role="alert" data-variant="success" class="mb-2">' + msg + '</div>';
     var tries = 0;
     (function ping() {
       tries++;
       fetch('/healthz', { cache: 'no-store' })
         .then(function (r) {
-          if (r.ok) { window.location = (backURL || '/settings') + '?update=stackctl+wurde+aktualisiert'; }
+          if (r.ok) { window.location = restartDone(); }
           else { setTimeout(ping, 1500); }
         })
         .catch(function () { if (tries < 200) setTimeout(ping, 1500); });
@@ -147,8 +157,9 @@
         if (finished && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       })
       .catch(function () {
-        // A failing poll during a self-update means the server is restarting.
-        if (jobKind === 'selfupdate') {
+        // A failing poll during a self-update or restore means the server is
+        // restarting (os.Exit → systemd).
+        if (jobKind === 'selfupdate' || jobKind === 'restore') {
           if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
           waitForRestart();
         }

@@ -67,12 +67,62 @@
           </form>
         </td>
       </tr>
+      <tr>
+        <td colspan="5" style="padding-top:0;">
+          <details>
+            <summary class="sub" style="cursor:pointer;">Aus diesem Backup wiederherstellen…</summary>
+            <div role="alert" data-variant="danger" class="mt-1 mb-1">
+              <strong>Achtung:</strong> Die Wiederherstellung überschreibt die aktuelle
+              Datenbank, Konfiguration und alle App-Daten mit dem Stand dieses Backups.
+              Alle Dienste werden dabei kurz gestoppt und neu gestartet, anschließend
+              startet stackctl selbst neu. Dieser Schritt kann nicht rückgängig gemacht
+              werden.
+            </div>
+            <form method="post" action="/backups/{{.File}}/restore"
+                  data-loading-msg="Wiederherstellung wird gestartet…"
+                  onsubmit="return confirm('Wiederherstellung jetzt starten? Aktuelle Daten werden überschrieben.');">
+              {{csrfField $.CSRFToken}}
+              {{if .Encrypted}}
+              <label data-field class="mb-1">
+                Passphrase
+                <input type="password" name="passphrase" required autocomplete="off" placeholder="Passphrase dieses Backups">
+                <span class="hint">Dieses Backup ist verschlüsselt.</span>
+              </label>
+              {{end}}
+              <label data-field class="mb-1">
+                Zur Bestätigung den Schul-Slug eingeben: <code>{{$.SchoolSlug}}</code>
+                <input type="text" name="confirm_slug" required autocomplete="off" placeholder="{{$.SchoolSlug}}">
+              </label>
+              <label data-field class="mb-1">
+                <input type="checkbox" name="understand" required>
+                Mir ist bewusst, dass alle aktuellen Daten überschrieben werden.
+              </label>
+              <button type="submit" class="small" style="background:var(--danger);">Wiederherstellen</button>
+            </form>
+          </details>
+        </td>
+      </tr>
       {{end}}
     </tbody>
   </table>
   {{else}}
   <p class="sub">Noch keine Backups vorhanden.</p>
   {{end}}
+</article>
+
+<article class="card mt-2">
+  <h3 class="mb-1">Backup hochladen</h3>
+  <p class="sub mb-2" style="font-size:0.9rem;">
+    Eine zuvor heruntergeladene Sicherungsdatei (<code>backup-…tar.gz</code> oder
+    <code>.tar.gz.age</code>) hochladen, um sie hier wiederherstellen zu können.
+  </p>
+  <form method="post" action="/backups/upload" enctype="multipart/form-data" data-loading-msg="Wird hochgeladen…">
+    {{csrfField $.CSRFToken}}
+    <label data-field class="mb-2">
+      <input type="file" name="archive" accept=".gz,.age" required>
+    </label>
+    <button type="submit" class="small">Hochladen</button>
+  </form>
 </article>
 
 {{template "sidebar-layout-end" .PageData}}
