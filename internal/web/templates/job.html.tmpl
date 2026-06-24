@@ -31,9 +31,12 @@
 
 <script>
 (function () {
-  var jobID = {{.Job.ID | jsString}};
-  var jobKind = {{.Job.Kind | jsString}};
-  var backURL = {{.Job.BackURL | jsString}};
+  // jsString escapes the value but does NOT add quotes, so wrap each in '…' —
+  // a bare hex job id (e.g. c635…) would otherwise be read as an undefined
+  // identifier and crash the whole script (no polling, no restart redirect).
+  var jobID = '{{.Job.ID | jsString}}';
+  var jobKind = '{{.Job.Kind | jsString}}';
+  var backURL = '{{.Job.BackURL | jsString}}';
   var pollTimer = null;
 
   var ICON = { done: '✓', failed: '✗', running: '↻', pending: '○' };
@@ -111,22 +114,30 @@
     return (backURL || '/settings') + '?update=stackctl+wurde+aktualisiert';
   }
 
-  function waitForRestart() {
+  // waitForRestart polls /healthz until stackctl has restarted, then reloads
+  // into the new process. Unless alreadyUp is set, it waits for the service to
+  // first go DOWN and come back — otherwise a /healthz answered by the still-
+  // running old process would redirect prematurely (back to the OLD version).
+  // alreadyUp is passed when we detected the restart via a 404 (a fresh process
+  // is already serving and no longer knows this job) — then we reload at once.
+  function waitForRestart(alreadyUp) {
     var msg = jobKind === 'restore'
       ? 'Wiederherstellung abgeschlossen. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…'
       : 'Update installiert. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…';
     document.getElementById('job-status').textContent = 'Neustart läuft…';
     document.getElementById('job-result').innerHTML =
       '<div role="alert" data-variant="success" class="mb-2">' + msg + '</div>';
-    var tries = 0;
+    if (alreadyUp) { window.location = restartDone(); return; }
+    var tries = 0, wasDown = false;
     (function ping() {
       tries++;
       fetch('/healthz', { cache: 'no-store' })
         .then(function (r) {
-          if (r.ok) { window.location = restartDone(); }
-          else { setTimeout(ping, 1500); }
+          if (r.ok && wasDown) { window.location = restartDone(); return; }
+          if (!r.ok) wasDown = true;
+          if (tries < 300) setTimeout(ping, 1000);
         })
-        .catch(function () { if (tries < 200) setTimeout(ping, 1500); });
+        .catch(function () { wasDown = true; if (tries < 300) setTimeout(ping, 1000); });
     })();
   }
 
@@ -140,7 +151,7 @@
       return false;
     }
     // Done.
-    if (job.restarting) { waitForRestart(); return true; }
+    if (job.restarting) { waitForRestart(false); return true; }
     document.getElementById('job-status').textContent = job.success ? 'fertig' : 'fehlgeschlagen';
     renderResult(job);
     return true;
@@ -156,12 +167,15 @@
         var finished = apply(job);
         if (finished && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       })
-      .catch(function () {
+      .catch(function (err) {
         // A failing poll during a self-update or restore means the server is
-        // restarting (os.Exit → systemd).
+        // restarting (os.Exit → systemd). A 404 means a fresh process is already
+        // serving (it no longer knows this job) → reload at once; any other
+        // failure means it is mid-restart → wait for /healthz to recover.
         if (jobKind === 'selfupdate' || jobKind === 'restore') {
           if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-          waitForRestart();
+          var gone = String(err && err.message).indexOf('404') !== -1;
+          waitForRestart(gone);
         }
       });
   }
