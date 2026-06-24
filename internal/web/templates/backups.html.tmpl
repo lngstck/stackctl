@@ -1,0 +1,80 @@
+{{define "page"}}
+{{template "head" .}}
+{{template "sidebar-layout-start" .PageData}}
+
+<h2 class="mb-1">Sicherung &amp; Wiederherstellung</h2>
+<p class="sub mb-2">
+  Ein Backup enthält die komplette Datenbank (alle Nutzerdaten), die
+  Konfiguration mit allen Zugängen und die Daten aller installierten Apps.
+  Bewahre Backups sicher auf — sie enthalten Passwörter und personenbezogene Daten.
+</p>
+
+{{if .Message}}
+<div role="alert" data-variant="{{if .IsError}}danger{{else}}success{{end}}" class="mb-2">{{.Message}}</div>
+{{end}}
+
+<article class="card mb-2">
+  <h3 class="mb-1">Backup jetzt erstellen</h3>
+  <p class="sub mb-2" style="font-size:0.9rem;">
+    Je nach Datenmenge kann das einige Minuten dauern. Der Fortschritt wird live angezeigt.
+  </p>
+  <form method="post" action="/backups/create" data-loading-msg="Backup wird erstellt…">
+    {{csrfField $.CSRFToken}}
+    <label data-field class="mb-1">
+      <input type="checkbox" name="encrypt" id="bk-encrypt" onchange="document.getElementById('bk-pass-wrap').style.display = this.checked ? '' : 'none';">
+      Mit Passphrase verschlüsseln
+      <span class="hint">Empfohlen, wenn du das Backup herunterlädst (USB-Stick, anderer Rechner). <strong>Ohne diese Passphrase ist das Backup unwiederbringlich.</strong></span>
+    </label>
+    <div id="bk-pass-wrap" style="display:none;">
+      <label data-field class="mb-2">
+        Passphrase
+        <input type="password" name="passphrase" minlength="8" autocomplete="new-password" placeholder="mind. 8 Zeichen">
+      </label>
+    </div>
+    <button type="submit" class="mt-1">Backup erstellen</button>
+  </form>
+</article>
+
+<article class="card">
+  <h3 class="mb-2">Vorhandene Backups</h3>
+  {{if .Backups}}
+  <table style="width:100%;">
+    <thead>
+      <tr>
+        <th>Erstellt</th>
+        <th>Größe</th>
+        <th>Apps</th>
+        <th>Version</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Backups}}
+      <tr>
+        <td>
+          {{.CreatedAt}}
+          {{if .Encrypted}}<span class="badge" title="verschlüsselt" style="margin-left:0.4rem;">🔒</span>{{end}}
+        </td>
+        <td>{{.Size}}</td>
+        <td>{{.AppCount}}</td>
+        <td class="sub">{{.Version}}</td>
+        <td style="text-align:right; white-space:nowrap;">
+          <a href="/backups/{{.File}}/download" class="button ghost small">Download</a>
+          <form method="post" action="/backups/{{.File}}/delete" style="display:inline;"
+                onsubmit="return confirm('Dieses Backup wirklich löschen?');">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="ghost small" style="color:var(--danger);">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="sub">Noch keine Backups vorhanden.</p>
+  {{end}}
+</article>
+
+{{template "sidebar-layout-end" .PageData}}
+{{template "foot" .}}
+{{end}}

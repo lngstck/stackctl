@@ -102,6 +102,13 @@ func EnvFile() string     { return filepath.Join(ComposeDir(), ".env") }
 // VersionFile holds the currently installed version as plain text.
 func VersionFile() string { return filepath.Join(StackctlDir(), "stackctl.version") }
 
+// BackupsDir holds the server-side backup archives plus their unencrypted
+// metadata sidecars. It is created with 0o700 (owner-only) because an archive
+// carries the admin hash, dex secret, tunnel key, every app DB password and
+// student PII — the restrictive directory mode is the protection boundary even
+// when a root-in-container tar leaves the archive file itself world-readable.
+func BackupsDir() string { return filepath.Join(StackctlDir(), "backups") }
+
 // -- data tree --------------------------------------------------------------
 
 // AppDataDir returns the host-side data directory for an app: the one that

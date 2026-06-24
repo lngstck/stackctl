@@ -2,7 +2,7 @@ package web
 
 // PageData holds common data passed to all layout templates.
 type PageData struct {
-	NavActive    string // "dashboard", "apps", "settings", "tunnel", "llm"
+	NavActive    string // "dashboard", "apps", "settings", "tunnel", "backups", "llm"
 	SchoolName   string
 	SchoolSlug   string
 	LLMInstalled bool   // controls whether the "LLM" sidebar entry is rendered
