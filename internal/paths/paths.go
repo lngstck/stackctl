@@ -140,8 +140,18 @@ func EnsureDir(dir string, perm os.FileMode) error {
 		// so an older install with 0o750 gets pulled up. We only touch the
 		// leaf on purpose; parents might be owned by another uid
 		// (throwaway-chown) and shouldn't be re-permed from here.
-		if err := os.Chmod(dir, perm); err != nil {
-			return fmt.Errorf("chmod %s: %w", dir, err)
+		//
+		// The leaf itself can also be owned by another uid: volumes with
+		// owner: set get chowned to the container user right after creation,
+		// so on a later run (e.g. an update) the non-root stackctl process
+		// can no longer chmod it (EPERM). Only chmod when the perms actually
+		// differ — if they already match (the common re-run case) we skip and
+		// avoid the spurious failure, while a genuine 0o750->0o755 pull-up on
+		// a dir we still own keeps working.
+		if info, statErr := os.Stat(dir); statErr != nil || info.Mode().Perm() != perm {
+			if err := os.Chmod(dir, perm); err != nil {
+				return fmt.Errorf("chmod %s: %w", dir, err)
+			}
 		}
 		return nil
 	}
