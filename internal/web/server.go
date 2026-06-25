@@ -1,7 +1,9 @@
 package web
 
 import (
+	"crypto/rand"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
@@ -18,6 +20,22 @@ import (
 	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/tunnel"
 )
+
+// bootID is unique to this process. /healthz returns it in the X-Stackctl-Boot
+// header so the job page can detect a self-update restart by a *changed* id
+// rather than by observing a down→up transition — the latter is missed when
+// systemd brings the new process back faster than the page's poll interval.
+var bootID = newBootID()
+
+func newBootID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		// Fall back to a constant; worst case the page uses its wasDown
+		// fallback path instead of boot-id detection.
+		return "0"
+	}
+	return hex.EncodeToString(b)
+}
 
 //go:embed static/*
 var staticFS embed.FS
@@ -94,6 +112,7 @@ func (s *Server) routes() {
 
 	// Health check.
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Stackctl-Boot", bootID)
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
 	})

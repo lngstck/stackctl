@@ -13,6 +13,9 @@ import (
 type jobPageData struct {
 	PageData
 	Job jobSnapshot
+	// BootID of the process serving this page. The restart-detection script
+	// compares it against /healthz to know when a *new* process is up.
+	BootID string
 }
 
 func (s *Server) handleJobPage(w http.ResponseWriter, r *http.Request) {
@@ -24,6 +27,7 @@ func (s *Server) handleJobPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "job.html.tmpl", jobPageData{
 		PageData: s.pageData(navForJobKind(job.Kind)),
 		Job:      job.snapshot(),
+		BootID:   bootID,
 	})
 }
 

@@ -23,6 +23,7 @@ func TestRenderJobPageQuotesValues(t *testing.T) {
 	s.render(rec, "job.html.tmpl", jobPageData{
 		PageData: PageData{NavActive: "apps", CSRFToken: "tok"},
 		Job:      jobSnapshot{ID: "c635f878815ad543", Kind: "backup", Title: "Backup erstellen", BackURL: "/backups"},
+		BootID:   "abc123",
 	})
 	if rec.Code != 200 {
 		t.Fatalf("render status = %d; body:\n%s", rec.Code, rec.Body.String())
@@ -30,6 +31,11 @@ func TestRenderJobPageQuotesValues(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "var jobID = 'c635f878815ad543';") {
 		t.Errorf("job id not emitted as a quoted JS string literal")
+	}
+	// The restart-detection baseline must be present and quoted, else the page
+	// can't tell a new process from the old one and hangs at "Neustart läuft…".
+	if !strings.Contains(body, "var bootBaseline = 'abc123';") {
+		t.Errorf("bootBaseline not emitted as a quoted JS string literal")
 	}
 	if strings.Contains(body, "var jobID = c635f878815ad543;") {
 		t.Errorf("job id emitted unquoted — would crash the polling script")
@@ -40,6 +46,22 @@ func TestRenderJobPageQuotesValues(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing quoted assignment %q", want)
 		}
+	}
+}
+
+// /healthz must echo the process boot id so the job page can detect a restart
+// by a changed id (robust against a restart faster than the poll interval).
+func TestHealthzReturnsBootID(t *testing.T) {
+	s := &Server{mux: http.NewServeMux()}
+	s.routes()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	s.mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("healthz status = %d", rec.Code)
+	}
+	if got := rec.Header().Get("X-Stackctl-Boot"); got != bootID || got == "" {
+		t.Errorf("X-Stackctl-Boot = %q, want %q", got, bootID)
 	}
 }
 

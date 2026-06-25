@@ -37,6 +37,10 @@
   var jobID = '{{.Job.ID | jsString}}';
   var jobKind = '{{.Job.Kind | jsString}}';
   var backURL = '{{.Job.BackURL | jsString}}';
+  // Boot id of the process that rendered this page. After a self-update a new
+  // process answers /healthz with a different id — that's how we detect the
+  // restart (see waitForRestart) without depending on catching the down moment.
+  var bootBaseline = '{{.BootID | jsString}}';
   var pollTimer = null;
 
   var ICON = { done: '✓', failed: '✗', running: '↻', pending: '○' };
@@ -119,12 +123,15 @@
     return (backURL || '/settings') + '?update=stackctl+wurde+aktualisiert';
   }
 
-  // waitForRestart polls /healthz until stackctl has restarted, then reloads
-  // into the new process. Unless alreadyUp is set, it waits for the service to
-  // first go DOWN and come back — otherwise a /healthz answered by the still-
-  // running old process would redirect prematurely (back to the OLD version).
-  // alreadyUp is passed when we detected the restart via a 404 (a fresh process
-  // is already serving and no longer knows this job) — then we reload at once.
+  // waitForRestart polls /healthz until a NEW stackctl process is up, then
+  // reloads into it. A restart is detected primarily by a changed boot id
+  // (X-Stackctl-Boot) — robust even when systemd brings the new process back
+  // faster than the 1s poll interval, in which case the old down→up approach
+  // never observes a failing ping and the page would hang forever. The wasDown
+  // transition is kept as a fallback for the case where no boot id is available
+  // (page rendered by an older binary). alreadyUp is passed when we detected
+  // the restart via a 404 — a fresh process is already serving — so we reload
+  // at once.
   function waitForRestart(alreadyUp) {
     var msg = jobKind === 'restore'
       ? 'Wiederherstellung abgeschlossen. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…'
@@ -138,7 +145,12 @@
       tries++;
       fetch('/healthz', { cache: 'no-store' })
         .then(function (r) {
-          if (r.ok && wasDown) { window.location = restartDone(); return; }
+          var boot = r.headers.get('X-Stackctl-Boot');
+          // A different boot id means a new process is serving — reload. Guarded
+          // by a non-empty baseline so an old page (empty baseline) can't redirect
+          // prematurely off the still-running old process.
+          var restarted = bootBaseline && boot && boot !== bootBaseline;
+          if (r.ok && (restarted || wasDown)) { window.location = restartDone(); return; }
           if (!r.ok) wasDown = true;
           if (tries < 300) setTimeout(ping, 1000);
         })
