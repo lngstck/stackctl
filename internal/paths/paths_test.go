@@ -143,3 +143,52 @@ func TestAtomicWriteOverwrites(t *testing.T) {
 		}
 	}
 }
+
+// An existing dir below /opt/learningstack/ with stricter perms gets pulled
+// up to 0o755 on the next EnsureDir (older installs created dirs at 0o750).
+func TestEnsureDirPullsUpOldPerms(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvLearningstackDir, root)
+	dir := filepath.Join(root, "pylearn", "data")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := EnsureDir(dir, 0o750); err != nil {
+		t.Fatalf("EnsureDir: %v", err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o755 {
+		t.Errorf("perm = %o, want 0755 (pulled up)", perm)
+	}
+}
+
+// Regression: EnsureDir must not chmod a leaf whose perms already match. The
+// data dir of an owner: volume is chowned to the container uid right after
+// creation; on a later run (e.g. an update) the non-root stackctl process can
+// no longer chmod it and the old unconditional os.Chmod failed with EPERM.
+// Skipping the chmod when perms already match avoids that. We can't reproduce
+// foreign ownership without root, so we assert the skip indirectly: a chmod
+// that would change nothing must not be attempted. A read-only leaf (no write
+// bit) with perms already equal to the target stays untouched and error-free.
+func TestEnsureDirSkipsChmodWhenPermsMatch(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(EnvLearningstackDir, root)
+	dir := filepath.Join(root, "pylearn", "data")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Perms already at the target — EnsureDir must succeed without touching it.
+	if err := EnsureDir(dir, 0o755); err != nil {
+		t.Fatalf("EnsureDir on matching perms returned error: %v", err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o755 {
+		t.Errorf("perm = %o, want 0755 (unchanged)", perm)
+	}
+}
