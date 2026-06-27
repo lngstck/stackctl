@@ -229,6 +229,58 @@ func (s *jobStore) get(id string) (*Job, bool) {
 	return j, ok
 }
 
+// activityItem is a lightweight, read-only view of one job for the dashboard
+// "Letzte Aktivität" list. Flüchtig: lebt nur so lange wie der jobStore (max
+// maxRetainedJobs, weg nach Prozess-Neustart).
+type activityItem struct {
+	Title   string
+	Kind    string
+	Done    bool
+	Success bool
+	When    time.Time
+}
+
+// dotState maps the job outcome to a status-dot modifier (ok/warn/danger).
+func (a activityItem) dotState() string {
+	switch {
+	case !a.Done:
+		return "warn" // läuft noch
+	case a.Success:
+		return "ok"
+	default:
+		return "danger"
+	}
+}
+
+// recent returns up to n jobs, newest first, as activity items. Locks each
+// job under the store lock; safe because no code path acquires the store lock
+// while already holding a job lock.
+func (s *jobStore) recent(n int) []activityItem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]activityItem, 0, n)
+	for i := len(s.order) - 1; i >= 0 && len(out) < n; i-- {
+		j := s.jobs[s.order[i]]
+		if j == nil {
+			continue
+		}
+		j.mu.Lock()
+		when := j.finishedAt
+		if when.IsZero() {
+			when = j.startedAt
+		}
+		out = append(out, activityItem{
+			Title:   j.Title,
+			Kind:    j.Kind,
+			Done:    j.done,
+			Success: j.success,
+			When:    when,
+		})
+		j.mu.Unlock()
+	}
+	return out
+}
+
 func newJobID() string {
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {

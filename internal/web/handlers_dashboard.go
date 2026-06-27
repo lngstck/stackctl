@@ -1,65 +1,177 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/docker"
+	"github.com/lngstck/stackctl/internal/tunnel"
 )
 
-// dashboardData is the template context for dashboard.html.tmpl.
+// dashboardData is the template context for dashboard.html.tmpl. Das Dashboard
+// ist bewusst KEINE App-Liste mehr (das ist /apps), sondern eine
+// Statusübersicht: Was läuft nicht? Was muss aktualisiert werden? Wie steht
+// das System da? Alle Felder werden aus vorhandenen, schnellen Read-Quellen
+// aggregiert — kein Netz-Call (stackctl-Selbstupdate-Check bleibt im
+// System-Tab, weil er einen GitHub-Roundtrip braucht).
 type dashboardData struct {
 	PageData
-	Apps []appCardData
+	HasApps     bool
+	AppsTotal   int
+	AppsRunning int
+	Issues      []dashIssue
+	Updates     []dashUpdate
+	Sys         sysView
+	Activity    []dashActivity
 }
 
-// appCardData holds everything needed to render one app card.
-type appCardData struct {
-	ID              string
-	Name            string
-	Description     string
-	Category        string
-	Status          string // "running" | "stopped" | "unknown"
-	Port            int
-	Version         string
-	TunnelEnabled   bool
-	TunnelSubdomain string
-	IsMandatory     bool // dex, postgres — no remove button
+// dashIssue ist eine Zeile im "Handlungsbedarf"-Bereich.
+type dashIssue struct {
+	Level       string // "danger" | "warning"
+	Icon        string
+	Title       string
+	Detail      string
+	Action      string // In-App-Link
+	ActionLabel string
+}
+
+// dashUpdate ist eine verfügbare App-Aktualisierung (aus dem lokalen
+// Katalog-Cache, ohne Netz).
+type dashUpdate struct {
+	ID       string
+	Name     string
+	From     string
+	To       string
+	Breaking bool
+}
+
+// dashActivity ist eine Zeile in "Letzte Aktivität" (flüchtige In-RAM-Jobs).
+type dashActivity struct {
+	Title string
+	State string // status-dot Modifier: ok | warn | danger
+	Ago   string
+}
+
+// infraDisplayNames gibt den Pflicht-Diensten verständliche Namen für den
+// Admin (statt nackter Container-IDs).
+var infraDisplayNames = map[string]string{
+	"postgres": "Datenbank (PostgreSQL)",
+	"dex":      "Anmeldung (Dex)",
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	st := s.snapState()
 	data := dashboardData{
 		PageData: s.pageData("dashboard"),
+		Sys:      buildSysView(),
 	}
 
-	for _, cs := range s.snapState().Containers {
-		status := "unknown"
-		containerName := "ls-" + cs.ID
-		if docker.IsRunning(containerName) {
-			status = "running"
-		} else {
-			status = "stopped"
+	// 1) Dex-Tunnel — die Lebensader für den OIDC-Login. Liegt er, kann sich
+	//    niemand mehr über moin.schule anmelden → höchste Priorität.
+	if s.tunnelMgr != nil {
+		if status := s.tunnelMgr.Status(tunnel.DexTunnelID); status != "running" {
+			data.Issues = append(data.Issues, dashIssue{
+				Level:       "danger",
+				Icon:        "⚠",
+				Title:       "Anmeldung nicht erreichbar",
+				Detail:      "Der Dex-Tunnel ist nicht aktiv — Logins über moin.schule funktionieren nicht.",
+				Action:      "/tunnel",
+				ActionLabel: "Tunnel prüfen",
+			})
+		}
+	}
+
+	// 2) Pro installierter App: Health (läuft?), Tunnel-Status, Update.
+	for id, cs := range st.Containers {
+		data.AppsTotal++
+		running := docker.IsRunning("ls-" + id)
+		if running {
+			data.AppsRunning++
+		}
+		name := cs.Name
+		if name == "" {
+			name = id
 		}
 
-		port := 0
-		if len(cs.Ports) > 0 {
-			port = cs.Ports[0]
+		if !running {
+			if infraName, isInfra := infraDisplayNames[id]; isInfra {
+				data.Issues = append(data.Issues, dashIssue{
+					Level:       "danger",
+					Icon:        "⚠",
+					Title:       infraName + " läuft nicht",
+					Detail:      "Ein Pflicht-Dienst ist gestoppt — abhängige Apps funktionieren ohne ihn nicht.",
+					Action:      "/apps",
+					ActionLabel: "Zu den Apps",
+				})
+			} else {
+				data.Issues = append(data.Issues, dashIssue{
+					Level:       "warning",
+					Icon:        "●",
+					Title:       name + " läuft nicht",
+					Detail:      "Die App ist installiert, aber der Container ist gestoppt.",
+					Action:      "/apps/" + id,
+					ActionLabel: "Öffnen",
+				})
+			}
 		}
 
-		mandatory := cs.ID == "postgres" || cs.ID == "dex"
+		// Tunnel aktiviert, läuft aber nicht (nur echte Apps, keine Infra).
+		if cs.TunnelEnabled && id != "dex" && id != "postgres" && s.tunnelMgr != nil {
+			if status := s.tunnelMgr.Status(id); status != "running" {
+				data.Issues = append(data.Issues, dashIssue{
+					Level:       "warning",
+					Icon:        "●",
+					Title:       "Externer Zugang für " + name + " inaktiv",
+					Detail:      "Der Tunnel ist aktiviert, läuft aber gerade nicht.",
+					Action:      "/tunnel",
+					ActionLabel: "Tunnel prüfen",
+				})
+			}
+		}
 
-		data.Apps = append(data.Apps, appCardData{
-			ID:              cs.ID,
-			Name:            cs.Name,
-			Description:     "", // Would come from cached definition.
-			Category:        "", // Would come from cached definition.
-			Status:          status,
-			Port:            port,
-			Version:         cs.VersionInstalled,
-			TunnelEnabled:   cs.TunnelEnabled,
-			TunnelSubdomain: cs.TunnelSubdomain,
-			IsMandatory:     mandatory,
+		// Update-Verfügbarkeit aus dem gecachten Katalog (lokal, kein Netz).
+		if def, err := catalog.LoadDefinition(id); err == nil {
+			if catalog.HasUpdate(cs.VersionInstalled, def.Version) {
+				data.Updates = append(data.Updates, dashUpdate{
+					ID:       id,
+					Name:     name,
+					From:     cs.VersionInstalled,
+					To:       def.Version,
+					Breaking: def.Breaking,
+				})
+			}
+		}
+	}
+	data.HasApps = data.AppsTotal > 0
+
+	// 3) Letzte Aktivität — flüchtige In-RAM-Jobs (Install/Update/Selfupdate).
+	for _, a := range s.jobs.recent(5) {
+		data.Activity = append(data.Activity, dashActivity{
+			Title: a.Title,
+			State: a.dotState(),
+			Ago:   humanAgo(a.When),
 		})
 	}
 
 	s.render(w, "dashboard.html.tmpl", data)
+}
+
+// humanAgo formatiert einen Zeitpunkt als grobe deutsche Relativzeit.
+func humanAgo(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "gerade eben"
+	case d < time.Hour:
+		return fmt.Sprintf("vor %d Min.", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("vor %d Std.", int(d.Hours()))
+	default:
+		return fmt.Sprintf("vor %d Tg.", int(d.Hours()/24))
+	}
 }

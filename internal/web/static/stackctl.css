@@ -120,3 +120,81 @@
   word-break: break-all;
   user-select: all;
 }
+
+/* ── Dashboard ──────────────────────────────────────────────── */
+.dash-section { margin-block: 1.25rem; }
+
+/* "Alles in Ordnung"-Zustand (keine offenen Punkte) */
+.dash-allgood {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--success);
+  border-radius: var(--radius-medium);
+  background: color-mix(in srgb, var(--success) 7%, transparent);
+}
+.dash-allgood__icon { color: var(--success); font-size: 1.25rem; line-height: 1; }
+
+/* Handlungsbedarf-Liste */
+.issue-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.issue {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-medium);
+}
+.issue--danger  { border-left-color: var(--danger); }
+.issue--warning { border-left-color: var(--warning); }
+.issue__icon { font-size: 1rem; line-height: 1.4; flex-shrink: 0; }
+.issue--danger  .issue__icon { color: var(--danger); }
+.issue--warning .issue__icon { color: var(--warning); }
+.issue__body { flex: 1; min-width: 0; }
+.issue__title { font-weight: var(--font-semibold); }
+.issue__detail { font-size: 0.85rem; color: var(--muted-foreground); margin-top: 0.1rem; }
+.issue__action { flex-shrink: 0; align-self: center; }
+
+/* Kennzahlen-Raster */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Große Kennzahl (Apps X von Y) */
+.dash-stat { display: flex; align-items: baseline; gap: 0.5rem; }
+.dash-stat__num {
+  font-size: 2rem; font-weight: var(--font-bold);
+  letter-spacing: -0.02em; line-height: 1;
+}
+.dash-stat__unit { color: var(--muted-foreground); font-size: 0.9rem; }
+
+/* System-Metriken (RAM/Platte/Last) */
+.dash-metric { margin-block-end: 0.7rem; }
+.dash-metric:last-child { margin-block-end: 0; }
+.dash-metric__top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 0.75rem; font-size: 0.9rem;
+}
+.dash-metric__val { color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.8rem; }
+.dash-meter {
+  background: var(--muted); border-radius: 0.4rem;
+  height: 0.55rem; overflow: hidden; margin-top: 0.3rem;
+}
+.dash-meter > span { display: block; height: 100%; border-radius: 0.4rem; }
+.dash-meter > span.ok   { background: var(--success); }
+.dash-meter > span.warn { background: var(--warning); }
+.dash-meter > span.crit { background: var(--danger); }
+
+/* Kompakte Listen (Updates, Aktivität) */
+.dash-list { list-style: none; padding: 0; margin: 0; }
+.dash-list li {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.5rem 0; font-size: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.dash-list li:last-child { border-bottom: none; }
+.dash-list .grow { flex: 1; min-width: 0; }
+.dash-empty { color: var(--muted-foreground); font-size: 0.9rem; }
