@@ -20,8 +20,6 @@ type settingsData struct {
 	SchoolSlug   string
 	ServerDomain string
 	ContactEmail string
-	LLMEndpoint  string
-	LLMAPIKey    string
 	DexAuthURL   string
 	AutoUpdate   bool
 	Error        string
@@ -58,8 +56,6 @@ func (s *Server) settingsData(msg, errMsg string) settingsData {
 		SchoolSlug:     s.cfg.School.Slug,
 		ServerDomain:   s.cfg.School.ServerDomain,
 		ContactEmail:   s.cfg.School.ContactEmail,
-		LLMEndpoint:    s.cfg.GlobalEnv["LLM_ENDPOINT"],
-		LLMAPIKey:      s.cfg.GlobalEnv["LLM_API_KEY"],
 		DexAuthURL:     s.cfg.Dex.AuthURL,
 		AutoUpdate:     s.cfg.AutoUpdate.Enabled,
 		Message:        msg,
@@ -123,8 +119,6 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 	schoolName := r.FormValue("school_name")
 	serverDomain := r.FormValue("server_domain")
 	contactEmail := r.FormValue("contact_email")
-	llmEndpoint := r.FormValue("llm_endpoint")
-	llmAPIKey := r.FormValue("llm_api_key")
 	password := r.FormValue("password")
 	passwordConfirm := r.FormValue("password_confirm")
 
@@ -155,11 +149,6 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 	s.cfg.School.Name = schoolName
 	s.cfg.School.ServerDomain = serverDomain
 	s.cfg.School.ContactEmail = contactEmail
-	if s.cfg.GlobalEnv == nil {
-		s.cfg.GlobalEnv = map[string]string{}
-	}
-	s.cfg.GlobalEnv["LLM_ENDPOINT"] = llmEndpoint
-	s.cfg.GlobalEnv["LLM_API_KEY"] = llmAPIKey
 	s.cfg.AutoUpdate.Enabled = r.FormValue("auto_update") == "on"
 
 	if err := s.cfg.Save(); err != nil {
@@ -174,12 +163,6 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 		env = envfile.New()
 	}
 	envfile.ApplySystemEnv(env, s.cfg, newPassword)
-	if llmEndpoint != "" {
-		env.Set(envfile.GlobalSection, "LLM_ENDPOINT", llmEndpoint)
-	}
-	if llmAPIKey != "" {
-		env.Set(envfile.GlobalSection, "LLM_API_KEY", llmAPIKey)
-	}
 	if err := env.Save(paths.EnvFile()); err != nil {
 		log.Printf("web: save env from settings: %v", err)
 	}

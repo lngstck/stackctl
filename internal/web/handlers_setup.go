@@ -24,8 +24,6 @@ type setupData struct {
 	SchoolSlug   string
 	ServerDomain string
 	ContactEmail string
-	LLMEndpoint  string
-	LLMAPIKey    string
 	Error        string
 }
 
@@ -37,7 +35,6 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 
 	data := setupData{
 		ServerDomain: detectLANIP(),
-		LLMEndpoint:  "https://llm.learningstack.online/v1",
 	}
 	s.render(w, "setup.html.tmpl", data)
 }
@@ -59,16 +56,12 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	contactEmail := r.FormValue("contact_email")
 	password := r.FormValue("password")
 	passwordConfirm := r.FormValue("password_confirm")
-	llmEndpoint := r.FormValue("llm_endpoint")
-	llmAPIKey := r.FormValue("llm_api_key")
 
 	data := setupData{
 		SchoolName:   schoolName,
 		SchoolSlug:   schoolSlug,
 		ServerDomain: serverDomain,
 		ContactEmail: contactEmail,
-		LLMEndpoint:  llmEndpoint,
-		LLMAPIKey:    llmAPIKey,
 	}
 
 	// Validation.
@@ -118,8 +111,6 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Admin.PasswordHash = hash
 	s.cfg.Dex.ClientID = schoolSlug
 	s.cfg.Dex.AuthURL = "https://auth." + schoolSlug + ".learningstack.online"
-	s.cfg.GlobalEnv["LLM_ENDPOINT"] = llmEndpoint
-	s.cfg.GlobalEnv["LLM_API_KEY"] = llmAPIKey
 
 	// Generate Dex client secret.
 	dexSecret, err := secrets.RandomHex(20)
