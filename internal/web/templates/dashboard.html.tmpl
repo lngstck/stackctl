@@ -5,48 +5,111 @@
 
 <h2 class="mb-2">Dashboard</h2>
 
-{{if not .Apps}}
+{{if not .HasApps}}
 <div role="alert">
   Noch keine Apps installiert. <a href="/apps">Zum App-Katalog</a>
 </div>
 {{else}}
-<div class="app-grid">
-  {{range .Apps}}
-  <article class="card app-card">
-    <div class="card-header">
-      <span class="status-dot {{.Status}}"></span>
-      <strong>{{.Name}}</strong>
-      {{if .Category}}<span class="badge" style="margin-left:auto">{{.Category}}</span>{{end}}
+
+{{/* ── Handlungsbedarf ─────────────────────────────────────────── */}}
+<section class="dash-section">
+  {{if .Issues}}
+  <h3 class="mb-2">Handlungsbedarf</h3>
+  <div class="issue-list">
+    {{range .Issues}}
+    <div class="issue issue--{{.Level}}">
+      <span class="issue__icon" aria-hidden="true">{{.Icon}}</span>
+      <div class="issue__body">
+        <div class="issue__title">{{.Title}}</div>
+        <div class="issue__detail">{{.Detail}}</div>
+      </div>
+      {{if .Action}}<a class="button ghost small issue__action" href="{{.Action}}">{{.ActionLabel}}</a>{{end}}
     </div>
-    <p class="sub card-desc">{{.Description}}</p>
-    <div class="card-meta">
-      <div class="sub" style="font-size:0.8rem;">Port {{.Port}} · v{{.Version}}</div>
-      {{if .TunnelEnabled}}
-      <span class="tunnel-url" style="margin-top:0.35rem;display:inline-block;">{{.TunnelSubdomain}}</span>
-      {{end}}
+    {{end}}
+  </div>
+  {{else}}
+  <div class="dash-allgood">
+    <span class="dash-allgood__icon" aria-hidden="true">✓</span>
+    <div>
+      <strong>Alles in Ordnung.</strong>
+      <span class="sub"> Alle Dienste laufen und es liegen keine Warnungen vor.</span>
     </div>
-    <div class="card-footer">
-      {{if .IsMandatory}}
-        {{if .TunnelEnabled}}
-        <span class="sub" style="font-size:0.8rem;">Pflicht-Container</span>
-        {{end}}
-      {{else}}
-        <a href="/apps/{{.ID}}" class="button small">Details</a>
-        {{if eq .Status "running"}}
-        <form method="post" action="/apps/{{.ID}}/stop" style="display:inline">
-        {{csrfField $.CSRFToken}}
-          <button class="ghost small" data-variant="danger">Stop</button>
-        </form>
-        {{else}}
-        <form method="post" action="/apps/{{.ID}}/start" style="display:inline">
-        {{csrfField $.CSRFToken}}
-          <button class="ghost small">Start</button>
-        </form>
-        {{end}}
-      {{end}}
+  </div>
+  {{end}}
+</section>
+
+{{/* ── Kennzahlen: Apps · Updates · System · Aktivität ──────────── */}}
+<div class="dash-grid">
+
+  <article class="card">
+    <div class="card-head">
+      <span class="card-title">Apps</span>
+      <a class="sub" href="/apps">Alle ansehen →</a>
+    </div>
+    <div class="dash-stat">
+      <span class="dash-stat__num">{{.AppsRunning}}</span>
+      <span class="dash-stat__unit">von {{.AppsTotal}} laufen</span>
     </div>
   </article>
+
+  <article class="card">
+    <div class="card-head"><span class="card-title">Aktualisierungen</span></div>
+    {{if .Updates}}
+    <ul class="dash-list">
+      {{range .Updates}}
+      <li>
+        <span class="grow">
+          <strong>{{.Name}}</strong>
+          <span class="sub">{{.From}} → {{.To}}</span>
+          {{if .Breaking}}<span class="badge" data-variant="warning">Breaking</span>{{end}}
+        </span>
+        <a class="button ghost small" href="/apps/{{.ID}}">Details</a>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="dash-empty">Alle Apps sind aktuell.</p>
+    {{end}}
+  </article>
+
+  <article class="card">
+    <div class="card-head"><span class="card-title">System</span></div>
+    {{if .Sys.Available}}
+      {{if .Sys.RAMOK}}
+      <div class="dash-metric">
+        <div class="dash-metric__top"><span>Arbeitsspeicher</span><span class="dash-metric__val">{{.Sys.RAMUsed}} / {{.Sys.RAMTotal}}</span></div>
+        <div class="dash-meter"><span class="{{.Sys.RAMLevel}}" style="width:{{.Sys.RAMPercent}}%"></span></div>
+      </div>
+      {{end}}
+      {{if .Sys.DiskOK}}
+      <div class="dash-metric">
+        <div class="dash-metric__top"><span>Speicherplatz</span><span class="dash-metric__val">{{.Sys.DiskUsed}} / {{.Sys.DiskTotal}}</span></div>
+        <div class="dash-meter"><span class="{{.Sys.DiskLevel}}" style="width:{{.Sys.DiskPercent}}%"></span></div>
+      </div>
+      {{end}}
+      {{if .Sys.LoadOK}}
+      <div class="dash-metric__top"><span>Last (1 min)</span><span class="dash-metric__val">{{.Sys.Load1}}{{if .Sys.CPUCount}} · {{.Sys.CPUCount}} CPU{{end}}</span></div>
+      {{end}}
+    {{else}}
+    <p class="dash-empty">Systeminformationen sind auf dieser Plattform nicht verfügbar.</p>
+    {{end}}
+  </article>
+
+  {{if .Activity}}
+  <article class="card">
+    <div class="card-head"><span class="card-title">Letzte Aktivität</span></div>
+    <ul class="dash-list">
+      {{range .Activity}}
+      <li>
+        <span class="status-dot status-dot--{{.State}}"></span>
+        <span class="grow">{{.Title}}</span>
+        <span class="sub">{{.Ago}}</span>
+      </li>
+      {{end}}
+    </ul>
+  </article>
   {{end}}
+
 </div>
 {{end}}
 

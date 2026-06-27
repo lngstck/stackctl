@@ -161,7 +161,7 @@
       {{end}}
     </article>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;" class="mt-2">
+    <div class="mt-2">
       <article class="card">
         <h4 class="mb-1">stackctl</h4>
         <table style="width:100%;" class="mb-2">
@@ -198,18 +198,6 @@
         {{else if not .CheckError}}
           <p class="sub" style="font-size:0.85rem;">stackctl ist aktuell.</p>
         {{end}}
-      </article>
-
-      <article class="card">
-        <h4 class="mb-1">App-Katalog</h4>
-        <p class="sub mb-2" style="font-size:0.85rem;">
-          Katalog von <code>{{.SchoolSlug}}</code> synchronisieren, um neue Apps und Updates zu sehen.
-        </p>
-        <form method="POST" action="/system/catalog/sync"
-              data-loading-msg="Synchronisiere…">
-        {{csrfField $.CSRFToken}}
-          <button type="submit" class="small">Katalog synchronisieren</button>
-        </form>
       </article>
     </div>
   </div>
