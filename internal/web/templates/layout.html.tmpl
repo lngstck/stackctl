@@ -5,7 +5,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>stackctl</title>
+  <!-- Farbschema VOR dem CSS anwenden (kein Flash bei erzwungenem Hell/Dunkel). -->
+  <script src="/static/js/theme.js"></script>
+  <!-- Designsprache „Indigo" — Reihenfolge ist entscheidend:
+       Fonts → oat (Framework) → theme (Token-Overrides) → components → stackctl. -->
+  <link rel="stylesheet" href="/static/theme/fonts.css">
   <link rel="stylesheet" href="/static/oat.min.css">
+  <link rel="stylesheet" href="/static/theme/theme.css">
+  <link rel="stylesheet" href="/static/theme/components.css">
   <link rel="stylesheet" href="/static/stackctl.css">
 </head>
 <body>
@@ -88,8 +95,12 @@ document.addEventListener('submit', function(ev) {
 {{define "sidebar-layout-start"}}
 <div data-sidebar-layout>
   <aside data-sidebar>
-    <div style="padding: 0.5rem 1rem 0.5rem;">
-      <span class="wordmark">learningstack</span>
+    <div style="padding: 0.85rem 1rem 0.5rem;">
+      <a href="/" class="wordmark">
+        <span class="wordmark__mark"></span>
+        <span class="wordmark__name">learningstack</span>
+        <span class="wordmark__app">stackctl</span>
+      </a>
     </div>
     <nav>
       <ul class="unstyled">
@@ -108,6 +119,10 @@ document.addEventListener('submit', function(ev) {
       <button data-sidebar-toggle aria-label="Menue" class="ghost">&#9776;</button>
       <div class="hstack gap-2">
         <span class="school-name">{{.SchoolName}}</span>
+        <button id="theme-toggle" type="button" class="ghost theme-toggle"
+                title="Farbschema wechseln" aria-label="Farbschema wechseln">
+          <span class="theme-toggle__icon" aria-hidden="true">◐</span>
+        </button>
         <ot-dropdown>
           <button class="ghost" popovertarget="user-menu">Admin &#x25BE;</button>
           <div popover="auto" id="user-menu">

@@ -1,0 +1,22 @@
+/* ============================================================
+   learningstack — selbst gehostete Schriften (kein CDN!)
+   Variable-Fonts (latin), vor theme.css laden, damit
+   --font-sans / --font-mono greifen. Fallback: system-ui /
+   ui-monospace (siehe theme.css).
+   ============================================================ */
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/static/vendor/fonts/SpaceGrotesk-Variable.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/static/vendor/fonts/JetBrainsMono-Variable.woff2") format("woff2");
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}

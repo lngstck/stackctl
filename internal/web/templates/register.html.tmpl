@@ -3,7 +3,11 @@
 
 <div class="centered-box">
   <h1 class="mb-2" style="text-align:center;">
-    <span class="wordmark">learningstack</span>
+    <span class="wordmark wordmark--lg">
+      <span class="wordmark__mark"></span>
+      <span class="wordmark__name">learningstack</span>
+      <span class="wordmark__app">stackctl</span>
+    </span>
   </h1>
 
   <article class="card">
@@ -27,7 +31,7 @@
     <details class="mb-2">
       <summary class="sub" style="font-size:0.85rem;cursor:pointer;">Registrierungsblock anzeigen / kopieren</summary>
       <div style="position:relative;margin-top:0.5rem;">
-        <pre id="age-block" style="background:var(--surface-2);padding:1rem;border-radius:0.5rem;font-size:0.75rem;overflow-x:auto;white-space:pre;user-select:all;">{{.AgeBlock}}</pre>
+        <pre id="age-block" style="background:var(--faint);padding:1rem;border-radius:0.5rem;font-size:0.75rem;overflow-x:auto;white-space:pre;user-select:all;">{{.AgeBlock}}</pre>
         <button type="button" class="ghost small" id="copy-btn"
           style="position:absolute;top:0.5rem;right:0.5rem;font-size:0.75rem;">
           Kopieren
