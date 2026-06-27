@@ -59,18 +59,6 @@
           <input type="password" name="password_confirm" minlength="8" autocomplete="new-password">
         </label>
 
-        <h3 class="mb-2">KI-Einstellungen <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>
-
-        <label data-field class="mb-1">
-          LLM-Endpunkt
-          <input type="text" name="llm_endpoint" value="{{.LLMEndpoint}}" placeholder="OpenAI-kompatibler Endpunkt">
-        </label>
-
-        <label data-field class="mb-2">
-          LLM-API-Key
-          <input type="password" name="llm_api_key" value="{{.LLMAPIKey}}" placeholder="sk-...">
-        </label>
-
         <h3 class="mb-2">Automatische Updates</h3>
         <label data-field class="mb-2">
           <input type="checkbox" name="auto_update" {{if .AutoUpdate}}checked{{end}}>
