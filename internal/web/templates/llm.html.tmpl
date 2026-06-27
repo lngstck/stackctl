@@ -34,7 +34,7 @@
   <strong>Neuer API-Key fuer „{{.NewKeyID}}“ erstellt.</strong><br>
   <span class="sub">Dieser Klartext wird nur EINMAL angezeigt. Jetzt kopieren und sicher speichern — er kann nachher nicht wieder eingesehen werden.</span>
   <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem;">
-    <code style="flex:1;padding:0.4rem 0.6rem;background:#f5f5f5;border-radius:4px;word-break:break-all;font-size:0.9rem;">{{.NewKey}}</code>
+    <code style="flex:1;padding:0.4rem 0.6rem;background:var(--faint);border-radius:4px;word-break:break-all;font-size:0.9rem;">{{.NewKey}}</code>
     {{template "copy-btn" .NewKey}}
   </div>
 </div>
@@ -59,7 +59,7 @@
       {{if .Providers}}
       <table style="width:100%;border-collapse:collapse;" class="mb-2">
         <thead>
-          <tr style="text-align:left;border-bottom:1px solid #ddd;">
+          <tr style="text-align:left;border-bottom:1px solid var(--border);">
             <th style="padding:0.4rem;">ID</th>
             <th style="padding:0.4rem;">Kind</th>
             <th style="padding:0.4rem;">Base-URL</th>
@@ -69,7 +69,7 @@
         </thead>
         <tbody>
         {{range .Providers}}
-          <tr style="border-bottom:1px solid #eee;">
+          <tr style="border-bottom:1px solid var(--border);">
             <td style="padding:0.4rem;"><code>{{.ID}}</code></td>
             <td style="padding:0.4rem;">{{.Kind}}</td>
             <td style="padding:0.4rem;"><code>{{.BaseURL}}</code></td>
@@ -153,7 +153,7 @@
             <col style="width:32%;">
           </colgroup>
           <thead>
-            <tr style="text-align:left;border-bottom:1px solid #ddd;">
+            <tr style="text-align:left;border-bottom:1px solid var(--border);">
               <th style="padding:0.4rem;">ID</th>
               <th style="padding:0.4rem;">Provider</th>
               <th style="padding:0.4rem;">Upstream-Modell</th>
@@ -164,13 +164,13 @@
           </thead>
           <tbody>
           {{range .Personas}}
-            <tr style="border-bottom:1px solid #eee;vertical-align:top;">
+            <tr style="border-bottom:1px solid var(--border);vertical-align:top;">
               <td style="padding:0.4rem;word-break:break-word;"><code>{{.ID}}</code></td>
               <td style="padding:0.4rem;word-break:break-word;">{{if .Provider}}<code>{{.Provider}}</code>{{else}}<span class="sub">—</span>{{end}}</td>
               <td style="padding:0.4rem;word-break:break-word;">{{if .UpstreamID}}<code>{{.UpstreamID}}</code>{{else}}<span class="sub">—</span>{{end}}</td>
               <td style="padding:0.4rem;">{{if .Prompt}}<span class="sub">{{len .Prompt}} Zeichen</span>{{else}}<span class="sub">passthrough</span>{{end}}</td>
               <td style="padding:0.4rem;">
-                {{if and .Provider .UpstreamID}}<span style="color:green;">aktiv</span>{{else}}<span style="color:var(--danger);">inaktiv</span>{{end}}
+                {{if and .Provider .UpstreamID}}<span style="color:var(--success);">aktiv</span>{{else}}<span style="color:var(--danger);">inaktiv</span>{{end}}
               </td>
               <td style="padding:0.4rem;">
                 <div class="llm-actions">
@@ -284,7 +284,7 @@
       {{if .APIKeys}}
       <table style="width:100%;border-collapse:collapse;" class="mb-2">
         <thead>
-          <tr style="text-align:left;border-bottom:1px solid #ddd;">
+          <tr style="text-align:left;border-bottom:1px solid var(--border);">
             <th style="padding:0.4rem;">ID</th>
             <th style="padding:0.4rem;">Prefix</th>
             <th style="padding:0.4rem;">Personas</th>
@@ -293,7 +293,7 @@
         </thead>
         <tbody>
         {{range .APIKeys}}
-          <tr style="border-bottom:1px solid #eee;">
+          <tr style="border-bottom:1px solid var(--border);">
             <td style="padding:0.4rem;"><code>{{.ID}}</code></td>
             <td style="padding:0.4rem;"><code>{{.Prefix}}</code></td>
             <td style="padding:0.4rem;">

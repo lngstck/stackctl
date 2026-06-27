@@ -1,22 +1,27 @@
-/* stackctl custom styles – supplements oat.min.css */
+/* stackctl custom styles – Designsprache „Indigo".
+   Lädt NACH oat.min.css + theme.css + components.css. Nutzt durchgängig
+   die Theme-Tokens → Light/Dark automatisch via light-dark(). Wortmarke,
+   Status-Dot-Basis, card-head/kv-row/meter-row kommen aus components.css;
+   hier nur stackctl-spezifische Patterns + Token-Anbindung. */
 
-.sub { color: color-mix(in srgb, var(--foreground) 62%, transparent); }
-.wordmark { font-weight: 700; font-size: 1.6rem; letter-spacing: -0.02em; }
+/* Standard folgt dem OS; theme.js erzwingt bei Bedarf Hell/Dunkel. */
+:root { color-scheme: light dark; }
 
-/* Status dots */
-.status-dot {
-  display: inline-block;
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  margin-right: 0.4rem;
-  vertical-align: middle;
-}
-.status-dot.running  { background: var(--green, #22c55e); }
-.status-dot.stopped  { background: var(--red, #ef4444); }
-.status-dot.starting { background: var(--yellow, #eab308); }
-.status-dot.unknown  { background: color-mix(in srgb, var(--foreground) 30%, transparent); }
+.sub { color: var(--muted-foreground); }
 
-/* App cards grid – subgrid for aligned footers */
+/* ── Status-Dots ──────────────────────────────────────────────
+   Basis (Form, 0.6rem) kommt aus components.css. Hier nur das
+   Mapping der stackctl-Statuswörter auf die Status-Tokens. Ein
+   kleiner Rechtsabstand, weil die Dots im Markup teils ohne
+   Flex-Gap direkt vor Text stehen (z.B. Tunnel-Tabelle). */
+.status-dot { margin-inline-end: 0.4rem; }
+.status-dot.running  { background: var(--success); }
+.status-dot.stopped  { background: var(--danger); }
+.status-dot.starting { background: var(--warning); }
+.status-dot.error    { background: var(--danger); }
+.status-dot.unknown  { background: var(--faint-foreground); }
+
+/* ── App-Karten-Raster – subgrid für bündige Fußzeilen ──────── */
 .app-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -31,9 +36,7 @@
 .app-card .card-header {
   display: flex; align-items: center; gap: 0.5rem;
 }
-.app-card .card-desc {
-  font-size: 0.9rem;
-}
+.app-card .card-desc { font-size: 0.9rem; }
 .app-card .card-meta {
   display: flex;
   flex-direction: column;
@@ -44,64 +47,60 @@
   display: flex; align-items: center; justify-content: flex-end;
   gap: 0.5rem;
   padding-top: 0.75rem;
-  border-top: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-top: 1px solid var(--border);
 }
 
-/* Tunnel URL badge */
+/* ── Tunnel-URL-Badge ───────────────────────────────────────── */
 .tunnel-url {
   font-size: 0.75rem;
-  font-family: monospace;
-  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  font-family: var(--font-mono);
+  background: var(--faint);
+  color: var(--foreground);
   padding: 0.15rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--radius-small);
   word-break: break-all;
 }
 
-/* Buttons: always show outline */
-button.ghost, .button.ghost,
-button[class*="ghost"], a[class*="ghost"] {
-  border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent) !important;
+/* ── Ghost-Buttons: dezente Kante, damit Sekundäraktionen im
+   dichten Admin-UI als Buttons lesbar bleiben (oat lässt ghost
+   randlos). Token-basiert, kein !important nötig. ───────────── */
+:is(button, a.button, input[type=submit]).ghost {
+  border-color: var(--border);
 }
-button.ghost:hover, .button.ghost:hover {
-  border-color: color-mix(in srgb, var(--foreground) 40%, transparent) !important;
-}
-button.small, .button.small, a.button.small {
-  border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
-  border-radius: 6px;
-  padding: 0.25rem 0.75rem;
+:is(button, a.button, input[type=submit]).ghost:hover {
+  border-color: var(--muted-foreground);
 }
 
-/* Topnav */
-.school-name {
-  font-size: 1.05rem;
-  font-weight: 500;
+/* ── Theme-Umschalter (Topnav) ──────────────────────────────── */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.25rem; padding-inline: 0;
+  font-size: 1rem; line-height: 1;
 }
+.theme-toggle__icon { display: inline-block; }
+
+/* ── Topnav ─────────────────────────────────────────────────── */
+.school-name { font-size: 1.05rem; font-weight: var(--font-medium); }
 [data-topnav] {
   display: flex;
   align-items: center;
   gap: 1.5rem;
 }
-[data-topnav] > :last-child {
-  margin-left: auto;
-}
+[data-topnav] > :last-child { margin-left: auto; }
 
-/* Reduce default main padding so topnav isn't too tall */
-[data-sidebar-layout] > main {
-  padding-top: 0;
-}
+/* Default-Padding von main reduzieren, damit die Topnav nicht zu hoch wird. */
+[data-sidebar-layout] > main { padding-top: 0; }
 
-/* Sidebar active */
-[data-sidebar] a[aria-current="page"] {
-  font-weight: 600;
-}
+/* Sidebar: aktiver Eintrag */
+[data-sidebar] a[aria-current="page"] { font-weight: var(--font-semibold); }
 
-/* Centered box (setup, login) */
+/* ── Zentrierte Box (Setup, Login, Register) ────────────────── */
 .centered-box {
   max-width: 480px;
   margin: 3rem auto;
 }
 
-/* Spacing helpers */
+/* ── Abstandshilfen ─────────────────────────────────────────── */
 .mb-1 { margin-bottom: 0.5rem; }
 .mb-2 { margin-bottom: 1rem; }
 .mb-3 { margin-bottom: 1.5rem; }
@@ -110,13 +109,14 @@ button.small, .button.small, a.button.small {
 .gap-1 { gap: 0.5rem; }
 .gap-2 { gap: 1rem; }
 
-/* Key display (tunnel settings) */
+/* ── Key-Anzeige (Tunnel-Einstellungen, Registrierung) ──────── */
 .key-display {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
-  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  background: var(--faint);
+  color: var(--foreground);
   padding: 0.75rem 1rem;
-  border-radius: 6px;
+  border-radius: var(--radius-medium);
   word-break: break-all;
   user-select: all;
 }

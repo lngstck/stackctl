@@ -1,0 +1,87 @@
+/* ============================================================
+   learningstack — Theme „Indigo" (Richtung 2)
+   Dünne Override-Schicht ÜBER oat. Reihenfolge im <head>:
+     1. oat.min.css
+     2. theme.css        ← diese Datei (überschreibt Tokens)
+     3. components.css    ← semantische Ergänzungen
+   Schrift Space Grotesk / JetBrains Mono müssen geladen sein
+   (in Produktion self-hosted per @font-face, kein CDN).
+   Alle Farben als light-dark(hell, dunkel) → Dark Mode automatisch.
+   ============================================================ */
+
+:root {
+  /* ── Marke ─────────────────────────────────────────────── */
+  --primary:              light-dark(#4348cf, #6d72ff);  /* Indigo */
+  --primary-foreground:   light-dark(#ffffff, #0e0f14);
+  --ring:                 light-dark(#4348cf, #6d72ff);
+
+  /* ── Flächen & Text ────────────────────────────────────── */
+  --background:           light-dark(#fbfbfd, #0e0f14);
+  --foreground:           light-dark(#15161c, #eef0f6);
+  --card:                 light-dark(#ffffff, #16181f);
+  --card-foreground:      light-dark(#15161c, #eef0f6);
+  --muted:                light-dark(#f1f2f7, #1d1f28);
+  --muted-foreground:     light-dark(#62656f, #969aa8);
+  --secondary:            light-dark(#eceef5, #20232d);
+  --secondary-foreground: light-dark(#2f3340, #d3d6e0);
+  --accent:               light-dark(#eceef6, #232631);  /* Hover-Fläche (ghost/menu) */
+  --faint:                light-dark(#f5f6fb, #14161d);   /* code/pre Hintergrund */
+  --faint-foreground:     light-dark(#9498a4, #6b6f7c);
+
+  /* ── Rahmen & Felder ───────────────────────────────────── */
+  --border:               light-dark(#e1e3ec, #2a2d38);
+  --input:                light-dark(#d6d9e4, #2f3340);
+
+  /* ── Status: success / warning / danger / info ─────────── */
+  --success:              light-dark(#1f9a60, #45c489);
+  --success-foreground:   light-dark(#ffffff, #0e0f14);
+  --warning:              light-dark(#b07d12, #e3b03f);
+  --warning-foreground:   #0e0f14;
+  --danger:               light-dark(#d84640, #f0706a);
+  --danger-foreground:    light-dark(#ffffff, #0e0f14);
+  --info:                 light-dark(#2f6fe0, #5fa0ef);   /* NEU — fehlt in oat */
+  --info-foreground:      light-dark(#ffffff, #0e0f14);
+
+  /* ── Typografie ────────────────────────────────────────── */
+  --font-sans: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+
+  /* ── Form / Ecken (präzise, technisch) ─────────────────── */
+  --radius-small:  .1875rem;  /* 3px  — Badges intern, Checkbox */
+  --radius-medium: .3125rem;  /* 5px  — Buttons, Inputs, Cards  */
+  --radius-large:  .5rem;     /* 8px  — Dialog                  */
+
+  /* ── Editor / Terminal (pylearn IDE) ───────────────────── */
+  --editor-bg:        light-dark(#fbfbfd, #0b0c11);
+  --editor-fg:        light-dark(#15161c, #d7dae6);
+  --editor-gutter:    light-dark(#9498a4, #4a4f5e);
+  --editor-line:      light-dark(#eef0f7, #14161d);   /* Gutter-/aktive Zeile */
+  --syntax-keyword:   light-dark(#4348cf, #8f93ff);
+  --syntax-func:      light-dark(#2f6fe0, #6fb6ff);
+  --syntax-string:    light-dark(#1f9a60, #5fc9a0);
+  --syntax-number:    light-dark(#b07d12, #e3b03f);
+  --syntax-comment:   light-dark(#9498a4, #6b6f7c);
+  --terminal-bg:      light-dark(#15161c, #07080b);
+  --terminal-fg:      light-dark(#eef0f6, #d7dae6);
+}
+
+/* ── Buttons: flache, präzise Kante statt oats 3D-Bevel ──── */
+:is(button, [type=submit], [type=reset], [type=button], a.button):not(.outline):not(.ghost) {
+  border-color: transparent;
+}
+
+/* ── info-Variante für Alert & Badge (oat kennt sie nicht) ─ */
+[role=alert][data-variant=info] {
+  color: var(--info);
+  background-color: light-dark(
+    color-mix(in srgb, var(--info) 8%, transparent),
+    color-mix(in srgb, var(--info) 20%, transparent));
+}
+[role=alert][data-variant=info] a { color: var(--info); }
+
+.badge[data-variant=info] {
+  color: var(--info);
+  background-color: light-dark(
+    color-mix(in srgb, var(--info) 10%, transparent),
+    color-mix(in srgb, var(--info) 30%, transparent));
+}

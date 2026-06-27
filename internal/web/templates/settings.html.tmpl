@@ -134,16 +134,16 @@
       /* --muted is oat's surface colour (near-white in light mode); the
          readable secondary-text colour is --muted-foreground. Use the same
          foreground-mix as .sub so the values stay legible in both themes. */
-      .sysmeter { background:var(--muted,#e8e8e8); border-radius:0.4rem; height:0.7rem; overflow:hidden; }
+      .sysmeter { background:var(--muted); border-radius:0.4rem; height:0.7rem; overflow:hidden; }
       .sysmeter > span { display:block; height:100%; border-radius:0.4rem; transition:width .3s ease; }
-      .sysmeter > span.ok { background:var(--ok,#2e7d32); }
-      .sysmeter > span.warn { background:#c8860b; }
-      .sysmeter > span.crit { background:var(--danger,#c62828); }
+      .sysmeter > span.ok { background:var(--success); }
+      .sysmeter > span.warn { background:var(--warning); }
+      .sysmeter > span.crit { background:var(--danger); }
       .sysrow { margin-bottom:1rem; }
       .sysrow:last-child { margin-bottom:0; }
       .sysrow .lbl { display:flex; justify-content:space-between; align-items:baseline; font-size:0.92rem; margin-bottom:0.3rem; }
-      .sysrow .lbl .val { font-variant-numeric:tabular-nums; color:color-mix(in srgb, var(--foreground) 62%, transparent); font-size:0.85rem; }
-      .sysrow .free { font-size:0.8rem; color:color-mix(in srgb, var(--foreground) 62%, transparent); margin-top:0.25rem; }
+      .sysrow .lbl .val { font-variant-numeric:tabular-nums; color:var(--muted-foreground); font-size:0.85rem; }
+      .sysrow .free { font-size:0.8rem; color:var(--muted-foreground); margin-top:0.25rem; }
     </style>
 
     <article class="card mt-2">

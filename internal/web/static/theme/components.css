@@ -1,0 +1,190 @@
+/* ============================================================
+   learningstack — Komponenten-Erweiterungen
+   Semantische Klassen für Patterns, die oat NICHT abdeckt.
+   Nach oat.min.css + theme.css laden. Nutzt ausschließlich
+   die Theme-Tokens → Light/Dark automatisch.
+   ============================================================ */
+
+/* ── Wortmarke ──────────────────────────────────────────────
+   <a class="wordmark"><span class="wordmark__mark"></span>
+     <span class="wordmark__name">learningstack</span>
+     <span class="wordmark__app">PyLearn</span></a>                */
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  font-family: var(--font-sans);
+  font-weight: var(--font-bold);
+  letter-spacing: -.02em;
+  line-height: 1;
+  color: var(--foreground);
+  text-decoration: none;
+}
+.wordmark__mark {
+  width: 1.05em; height: 1.05em;
+  border-radius: var(--radius-small);
+  background: var(--primary);
+  flex-shrink: 0;
+}
+.wordmark__name { font-size: 1.15rem; }
+.wordmark__app {
+  font-weight: var(--font-medium);
+  letter-spacing: 0;
+  color: var(--muted-foreground);
+}
+.wordmark--lg .wordmark__name { font-size: 2rem; }
+.wordmark--lg .wordmark__app  { font-size: 1.1rem; }
+
+/* ── Status-Dot ─────────────────────────────────────────────
+   <span class="status-label"><span class="status-dot status-dot--ok"></span> Läuft</span> */
+.status-dot {
+  display: inline-block;
+  width: .6rem; height: .6rem;
+  border-radius: var(--radius-full);
+  background: var(--muted-foreground);
+  flex-shrink: 0;
+}
+.status-dot--ok     { background: var(--success); }
+.status-dot--warn   { background: var(--warning); }
+.status-dot--danger { background: var(--danger); }
+.status-dot--off    { background: var(--faint-foreground); }
+.status-label {
+  display: inline-flex; align-items: center; gap: .5rem;
+  font-size: var(--text-7);
+}
+
+/* ── Card-Kopf / -Fuß (Apps-Übersicht) ─────────────────────
+   Ergänzt oats .card mit Titelzeile + Fußzeile.                */
+.card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); margin-block-end: var(--space-3);
+}
+.card-title {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-weight: var(--font-semibold); font-size: var(--text-5);
+}
+.card-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); margin-block-start: var(--space-5);
+}
+
+/* ── Meter-Zeile (System-Auslastung in stackctl) ───────────
+   <div class="meter-row">
+     <div class="meter-row__top"><span class="meter-row__label">Arbeitsspeicher</span>
+       <span class="meter-row__val">1.4 / 15.4 GiB · 9%</span></div>
+     <meter ...></meter></div>                                  */
+.meter-row { margin-block-end: var(--space-5); }
+.meter-row:last-child { margin-block-end: 0; }
+.meter-row__top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: var(--space-3); margin-block-end: var(--space-2);
+}
+.meter-row__label { font-weight: var(--font-medium); font-size: var(--text-7); }
+.meter-row__val {
+  font-size: var(--text-8); color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+.meter-row__note {
+  font-size: var(--text-8); color: var(--muted-foreground);
+  margin-block-start: var(--space-1);
+}
+
+/* ── Key/Value-Zeile (Versions-/Detaillisten) ─────────────── */
+.kv-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); padding-block: var(--space-3);
+  border-bottom: 1px solid var(--border); font-size: var(--text-7);
+}
+.kv-row:last-child { border-bottom: none; }
+.kv-row__key { color: var(--muted-foreground); }
+.kv-row__val { font-weight: var(--font-medium); }
+
+/* ── IDE-Layout (pylearn) ───────────────────────────────────
+   Editor links (oben) · Terminal links (unten) · Panel rechts.
+   <div class="ide"><div class="ide__editor">…</div>
+     <div class="ide__term">…</div><div class="ide__side">…</div></div> */
+.ide {
+  display: grid;
+  grid-template-columns: 1fr 20rem;
+  grid-template-rows: 1fr 9rem;
+  gap: var(--space-3);
+  min-height: 28rem;
+}
+.ide__editor {
+  grid-column: 1; grid-row: 1;
+  display: flex; flex-direction: column;
+  background: var(--editor-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  overflow: hidden;
+}
+.ide__term {
+  grid-column: 1; grid-row: 2;
+  overflow: hidden;
+}
+.ide__side {
+  grid-column: 2; grid-row: 1 / 3;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  padding: var(--space-5);
+  overflow: auto;
+}
+@media (max-width: 768px) {
+  .ide { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; }
+  .ide__side { grid-column: 1; grid-row: auto; }
+  .ide__editor, .ide__term { grid-column: 1; }
+}
+
+/* Editor-Innenleben */
+.editor-toolbar {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+.editor-surface {
+  flex: 1; display: flex;
+  font-family: var(--font-mono); font-size: var(--text-7);
+  line-height: 1.65; color: var(--editor-fg); overflow: auto;
+}
+.editor-gutter {
+  padding: var(--space-3) var(--space-2);
+  text-align: right; color: var(--editor-gutter);
+  background: var(--editor-line); user-select: none;
+  white-space: pre;
+}
+.editor-code { padding: var(--space-3) var(--space-4); white-space: pre; flex: 1; }
+.tok-kw  { color: var(--syntax-keyword); }
+.tok-fn  { color: var(--syntax-func); }
+.tok-str { color: var(--syntax-string); }
+.tok-num { color: var(--syntax-number); }
+.tok-cm  { color: var(--syntax-comment); }
+
+/* Terminal */
+.terminal {
+  height: 100%;
+  background: var(--terminal-bg); color: var(--terminal-fg);
+  font-family: var(--font-mono); font-size: var(--text-7);
+  line-height: 1.6;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-medium);
+  overflow: auto; white-space: pre-wrap;
+}
+.terminal__prompt { color: var(--success); }
+
+/* ── Swatch-Raster (nur für den Styleguide selbst) ────────── */
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--space-3);
+}
+.swatch {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  overflow: hidden;
+}
+.swatch__block { height: 3.25rem; }
+.swatch__info { padding: var(--space-2) var(--space-3); background: var(--card); }
+.swatch__name { font-size: var(--text-8); font-weight: var(--font-medium); }
+.swatch__var  { font-size: .7rem; color: var(--muted-foreground); font-family: var(--font-mono); }

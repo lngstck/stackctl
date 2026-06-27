@@ -6,15 +6,15 @@
   .job-steps { list-style:none; padding:0; margin:0 0 1rem; }
   .job-steps li { display:flex; align-items:center; gap:0.6rem; padding:0.35rem 0; font-size:0.95rem; }
   .job-ic { width:1.3rem; text-align:center; flex:0 0 auto; }
-  .job-ic.done { color:var(--ok, #2e7d32); }
-  .job-ic.failed { color:var(--danger, #c62828); }
-  .job-ic.pending { color:var(--muted, #999); }
-  .job-ic.running { color:var(--primary, #555); display:inline-block; animation:jobspin 1s linear infinite; }
+  .job-ic.done { color:var(--success); }
+  .job-ic.failed { color:var(--danger); }
+  .job-ic.pending { color:var(--muted-foreground); }
+  .job-ic.running { color:var(--primary); display:inline-block; animation:jobspin 1s linear infinite; }
   @keyframes jobspin { to { transform:rotate(360deg); } }
-  .job-step.pending { color:var(--muted, #999); }
-  .job-elapsed { color:var(--muted,#777); font-variant-numeric:tabular-nums; }
+  .job-step.pending { color:var(--muted-foreground); }
+  .job-elapsed { color:var(--muted-foreground); font-variant-numeric:tabular-nums; }
   .job-log { margin:0.5rem 0 1rem; }
-  .job-log pre { max-height:18rem; overflow:auto; background:#1113; padding:0.6rem 0.8rem; border-radius:0.4rem; font-size:0.8rem; line-height:1.35; white-space:pre-wrap; word-break:break-all; }
+  .job-log pre { max-height:18rem; overflow:auto; background:var(--faint); padding:0.6rem 0.8rem; border-radius:var(--radius-medium); font-size:0.8rem; line-height:1.35; white-space:pre-wrap; word-break:break-all; }
 </style>
 
 <h2 class="mb-1" id="job-title">{{.Job.Title}}</h2>
