@@ -2,8 +2,10 @@ package web
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/lngstck/stackctl/internal/catalog"
@@ -64,7 +66,7 @@ type appDetailData struct {
 	IsMandatory     bool
 	AdminLogin         string
 	AdminPassword      string
-	AdminNotes         string
+	AdminNotes         template.HTML
 	UpdateAvailable    bool
 	UpdateTo           string
 	UpdateBreaking     bool
@@ -100,6 +102,32 @@ func expandAdminPlaceholders(s string, cfg *config.Config, appID string) string 
 		"{app_id}", appID,
 	)
 	return r.Replace(s)
+}
+
+// urlPattern matches http(s)-URLs in admin_info notes. Trailing
+// Satzzeichen bleiben draussen, damit "…/admin." nicht den Punkt mitnimmt.
+var urlPattern = regexp.MustCompile(`https?://[^\s<>"]+`)
+
+// linkifyAdminNotes escapes admin_info notes for HTML and wraps URLs in
+// anchor tags. Everything is escaped first — the only markup in the result
+// is the anchors we build ourselves, so catalog content can't inject HTML.
+func linkifyAdminNotes(s string) template.HTML {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range urlPattern.FindAllStringIndex(s, -1) {
+		b.WriteString(template.HTMLEscapeString(s[last:m[0]]))
+		url := strings.TrimRight(s[m[0]:m[1]], ".,;:!?)")
+		rest := s[m[0]:m[1]][len(url):]
+		esc := template.HTMLEscapeString(url)
+		b.WriteString(`<a href="` + esc + `" target="_blank" rel="noopener">` + esc + `</a>`)
+		b.WriteString(template.HTMLEscapeString(rest))
+		last = m[1]
+	}
+	b.WriteString(template.HTMLEscapeString(s[last:]))
+	return template.HTML(b.String())
 }
 
 // usesAdminPassword reports whether any of the app's environment values
@@ -235,7 +263,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		if def.AdminInfo != nil {
 			data.AdminLogin = expandAdminPlaceholders(def.AdminInfo.Login, s.cfg, appID)
 			data.AdminPassword = expandAdminPlaceholders(def.AdminInfo.PasswordHint, s.cfg, appID)
-			data.AdminNotes = expandAdminPlaceholders(def.AdminInfo.Notes, s.cfg, appID)
+			data.AdminNotes = linkifyAdminNotes(expandAdminPlaceholders(def.AdminInfo.Notes, s.cfg, appID))
 		}
 	}
 
