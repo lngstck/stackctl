@@ -64,7 +64,29 @@ esac
 command -v curl  >/dev/null 2>&1 || die "curl ist nicht installiert. Bitte installieren: apt install curl"
 command -v docker >/dev/null 2>&1 || die "Docker ist nicht installiert. Bitte zuerst Docker installieren: https://docs.docker.com/engine/install/"
 
-info "OS: ${ID:-unknown} | Arch: ${ARCH} (${GOARCH}) | Docker: $(docker --version | head -1)"
+# stackctl ruft durchgehend 'docker compose ...' (v2-Plugin) auf. Das
+# Debian/Ubuntu-Paket 'docker.io' und Snap-Docker bringen das Plugin nicht
+# mit — ohne diesen Check laeuft die Installation durch und scheitert erst
+# beim ersten App-Install mit einer kryptischen Meldung.
+docker compose version >/dev/null 2>&1 || die "Docker-Compose-Plugin fehlt ('docker compose version' schlaegt fehl).
+  stackctl braucht Docker Engine inkl. Compose-Plugin (nicht 'docker.io' oder Snap).
+  Installation: https://docs.docker.com/engine/install/ (docker-ce + docker-compose-plugin)"
+
+# 'docker --version' funktioniert auch ohne laufenden Daemon — erst
+# 'docker info' beweist, dass der Daemon erreichbar ist.
+docker info >/dev/null 2>&1 || die "Docker-Daemon ist nicht erreichbar ('docker info' schlaegt fehl).
+  Starten: systemctl enable --now docker"
+
+info "OS: ${ID:-unknown} | Arch: ${ARCH} (${GOARCH}) | Docker: $(docker --version | head -1) | Compose: $(docker compose version --short 2>/dev/null || echo '?')"
+
+# Port 8090 belegt und stackctl laeuft nicht? Dann wuerde der Service nach
+# der Installation im Crashloop landen. Nur Warnung, kein Abbruch — der
+# Admin soll selbst entscheiden.
+if command -v ss >/dev/null 2>&1 \
+    && ss -tln 2>/dev/null | grep -Eq '[:.]8090[[:space:]]' \
+    && ! systemctl is-active --quiet stackctl 2>/dev/null; then
+    warn "Port 8090 ist bereits belegt (und stackctl laeuft nicht). Der Web-UI-Start wird vermutlich fehlschlagen."
+fi
 
 # --- Create user and group ------------------------------------------------
 if ! id "$USER" &>/dev/null; then
