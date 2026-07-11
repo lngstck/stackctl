@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lngstck/stackctl/internal/catalog"
+	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/docker"
 	"github.com/lngstck/stackctl/internal/tunnel"
 )
@@ -61,12 +62,57 @@ var infraDisplayNames = map[string]string{
 	"dex":      "Anmeldung (Dex)",
 }
 
+// mandatoryAppIDs sind die Pflicht-Dienste in sinnvoller
+// Installations-Reihenfolge (Apps hängen von postgres ab, Logins von dex).
+var mandatoryAppIDs = []string{"postgres", "dex"}
+
+// isMandatoryApp meldet, ob die App ein Pflicht-Dienst ist. Einzige Quelle
+// der Wahrheit dafür ist infraDisplayNames.
+func isMandatoryApp(id string) bool {
+	_, ok := infraDisplayNames[id]
+	return ok
+}
+
+// missingInfraDetails erklärt pro Pflicht-Dienst, warum er installiert werden
+// muss — der Admin auf einem frisch freigeschalteten System kennt weder
+// "postgres" noch "dex".
+var missingInfraDetails = map[string]string{
+	"postgres": "Pflicht-Dienst — fast alle Apps brauchen die Datenbank. Bitte zuerst installieren.",
+	"dex":      "Pflicht-Dienst — ohne ihn funktioniert kein Login über moin.schule.",
+}
+
+// missingInfraIssues liefert Handlungsbedarf-Karten für Pflicht-Dienste, die
+// noch gar nicht installiert sind. Ohne diesen Hinweis landet ein frisch
+// freigeschalteter Admin auf einem leeren Dashboard und erfährt erst beim
+// Installieren einer App von den Abhängigkeiten.
+func missingInfraIssues(st *config.State) []dashIssue {
+	var issues []dashIssue
+	for _, id := range mandatoryAppIDs {
+		if _, installed := st.Containers[id]; installed {
+			continue
+		}
+		issues = append(issues, dashIssue{
+			Level:       "danger",
+			Icon:        "⚠",
+			Title:       infraDisplayNames[id] + " noch nicht installiert",
+			Detail:      missingInfraDetails[id],
+			Action:      "/apps/" + id + "/install",
+			ActionLabel: "Jetzt installieren",
+		})
+	}
+	return issues
+}
+
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	st := s.snapState()
 	data := dashboardData{
 		PageData: s.pageData("dashboard"),
 		Sys:      buildSysView(),
 	}
+
+	// 0) Fehlende Pflicht-Dienste — auf einem frisch freigeschalteten System
+	//    das Erste, was der Admin tun muss. Steht deshalb ganz oben.
+	data.Issues = append(data.Issues, missingInfraIssues(st)...)
 
 	// 1) Dex-Tunnel — die Lebensader für den OIDC-Login. Liegt er, kann sich
 	//    niemand mehr über moin.schule anmelden → höchste Priorität.

@@ -6,27 +6,27 @@
 <h2 class="mb-2">Dashboard</h2>
 
 {{if not .HasApps}}
-<div role="alert">
+<div role="alert" class="mb-2">
   Noch keine Apps installiert. <a href="/apps">Zum App-Katalog</a>
 </div>
+
+{{/* Auch ohne installierte Apps muss der Handlungsbedarf sichtbar sein —
+     genau dann fehlen die Pflicht-Dienste und der Admin braucht den
+     Einstieg. Nur die "Alles in Ordnung"-Box ergibt hier keinen Sinn. */}}
+{{if .Issues}}
+<section class="dash-section">
+  <h3 class="mb-2">Handlungsbedarf</h3>
+  {{template "issue-list" .Issues}}
+</section>
+{{end}}
+
 {{else}}
 
 {{/* ── Handlungsbedarf ─────────────────────────────────────────── */}}
 <section class="dash-section">
   {{if .Issues}}
   <h3 class="mb-2">Handlungsbedarf</h3>
-  <div class="issue-list">
-    {{range .Issues}}
-    <div class="issue issue--{{.Level}}">
-      <span class="issue__icon" aria-hidden="true">{{.Icon}}</span>
-      <div class="issue__body">
-        <div class="issue__title">{{.Title}}</div>
-        <div class="issue__detail">{{.Detail}}</div>
-      </div>
-      {{if .Action}}<a class="button ghost small issue__action" href="{{.Action}}">{{.ActionLabel}}</a>{{end}}
-    </div>
-    {{end}}
-  </div>
+  {{template "issue-list" .Issues}}
   {{else}}
   <div class="dash-allgood">
     <span class="dash-allgood__icon" aria-hidden="true">✓</span>
@@ -115,4 +115,19 @@
 
 {{template "sidebar-layout-end" .PageData}}
 {{template "foot" .}}
+{{end}}
+
+{{define "issue-list"}}
+<div class="issue-list">
+  {{range .}}
+  <div class="issue issue--{{.Level}}">
+    <span class="issue__icon" aria-hidden="true">{{.Icon}}</span>
+    <div class="issue__body">
+      <div class="issue__title">{{.Title}}</div>
+      <div class="issue__detail">{{.Detail}}</div>
+    </div>
+    {{if .Action}}<a class="button ghost small issue__action" href="{{.Action}}">{{.ActionLabel}}</a>{{end}}
+  </div>
+  {{end}}
+</div>
 {{end}}

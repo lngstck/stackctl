@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/lngstck/stackctl/internal/catalog"
@@ -37,10 +38,22 @@ type appListEntry struct {
 	Description     string
 	Version         string
 	IsInstalled     bool
+	IsMandatory     bool
 	Status          string // "running" | "stopped" | "unknown" | "" (not installed)
 	UpdateAvailable bool
 	UpdateTo        string
 	UpdateBreaking  bool
+}
+
+// pinMandatoryFirst zieht noch nicht installierte Pflicht-Dienste an den
+// Anfang der Liste — auf einem frischen System soll der Admin postgres und
+// dex als Erstes sehen, nicht alphabetisch irgendwo im Katalog suchen.
+func pinMandatoryFirst(entries []appListEntry) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		pi := entries[i].IsMandatory && !entries[i].IsInstalled
+		pj := entries[j].IsMandatory && !entries[j].IsInstalled
+		return pi && !pj
+	})
 }
 
 // appDetailData is the template context for app_detail.html.tmpl.
@@ -165,6 +178,7 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 			Description: app.Description,
 			Version:     "",
 			IsInstalled: installed,
+			IsMandatory: isMandatoryApp(app.ID),
 		}
 
 		if installed {
@@ -190,6 +204,9 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 		}
 		data.All = append(data.All, entry)
 	}
+
+	pinMandatoryFirst(data.All)
+	pinMandatoryFirst(data.Available)
 
 	if msg := r.URL.Query().Get("msg"); msg != "" {
 		data.Message = msg
@@ -234,7 +251,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		TunnelSubdomain: cs.TunnelSubdomain,
 		ContainerName:   "ls-" + appID,
 		InstalledAt:     cs.InstalledAt,
-		IsMandatory:        appID == "postgres" || appID == "dex",
+		IsMandatory:        isMandatoryApp(appID),
 		AutoUpdateDisabled: cs.AutoUpdateDisabled,
 	}
 
