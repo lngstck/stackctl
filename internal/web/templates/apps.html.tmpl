@@ -79,6 +79,9 @@
   </div>
   <p class="sub card-desc">{{.Description}}</p>
   <div class="card-meta">
+    {{if and .IsMandatory (not .IsInstalled)}}
+    <span class="badge" data-variant="danger" style="font-size:0.75rem">Pflicht-Dienst — zuerst installieren</span>
+    {{end}}
     {{if .IsInstalled}}
     <div class="sub" style="font-size:0.8rem;">v{{.Version}} installiert</div>
     {{if .UpdateAvailable}}
