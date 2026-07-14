@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"log"
+	"syscall"
 	"time"
 )
 
@@ -41,12 +42,17 @@ func (m *Manager) monitorLoop() {
 	ticker := time.NewTicker(monitorInterval)
 	defer ticker.Stop()
 
+	routingTicker := time.NewTicker(routingCheckInterval)
+	defer routingTicker.Stop()
+
 	for {
 		select {
 		case <-m.stopCh:
 			return
 		case <-ticker.C:
 			m.checkAndRestart()
+		case <-routingTicker.C:
+			m.checkRouting()
 		}
 	}
 }
@@ -101,6 +107,92 @@ func (m *Manager) checkAndRestart() {
 			}
 		}
 	}
+}
+
+// checkRouting probes every settled, alive tunnel's public URL and
+// force-reconnects tunnels whose host the sish edge reports as unbound
+// (see routing.go for why a live process can be publicly dead). Probes run
+// WITHOUT holding m.mu — a slow edge must not block Status() for the UI.
+func (m *Manager) checkRouting() {
+	type candidate struct {
+		id        string
+		host      string
+		startedAt time.Time
+	}
+
+	// 1) Snapshot alive tunnels past the settle window. Fresh binds are
+	//    skipped: they were just verified implicitly by ExitOnForwardFailure,
+	//    and probing them races DNS propagation of a first-time TXT record.
+	m.mu.Lock()
+	now := time.Now()
+	var cands []candidate
+	for id, p := range m.tunnels {
+		select {
+		case <-p.done:
+			// Dead — the reconnect path in checkAndRestart owns it.
+		default:
+			if now.Sub(p.startedAt) >= settleDuration {
+				cands = append(cands, candidate{id, p.remoteHost, p.startedAt})
+			}
+		}
+	}
+	m.mu.Unlock()
+
+	for _, c := range cands {
+		res := m.probe(c.host)
+
+		m.mu.Lock()
+		p, ok := m.tunnels[c.id]
+		if !ok || !p.startedAt.Equal(c.startedAt) {
+			// Tunnel was stopped or replaced while we probed — verdict is
+			// about a process that no longer exists.
+			m.mu.Unlock()
+			continue
+		}
+		switch res {
+		case routingOK:
+			p.routingFailures = 0
+		case routingUnrouted:
+			p.routingFailures++
+			if p.routingFailures >= routingFailThreshold {
+				log.Printf("tunnel: %s is connected but sish does not route %s (edge 404 ×%d) — forcing reconnect",
+					c.id, c.host, p.routingFailures)
+				p.routingFailures = 0
+				m.terminateForRebind(p)
+				// done closes shortly; the next checkAndRestart tick respawns
+				// the tunnel — fresh bind, fresh _sish TXT lookup.
+			}
+		case routingUnknown:
+			// No evidence either way (offline, timeout): neither count nor
+			// reset, otherwise an unreliable probe path could mask or cause
+			// churn.
+		}
+		m.mu.Unlock()
+	}
+}
+
+// terminateForRebind asks the tunnel process to exit WITHOUT removing it from
+// the map, so the regular reconnect path picks it up. SIGTERM first: autossh
+// forwards it to its ssh child and exits cleanly, whereas SIGKILL would
+// orphan the child and leave the stale connection open. Escalates to SIGKILL
+// if the process ignores SIGTERM. Caller must hold m.mu.
+func (m *Manager) terminateForRebind(p *tunnelProc) {
+	if p.cmd == nil || p.cmd.Process == nil {
+		return
+	}
+	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		_ = p.cmd.Process.Kill()
+		return
+	}
+	proc := p.cmd.Process
+	done := p.done
+	go func() {
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			_ = proc.Kill()
+		}
+	}()
 }
 
 // computeBackoff returns baseBackoff·2^(failures-1), clamped to maxBackoff.
