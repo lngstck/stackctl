@@ -36,6 +36,11 @@ type tunnelProc struct {
 	// freshly started, healthy tunnel.
 	consecutiveFailures int
 	nextRetryAt         time.Time
+
+	// routingFailures counts consecutive "sish does not route this host"
+	// probes (routing.go). At routingFailThreshold the monitor force-kills
+	// the process so the regular reconnect path rebinds it.
+	routingFailures int
 }
 
 // Manager owns all running tunnel processes. It is safe for concurrent use.
@@ -45,6 +50,10 @@ type Manager struct {
 	cfg     *config.Config
 	state   *config.State
 	stopCh  chan struct{} // closed to signal the monitor goroutine to exit
+
+	// probe checks whether a public tunnel host is actually routed by sish
+	// (routing.go). A field so tests can substitute a fake.
+	probe func(host string) routingResult
 }
 
 // New creates a tunnel Manager. Call EnsureDexTunnel and StartMonitor after
@@ -55,6 +64,7 @@ func New(cfg *config.Config, state *config.State) *Manager {
 		cfg:     cfg,
 		state:   state,
 		stopCh:  make(chan struct{}),
+		probe:   probePublicURL,
 	}
 }
 
