@@ -150,3 +150,44 @@ func TestCollectComposeDefsNoDuplicate(t *testing.T) {
 		t.Errorf("count = %d, want 1 (no duplicate)", len(result))
 	}
 }
+
+func TestExpandMessagePlaceholders(t *testing.T) {
+	env := envfile.New()
+	env.Set(envfile.GlobalSection, "SCHOOL_SLUG", "phoenix")
+
+	cfg := &config.Config{}
+	cfg.School.Slug = "phoenix"
+	cfg.School.ServerDomain = "server.local"
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		// Die Katalog-YAMLs nutzen ueberwiegend die Klammer-Form; vor dem Fix
+		// blieb sie woertlich stehen, weil os.Expand nur $-Syntax kennt.
+		{"brace lower", "https://a.{school_slug}.x/admin", "https://a.phoenix.x/admin"},
+		{"brace upper", "https://a.{SCHOOL_SLUG}.x/station", "https://a.phoenix.x/station"},
+		{"server domain", "http://{server_domain}:8340", "http://server.local:8340"},
+		{"app id", "Container ls-{app_id}", "Container ls-sponsorenlauf"},
+		{"dollar form still works", "https://a.${SCHOOL_SLUG}.x", "https://a.phoenix.x"},
+		{"mixed", "{server_domain} + ${SCHOOL_SLUG}", "server.local + phoenix"},
+		{"unknown env var stays put", "${NOPE}", "${NOPE}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := expandMessage(tc.in, env, cfg, "sponsorenlauf"); got != tc.want {
+				t.Errorf("expandMessage(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExpandMessageNilConfig(t *testing.T) {
+	// Defensive: ohne Config duerfen die Env-Platzhalter trotzdem aufloesen.
+	env := envfile.New()
+	env.Set(envfile.GlobalSection, "SCHOOL_SLUG", "phoenix")
+	if got := expandMessage("${SCHOOL_SLUG}", env, nil, "x"); got != "phoenix" {
+		t.Errorf("got %q, want %q", got, "phoenix")
+	}
+}
