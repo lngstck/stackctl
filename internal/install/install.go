@@ -307,7 +307,7 @@ func Install(
 			}
 		}
 		for _, m := range def.PostInstall.Messages {
-			res.Messages = append(res.Messages, expandEnvVars(m, env))
+			res.Messages = append(res.Messages, expandMessage(m, env, cfg, def.ID))
 		}
 	}
 
@@ -455,7 +455,7 @@ func Update(
 			}
 		}
 		for _, m := range def.PostInstall.Messages {
-			res.Messages = append(res.Messages, expandEnvVars(m, env))
+			res.Messages = append(res.Messages, expandMessage(m, env, cfg, def.ID))
 		}
 	}
 	res.Success = true
@@ -751,6 +751,35 @@ func createDataDirs(def *catalog.Definition, env *envfile.File) error {
 
 // expandEnvVars replaces ${VAR} placeholders in s with values from env.
 // Unknown variables are left as-is.
+// expandMessage resolves a post_install message for display. It handles two
+// placeholder styles, because the catalog YAMLs use both:
+//
+//	${SOME_VAR}      — looked up in .env (os.Expand semantics)
+//	{school_slug}    — school/app metadata, same set admin_info supports
+//	{SCHOOL_SLUG}    — upper-case spelling used by several catalog entries
+//
+// Before this, messages went through expandEnvVars alone, which only knows
+// the $-form — so every brace placeholder was printed verbatim ("Oeffentlich:
+// https://pylearn.{SCHOOL_SLUG}.learningstack.online") in the one place an
+// admin reads right after installing. The sibling replacer for admin_info
+// lives in internal/web (expandAdminPlaceholders); keep the two in sync.
+// Reihenfolge ist wichtig: erst die $-Form, dann die Klammern. "{SCHOOL_SLUG}"
+// ist ein Teilstring von "${SCHOOL_SLUG}" — andersherum machte der Ersetzer aus
+// "${SCHOOL_SLUG}" ein "${phoenix}", das anschliessend als unbekannte Variable
+// stehen bliebe.
+func expandMessage(s string, env *envfile.File, cfg *config.Config, appID string) string {
+	s = expandEnvVars(s, env)
+	if cfg == nil {
+		return s
+	}
+	return strings.NewReplacer(
+		"{school_slug}", cfg.School.Slug,
+		"{SCHOOL_SLUG}", cfg.School.Slug,
+		"{server_domain}", cfg.School.ServerDomain,
+		"{app_id}", appID,
+	).Replace(s)
+}
+
 func expandEnvVars(s string, env *envfile.File) string {
 	return os.Expand(s, func(key string) string {
 		if val, ok := env.Get(key); ok {
