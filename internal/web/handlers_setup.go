@@ -291,18 +291,9 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Printf("web: registration complete, state → ready")
 		}
-		// Bootstrap tunnels now that we're ready — otherwise the Dex tunnel
-		// would only come up on next stackctl restart.
-		if s.tunnelMgr != nil {
-			if err := tunnel.EnsureKey(); err != nil {
-				log.Printf("web: ensure tunnel key: %v", err)
-			}
-			if err := s.tunnelMgr.EnsureDexTunnel(); err != nil {
-				log.Printf("web: ensure dex tunnel: %v", err)
-			}
-			s.tunnelMgr.RestoreAppTunnels()
-			s.tunnelMgr.StartMonitor()
-		}
+		// Publish now that we're ready — otherwise the login would only
+		// become reachable on the next stackctl restart.
+		s.bootstrapPublisher()
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"status":"ready"}`)
 		return

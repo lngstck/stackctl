@@ -348,3 +348,15 @@ func httpGet(url string) ([]byte, error) {
 	}
 	return body, nil
 }
+
+// ContainerPort returns the in-container port of an app's first port mapping,
+// or 0 if the definition is not cached or declares no ports. A local reverse
+// proxy needs this to reach the container over the docker network; callers
+// that cannot resolve it still publish the app, just with less information.
+func ContainerPort(appID string) int {
+	def, err := LoadDefinition(appID)
+	if err != nil || len(def.Ports) == 0 {
+		return 0
+	}
+	return def.Ports[0].Container
+}

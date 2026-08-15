@@ -23,8 +23,8 @@ import (
 	"github.com/lngstck/stackctl/internal/install"
 	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/publish"
 	"github.com/lngstck/stackctl/internal/secrets"
-	"github.com/lngstck/stackctl/internal/tunnel"
 	"github.com/lngstck/stackctl/internal/update"
 	"github.com/lngstck/stackctl/internal/web"
 )
@@ -92,22 +92,21 @@ func cmdWeb(args []string, stdout, stderr io.Writer) int {
 		state = config.NewState()
 	}
 
-	// Tunnel manager.
-	tunnelMgr := tunnel.New(cfg, state)
+	// Publisher — how this install is reachable from the internet. Which
+	// implementation that is follows from config.public.transport; nothing
+	// above this line branches on it.
+	publisher := publish.For(cfg)
 	if cfg.SetupState == config.SetupStateReady {
-		if err := tunnel.EnsureKey(); err != nil {
-			log.Printf("tunnel: ensure key: %v", err)
+		if err := publisher.EnsureAuth(); err != nil {
+			log.Printf("publish: login: %v", err)
 		}
-		if err := tunnelMgr.EnsureDexTunnel(); err != nil {
-			log.Printf("tunnel: dex tunnel: %v", err)
-		}
-		tunnelMgr.RestoreAppTunnels()
-		tunnelMgr.StartMonitor()
+		publisher.Restore(publish.AppsFrom(state, catalog.ContainerPort))
+		publisher.StartMonitor()
 	}
 
 	// Build server options.
 	var opts []web.Option
-	opts = append(opts, web.WithTunnelManager(tunnelMgr))
+	opts = append(opts, web.WithPublisher(publisher))
 	if *dev {
 		// In dev mode, find the web package dir relative to the binary or CWD.
 		webDir := filepath.Join(paths.StackctlDir(), "internal", "web")
