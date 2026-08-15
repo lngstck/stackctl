@@ -62,21 +62,19 @@ func TestAppsFromToleratesMissingContainerPort(t *testing.T) {
 	}
 }
 
-// A transport this build cannot serve must fail loudly per operation while
-// leaving stackctl itself running — the admin fixes the setting in the very
-// web UI that would otherwise be gone.
+// A transport this build cannot serve — a config from a newer stackctl, or a
+// hand-edited value — must fail loudly per operation while leaving stackctl
+// itself running. The admin fixes the setting in the very web UI that would
+// otherwise be gone.
 func TestUnsupportedTransportFailsPerOperation(t *testing.T) {
 	cfg := &config.Config{
 		School: config.School{Slug: "phoenix"},
-		Public: config.Public{Transport: config.TransportDirect, BaseDomain: "ls.gym-phoenix.de"},
+		Public: config.Public{Transport: "carrier-pigeon", BaseDomain: "ls.gym-phoenix.de"},
 	}
 
 	p := For(cfg)
 	if p == nil {
 		t.Fatal("For must never return nil")
-	}
-	if p.Kind() != KindDirect {
-		t.Errorf("Kind = %q, want %q", p.Kind(), KindDirect)
 	}
 	if err := p.EnsureAuth(); err == nil {
 		t.Error("EnsureAuth should report the unsupported transport")
@@ -105,6 +103,19 @@ func TestForReturnsRelayByDefault(t *testing.T) {
 	}
 	if _, ok := p.(ConnectivityTester); !ok {
 		t.Error("a relay must offer a transport test")
+	}
+
+	direct := For(&config.Config{
+		School: config.School{Slug: "phoenix"},
+		Public: config.Public{Transport: config.TransportDirect, BaseDomain: "ls.gym-phoenix.de"},
+	})
+	if direct.Kind() != KindDirect {
+		t.Errorf("Kind = %q, want %q", direct.Kind(), KindDirect)
+	}
+	// A server that publishes itself dials no endpoint, so it has neither a
+	// relay identity to show nor a transport handshake to test.
+	if _, ok := direct.(RelayIdentity); ok {
+		t.Error("direct transport must not advertise a relay identity")
 	}
 
 	// An install whose transport was never written down is a relay too —

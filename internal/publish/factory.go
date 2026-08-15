@@ -19,18 +19,21 @@ import (
 func For(cfg *config.Config) Publisher {
 	switch cfg.Public.Transport {
 	case config.TransportDirect:
-		// Implemented in the step that adds the local reverse proxy.
-		log.Printf("publish: transport %q is not supported by this build — apps stay unpublished",
-			cfg.Public.Transport)
-		return unsupported{kind: KindDirect}
-	default:
+		return NewDirect(cfg)
+	case config.TransportRelay, "":
+		// An install whose transport was never written down is a relay —
+		// that is the historical default, not an error.
 		return NewRelay(cfg)
+	default:
+		log.Printf("publish: unknown transport %q — apps stay unpublished", cfg.Public.Transport)
+		return unsupported{kind: cfg.Public.Transport}
 	}
 }
 
-// unsupported stands in for a transport this build does not implement. It
-// keeps the rest of stackctl running and makes the gap visible in the UI
-// instead of crashing or silently publishing nothing.
+// unsupported stands in for a transport this build does not implement — a
+// config from a newer stackctl, or a hand-edited value. It keeps the rest of
+// stackctl running and makes the gap visible in the UI instead of crashing or
+// silently publishing nothing.
 type unsupported struct{ kind string }
 
 var errUnsupported = errors.New("diese Betriebsart wird von dieser stackctl-Version nicht unterstuetzt")

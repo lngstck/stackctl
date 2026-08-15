@@ -231,7 +231,7 @@ func Install(
 
 	rep.Step("Konfiguration schreiben")
 	composeDefs := collectComposeDefs(allDefs, def)
-	if err := compose.Regenerate(composeDefs); err != nil {
+	if err := compose.Regenerate(composeDefs, composeOptions(cfg)); err != nil {
 		rollback()
 		return fail(res, "compose: %v", err)
 	}
@@ -419,7 +419,7 @@ func Update(
 
 	rep.Step("Konfiguration schreiben")
 	composeDefs := collectComposeDefs(allDefs, def)
-	if err := compose.Regenerate(composeDefs); err != nil {
+	if err := compose.Regenerate(composeDefs, composeOptions(cfg)); err != nil {
 		return fail(res, "compose: %v", err)
 	}
 
@@ -632,7 +632,7 @@ func Remove(
 			composeDefs = append(composeDefs, d.ToCompose())
 		}
 	}
-	if err := compose.Regenerate(composeDefs); err != nil {
+	if err := compose.Regenerate(composeDefs, composeOptions(cfg)); err != nil {
 		return dexClients, fmt.Errorf("compose regen: %w", err)
 	}
 
@@ -827,4 +827,14 @@ func runScript(step catalog.ScriptStep) error {
 		return fmt.Errorf("unknown script type %q", step.Type)
 	}
 	return nil
+}
+
+// composeOptions derives the compose rendering options from the install's
+// transport. See compose.Options.BindLocalhost for why this is not a catalog
+// concern: the same app definition is correct on a school LAN server and on a
+// public VM, but the port binding is not.
+func composeOptions(cfg *config.Config) compose.Options {
+	return compose.Options{
+		BindLocalhost: cfg != nil && cfg.Public.Transport == config.TransportDirect,
+	}
 }

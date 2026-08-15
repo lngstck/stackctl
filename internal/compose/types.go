@@ -11,17 +11,23 @@ package compose
 // to build a docker-compose service block. Fields are tagged for yaml.v3
 // so the catalog package can unmarshal directly into this type.
 type AppDefinition struct {
-	ID          string      `yaml:"id"`
-	Name        string      `yaml:"name"`
-	Version     string      `yaml:"version"`
-	Image       ImageSpec   `yaml:"image"`
-	Ports       []PortSpec  `yaml:"ports,omitempty"`
+	ID          string       `yaml:"id"`
+	Name        string       `yaml:"name"`
+	Version     string       `yaml:"version"`
+	Image       ImageSpec    `yaml:"image"`
+	Ports       []PortSpec   `yaml:"ports,omitempty"`
 	Volumes     []VolumeSpec `yaml:"volumes,omitempty"`
-	Environment []EnvVar    `yaml:"environment,omitempty"`
-	DependsOn   []string    `yaml:"depends_on,omitempty"`
-	Entrypoint  []string    `yaml:"entrypoint,omitempty"`
-	Command     []string    `yaml:"command,omitempty"`
-	Configs     []ConfigSpec `yaml:"configs,omitempty"`
+	Environment []EnvVar     `yaml:"environment,omitempty"`
+	DependsOn   []string     `yaml:"depends_on,omitempty"`
+	Entrypoint  []string     `yaml:"entrypoint,omitempty"`
+	// PublicEntrypoint marks a container that IS this install's way in from
+	// the internet — the reverse proxy. Its ports must stay reachable from
+	// outside even when everything else is confined to localhost, which is
+	// the one case where "bind to 127.0.0.1 for safety" would take the whole
+	// install offline instead of protecting it.
+	PublicEntrypoint bool         `yaml:"public_entrypoint,omitempty"`
+	Command          []string     `yaml:"command,omitempty"`
+	Configs          []ConfigSpec `yaml:"configs,omitempty"`
 }
 
 // ImageSpec identifies the Docker image.

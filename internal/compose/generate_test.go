@@ -23,7 +23,7 @@ func TestBuildServiceBlockMinimal(t *testing.T) {
 		},
 	}
 
-	svc := BuildServiceBlock(def)
+	svc := BuildServiceBlock(def, Options{})
 
 	if svc["image"] != "registry.learningstack.online/testing:1.0.0" {
 		t.Errorf("image = %v", svc["image"])
@@ -62,7 +62,7 @@ func TestBuildServiceBlockFull(t *testing.T) {
 		DependsOn: []string{"postgres", "dex"},
 	}
 
-	svc := BuildServiceBlock(def)
+	svc := BuildServiceBlock(def, Options{})
 
 	vols := svc["volumes"].([]string)
 	if len(vols) != 2 {
@@ -92,7 +92,7 @@ func TestBuildServiceBlockBindAddress(t *testing.T) {
 			{Host: 8100, Container: 5432, Bind: "127.0.0.1"},
 		},
 	}
-	svc := BuildServiceBlock(def)
+	svc := BuildServiceBlock(def, Options{})
 	ports := svc["ports"].([]string)
 	if ports[0] != "127.0.0.1:8100:5432" {
 		t.Errorf("bind port = %q", ports[0])
@@ -117,15 +117,15 @@ func TestRegenerateCreatesValidYAML(t *testing.T) {
 			},
 		},
 		{
-			ID:    "dex",
-			Name:  "Dex",
-			Image: ImageSpec{Name: "ghcr.io/dexidp/dex", Tag: "v2.45.1"},
-			Ports: []PortSpec{{Host: 5556, Container: 5556, Bind: "0.0.0.0"}},
+			ID:        "dex",
+			Name:      "Dex",
+			Image:     ImageSpec{Name: "ghcr.io/dexidp/dex", Tag: "v2.45.1"},
+			Ports:     []PortSpec{{Host: 5556, Container: 5556, Bind: "0.0.0.0"}},
 			DependsOn: []string{"postgres"},
 		},
 	}
 
-	if err := Regenerate(defs); err != nil {
+	if err := Regenerate(defs, Options{}); err != nil {
 		t.Fatalf("Regenerate: %v", err)
 	}
 
@@ -176,8 +176,8 @@ func TestRegenerateEmpty(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(paths.EnvStackctlDir, dir)
 
-	if err := Regenerate(nil); err != nil {
-		t.Fatalf("Regenerate(nil): %v", err)
+	if err := Regenerate(nil, Options{}); err != nil {
+		t.Fatalf("Regenerate(nil, Options{}): %v", err)
 	}
 	raw, _ := os.ReadFile(paths.ComposeFile())
 	var doc map[string]any
@@ -225,5 +225,62 @@ func TestEnvRef(t *testing.T) {
 func TestServiceName(t *testing.T) {
 	if got := ServiceName("langflow"); got != "ls-langflow" {
 		t.Errorf("ServiceName = %q", got)
+	}
+}
+
+// On a server that publishes itself, every app port must be bound to
+// localhost. The catalog default of 0.0.0.0 would put each app on its own
+// high port straight onto the public IP, unauthenticated and unencrypted,
+// right next to the proxy that is meant to be the only way in.
+func TestBuildServiceBlockBindLocalhost(t *testing.T) {
+	def := &AppDefinition{
+		ID:    "pylearn",
+		Image: ImageSpec{Name: "ghcr.io/lngstck/pylearn", Tag: "0.8.0"},
+		Ports: []PortSpec{
+			{Host: 8330, Container: 8000},
+			{Host: 8331, Container: 8001, Bind: "0.0.0.0"},
+		},
+	}
+
+	svc := BuildServiceBlock(def, Options{BindLocalhost: true})
+	ports, ok := svc["ports"].([]string)
+	if !ok {
+		t.Fatalf("ports = %T, want []string", svc["ports"])
+	}
+	want := []string{"127.0.0.1:8330:8000", "127.0.0.1:8331:8001"}
+	for i, w := range want {
+		if ports[i] != w {
+			t.Errorf("ports[%d] = %q, want %q", i, ports[i], w)
+		}
+	}
+
+	// A relay install keeps the LAN reachable — that is a feature there.
+	svc = BuildServiceBlock(def, Options{})
+	ports, _ = svc["ports"].([]string)
+	if ports[0] != "0.0.0.0:8330:8000" {
+		t.Errorf("relay ports[0] = %q, want 0.0.0.0:8330:8000", ports[0])
+	}
+}
+
+// The reverse proxy is the exception to the localhost rule: it IS the way in.
+// Confining it would take every published app offline instead of protecting
+// anything.
+func TestBuildServiceBlockPublicEntrypointStaysExposed(t *testing.T) {
+	proxy := &AppDefinition{
+		ID:               "caddy",
+		Image:            ImageSpec{Name: "caddy", Tag: "2-alpine"},
+		PublicEntrypoint: true,
+		Ports: []PortSpec{
+			{Host: 80, Container: 80},
+			{Host: 443, Container: 443},
+		},
+	}
+
+	svc := BuildServiceBlock(proxy, Options{BindLocalhost: true})
+	ports, _ := svc["ports"].([]string)
+	for i, want := range []string{"0.0.0.0:80:80", "0.0.0.0:443:443"} {
+		if ports[i] != want {
+			t.Errorf("ports[%d] = %q, want %q", i, ports[i], want)
+		}
 	}
 }
