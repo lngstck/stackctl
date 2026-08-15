@@ -6,6 +6,7 @@ import (
 
 	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/public"
 	"github.com/lngstck/stackctl/internal/secrets"
 	"github.com/lngstck/stackctl/internal/update"
 )
@@ -20,7 +21,10 @@ type settingsData struct {
 	SchoolSlug   string
 	ServerDomain string
 	ContactEmail string
-	DexAuthURL   string
+	// PublicBaseDomain is the parent of every public hostname of this
+	// install — no longer derivable from the slug, so the UI reads it.
+	PublicBaseDomain string
+	DexAuthURL       string
 	AutoUpdate   bool
 	Error        string
 	Message      string
@@ -55,8 +59,9 @@ func (s *Server) settingsData(msg, errMsg string) settingsData {
 		SchoolName:     s.cfg.School.Name,
 		SchoolSlug:     s.cfg.School.Slug,
 		ServerDomain:   s.cfg.School.ServerDomain,
-		ContactEmail:   s.cfg.School.ContactEmail,
-		DexAuthURL:     s.cfg.Dex.AuthURL,
+		ContactEmail:     s.cfg.School.ContactEmail,
+		PublicBaseDomain: public.BaseDomain(s.cfg),
+		DexAuthURL:       s.cfg.Dex.AuthURL,
 		AutoUpdate:     s.cfg.AutoUpdate.Enabled,
 		Message:        msg,
 		Error:          errMsg,

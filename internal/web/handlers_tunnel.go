@@ -6,6 +6,7 @@ import (
 
 	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/public"
 	"github.com/lngstck/stackctl/internal/tunnel"
 )
 
@@ -37,8 +38,8 @@ type tunnelAppEntry struct {
 func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	data := tunnelData{
 		PageData: s.pageData("tunnel"),
-		SSHHost:  s.cfg.Tunnel.SSHHost,
-		SSHPort:  s.cfg.Tunnel.SSHPort,
+		SSHHost:  s.cfg.Public.Relay.SSHHost,
+		SSHPort:  s.cfg.Public.Relay.SSHPort,
 	}
 
 	// SSH key.
@@ -48,7 +49,7 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dex tunnel status.
-	data.DexSubdomain = "auth." + s.cfg.School.Slug + ".learningstack.online"
+	data.DexSubdomain = public.AuthHost(s.cfg)
 	if s.tunnelMgr != nil {
 		data.DexTunnelStatus = s.tunnelMgr.Status(tunnel.DexTunnelID)
 	} else {
@@ -68,8 +69,8 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 			ID:              id,
 			Name:            cs.Name,
 			Port:            port,
-			TunnelEnabled:   cs.TunnelEnabled,
-			TunnelSubdomain: cs.TunnelSubdomain,
+			TunnelEnabled:   cs.PublicEnabled,
+			TunnelSubdomain: cs.PublicHost,
 		}
 		if s.tunnelMgr != nil {
 			entry.TunnelStatus = s.tunnelMgr.Status(id)
@@ -126,7 +127,7 @@ func (s *Server) handleDexTunnelStop(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleTunnelTest(w http.ResponseWriter, r *http.Request) {
 	keyPath := paths.TunnelKeyFile()
-	err := tunnel.TestConnection(s.cfg.Tunnel.SSHHost, s.cfg.Tunnel.SSHPort, keyPath)
+	err := tunnel.TestConnection(s.cfg.Public.Relay.SSHHost, s.cfg.Public.Relay.SSHPort, keyPath)
 	if err != nil {
 		http.Redirect(w, r, "/tunnel?test="+fmt.Sprintf("Fehler: %v", err), http.StatusSeeOther)
 		return

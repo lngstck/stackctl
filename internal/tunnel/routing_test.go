@@ -64,7 +64,7 @@ func settledProc(t *testing.T, id string) *tunnelProc {
 		cmd:        cmd,
 		done:       done,
 		tunnelID:   id,
-		remoteHost: id + ".test." + RootDomain,
+		remoteHost: id + ".test.learningstack.online",
 		startedAt:  time.Now().Add(-2 * settleDuration),
 	}
 }

@@ -164,7 +164,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Tunnel aktiviert, läuft aber nicht (nur echte Apps, keine Infra).
-		if cs.TunnelEnabled && id != "dex" && id != "postgres" && s.tunnelMgr != nil {
+		if cs.PublicEnabled && id != "dex" && id != "postgres" && s.tunnelMgr != nil {
 			if status := s.tunnelMgr.Status(id); status != "running" {
 				data.Issues = append(data.Issues, dashIssue{
 					Level:       "warning",

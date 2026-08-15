@@ -9,6 +9,7 @@ import (
 
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/public"
 )
 
 // Status constants returned by Manager.Status.
@@ -87,7 +88,7 @@ func (m *Manager) startLocked(tunnelID, remoteHost string, localPort int) error 
 	}
 
 	keyPath := paths.TunnelKeyFile()
-	cmd := buildSSHCmd(remoteHost, localPort, m.cfg.Tunnel.SSHHost, m.cfg.Tunnel.SSHPort, keyPath)
+	cmd := buildSSHCmd(remoteHost, localPort, m.cfg.Public.Relay.SSHHost, m.cfg.Public.Relay.SSHPort, keyPath)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start tunnel %s: %w", tunnelID, err)
 	}
@@ -176,18 +177,14 @@ func (m *Manager) AllStatuses() map[string]string {
 	return out
 }
 
-// RootDomain is the public root under which every school's subdomains live.
-// The `-R`-Remote-Host muss der volle FQDN sein, weil sish den angegebenen
-// Host 1:1 als Routing-Key benutzt — wenn wir nur `auth.{slug}` angeben,
-// registriert sich der Tunnel als `auth.{slug}`, aber eingehende Requests
-// kommen mit Host-Header `auth.{slug}.learningstack.online` und finden
-// keine passende Registrierung ("cannot find connection for host: …").
-const RootDomain = "learningstack.online"
-
-// EnsureDexTunnel starts the mandatory Dex tunnel if it is not already running.
-// The Dex tunnel forwards auth.{slug}.learningstack.online:80 to localhost:5556.
+// EnsureDexTunnel starts the mandatory Dex tunnel if it is not already
+// running. It forwards auth.{base_domain}:80 to localhost:5556.
+//
+// The `-R` remote host is always the full FQDN from internal/public, because
+// sish uses the requested name verbatim as its routing key — see the note on
+// public.Host.
 func (m *Manager) EnsureDexTunnel() error {
-	remoteHost := "auth." + m.cfg.School.Slug + "." + RootDomain
+	remoteHost := public.AuthHost(m.cfg)
 	return m.Start(DexTunnelID, remoteHost, 5556)
 }
 
@@ -206,12 +203,12 @@ func (m *Manager) StopDexTunnel() error {
 	return m.Stop(DexTunnelID)
 }
 
-// RestoreAppTunnels restarts tunnels for all apps that had tunnel_enabled=true
+// RestoreAppTunnels restarts tunnels for all apps that had public_enabled=true
 // in state.yaml. Called once during startup.
 func (m *Manager) RestoreAppTunnels() {
 	for id, cs := range m.state.Containers {
-		if cs.TunnelEnabled && len(cs.Ports) > 0 {
-			remoteHost := id + "." + m.cfg.School.Slug + "." + RootDomain
+		if cs.PublicEnabled && len(cs.Ports) > 0 {
+			remoteHost := public.AppHost(m.cfg, id)
 			if err := m.Start(id, remoteHost, cs.Ports[0]); err != nil {
 				log.Printf("tunnel: restore %s: %v", id, err)
 			}
@@ -228,12 +225,12 @@ func (m *Manager) EnableAppTunnel(appID string) error {
 	if len(cs.Ports) == 0 {
 		return fmt.Errorf("app %s has no ports", appID)
 	}
-	remoteHost := appID + "." + m.cfg.School.Slug + "." + RootDomain
+	remoteHost := public.AppHost(m.cfg, appID)
 	if err := m.Start(appID, remoteHost, cs.Ports[0]); err != nil {
 		return err
 	}
-	cs.TunnelEnabled = true
-	cs.TunnelSubdomain = remoteHost
+	cs.PublicEnabled = true
+	cs.PublicHost = remoteHost
 	return m.state.Save()
 }
 
@@ -246,8 +243,8 @@ func (m *Manager) DisableAppTunnel(appID string) error {
 	if err := m.Stop(appID); err != nil {
 		return err
 	}
-	cs.TunnelEnabled = false
-	cs.TunnelSubdomain = ""
+	cs.PublicEnabled = false
+	cs.PublicHost = ""
 	return m.state.Save()
 }
 

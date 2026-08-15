@@ -208,12 +208,8 @@ func Install(
 			firstPort = def.Ports[0].Host
 		}
 		redirectURI := dex.BuildRedirectURI(
-			def.OIDC.RedirectPath,
-			def.ID,
-			cfg.School.Slug,
-			cfg.School.ServerDomain,
-			firstPort,
-			true, // tunneled — OIDC requires public URL
+			cfg, def.ID, def.OIDC.RedirectPath, firstPort,
+			true, // OIDC only works on the public URL
 		)
 
 		client := dex.Client{
@@ -291,7 +287,7 @@ func Install(
 		Ports:            hostPorts,
 		EnvKeys:          newEnvKeys,
 		InstalledAt:      time.Now().UTC().Format(time.RFC3339),
-		TunnelEnabled:    false,
+		PublicEnabled:    false,
 	}
 	state.Containers[def.ID] = cs
 	for _, p := range hostPorts {
@@ -408,8 +404,7 @@ func Update(
 			firstPort = def.Ports[0].Host
 		}
 		redirectURI := dex.BuildRedirectURI(
-			def.OIDC.RedirectPath, def.ID, cfg.School.Slug,
-			cfg.School.ServerDomain, firstPort, true,
+			cfg, def.ID, def.OIDC.RedirectPath, firstPort, true,
 		)
 		client := dex.Client{
 			ID: def.OIDC.ClientID, Secret: oidcSecret, Name: def.Name,
@@ -479,8 +474,7 @@ func dexClientFor(def *catalog.Definition, env *envfile.File, cfg *config.Config
 		firstPort = def.Ports[0].Host
 	}
 	redirectURI := dex.BuildRedirectURI(
-		def.OIDC.RedirectPath, def.ID, cfg.School.Slug,
-		cfg.School.ServerDomain, firstPort, true,
+		cfg, def.ID, def.OIDC.RedirectPath, firstPort, true,
 	)
 	return dex.Client{
 		ID:           def.OIDC.ClientID,

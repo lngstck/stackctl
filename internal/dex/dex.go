@@ -5,7 +5,9 @@
 //
 // Phase 1 architecture: the local school Dex connects upstream to the central
 // Dex at auth.learningstack.online, which in turn connects to moin.schule.
-// No static-password fallback, no Wobila, no upstream switching.
+// No static-password fallback, no Wobila, no upstream switching. That upstream
+// is fixed regardless of how the school itself is reached — only the local
+// Dex's own address moves with config.public (see internal/public).
 //
 // The config uses claimMapping (SINGULAR, not claimMappings!) — see Memory
 // project_central_dex_moinschule.md for the critical fallstrick.
@@ -20,6 +22,7 @@ import (
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/docker"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/public"
 )
 
 // DexContainerName is the Docker container name for the local Dex instance.
@@ -42,7 +45,7 @@ type Client struct {
 // school config and list of registered OIDC clients. The caller is
 // responsible for writing it to disk and restarting Dex.
 func GenerateConfig(cfg *config.Config, clients []Client) ([]byte, error) {
-	authURL := AuthURL(cfg)
+	authURL := public.AuthURL(cfg)
 
 	doc := map[string]any{
 		"issuer": authURL,
@@ -186,18 +189,19 @@ func RemoveClient(clientID string, cfg *config.Config, existingClients []Client)
 	return updated, nil
 }
 
-// AuthURL returns the canonical public URL where Dex is reachable.
-// This is always https://auth.{slug}.learningstack.online — never a local
-// URL, because the OIDC issuer must match between browser and container.
-func AuthURL(cfg *config.Config) string {
-	return "https://auth." + cfg.School.Slug + ".learningstack.online"
-}
-
 // BuildRedirectURI builds the full OIDC redirect URI for an app.
-// If tunneled is true, the public tunnel URL is used; otherwise the local URL.
-func BuildRedirectURI(redirectPath, appID, schoolSlug, serverDomain string, port int, tunneled bool) string {
-	if tunneled {
-		return "https://" + appID + "." + schoolSlug + ".learningstack.online" + redirectPath
+//
+// When isPublic is true the app's public URL is used; otherwise the LAN URL
+// on the server's own address. An OIDC app only works publicly — Dex holds
+// exactly one redirect URI per client — so callers pass true for anything
+// that has to log in.
+func BuildRedirectURI(cfg *config.Config, appID, redirectPath string, port int, isPublic bool) string {
+	if isPublic {
+		return public.AppURL(cfg, appID) + redirectPath
 	}
-	return fmt.Sprintf("http://%s:%d%s", serverDomain, port, redirectPath)
+	domain := cfg.School.ServerDomain
+	if domain == "" {
+		domain = "localhost"
+	}
+	return fmt.Sprintf("http://%s:%d%s", domain, port, redirectPath)
 }

@@ -32,7 +32,7 @@
         <label data-field class="mb-1">
           Schul-Slug
           <input type="text" value="{{.SchoolSlug}}" disabled>
-          <span class="hint">Der Slug ist nach der Registrierung nicht mehr aenderbar. Er ist Teil der oeffentlichen URLs: <code>auth.<strong>{{.SchoolSlug}}</strong>.learningstack.online</code></span>
+          <span class="hint">Der Slug ist nach der Registrierung nicht mehr aenderbar. Er identifiziert die Schule beim zentralen Login und in der Datenbank.</span>
         </label>
 
         <label data-field class="mb-1">
@@ -44,6 +44,12 @@
         <label data-field class="mb-2">
           Kontakt-E-Mail
           <input type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="admin@schule.de">
+        </label>
+
+        <label data-field class="mb-2">
+          Oeffentliche Adresse
+          <input type="text" value="{{.PublicBaseDomain}}" disabled>
+          <span class="hint">Unter dieser Domain sind die Apps aus dem Internet erreichbar: <code>app.<strong>{{.PublicBaseDomain}}</strong></code>. Eine Aenderung betrifft alle App-URLs und den Login und laeuft daher ueber den Betreiber.</span>
         </label>
 
         <h3 class="mb-2">Admin-Passwort aendern <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>

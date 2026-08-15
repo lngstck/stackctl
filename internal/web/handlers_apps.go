@@ -247,8 +247,8 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		Status:          status,
 		Port:            port,
 		ServerDomain:    s.cfg.School.ServerDomain,
-		TunnelEnabled:   cs.TunnelEnabled,
-		TunnelSubdomain: cs.TunnelSubdomain,
+		TunnelEnabled:   cs.PublicEnabled,
+		TunnelSubdomain: cs.PublicHost,
 		ContainerName:   "ls-" + appID,
 		InstalledAt:     cs.InstalledAt,
 		IsMandatory:        isMandatoryApp(appID),
@@ -269,8 +269,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 			data.HasOIDC = true
 			data.OIDCClientID = def.OIDC.ClientID
 			data.OIDCRedirectURI = dex.BuildRedirectURI(
-				def.OIDC.RedirectPath, appID, s.cfg.School.Slug,
-				s.cfg.School.ServerDomain, port, cs.TunnelEnabled,
+				s.cfg, appID, def.OIDC.RedirectPath, port, cs.PublicEnabled,
 			)
 		}
 		if def.Links != nil {

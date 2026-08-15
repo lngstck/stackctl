@@ -29,11 +29,14 @@ func TestDefaultConfig(t *testing.T) {
 	if c.Catalog.URL == "" {
 		t.Error("Catalog.URL empty in default")
 	}
-	if c.Tunnel.SSHHost != "sish.learningstack.online" {
-		t.Errorf("Tunnel.SSHHost = %q", c.Tunnel.SSHHost)
+	if c.Public.Transport != TransportRelay {
+		t.Errorf("Public.Transport = %q, want %q", c.Public.Transport, TransportRelay)
 	}
-	if c.Tunnel.SSHPort != 2222 {
-		t.Errorf("Tunnel.SSHPort = %d, want 2222", c.Tunnel.SSHPort)
+	if c.Public.Relay.SSHHost != "sish.learningstack.online" {
+		t.Errorf("Public.Relay.SSHHost = %q", c.Public.Relay.SSHHost)
+	}
+	if c.Public.Relay.SSHPort != 2222 {
+		t.Errorf("Public.Relay.SSHPort = %d, want 2222", c.Public.Relay.SSHPort)
 	}
 	if c.GlobalEnv == nil {
 		t.Error("GlobalEnv should be non-nil map")
@@ -116,9 +119,30 @@ func TestValidate(t *testing.T) {
 
 	c.School.Slug = "phoenix"
 	c.School.Name = "Phoenix"
+	if err := c.Validate(); err == nil {
+		t.Error("ready without base_domain should fail")
+	}
+
+	c.Public.BaseDomain = RelayBaseDomain("phoenix")
 	if err := c.Validate(); err != nil {
 		t.Errorf("ready with valid school should pass: %v", err)
 	}
+
+	c.Public.Transport = "carrier-pigeon"
+	if err := c.Validate(); err == nil {
+		t.Error("unknown transport should fail")
+	}
+	c.Public.Transport = TransportDirect
+	if err := c.Validate(); err != nil {
+		t.Errorf("direct transport should validate: %v", err)
+	}
+	c.Public.Transport = TransportRelay
+
+	c.Public.BaseDomain = "https://ls.gym-phoenix.de"
+	if err := c.Validate(); err == nil {
+		t.Error("base_domain with scheme should fail")
+	}
+	c.Public.BaseDomain = RelayBaseDomain("phoenix")
 
 	c.Version = 999
 	if err := c.Validate(); err == nil {
