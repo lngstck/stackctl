@@ -60,17 +60,34 @@ type dashActivity struct {
 var infraDisplayNames = map[string]string{
 	"postgres": "Datenbank (PostgreSQL)",
 	"dex":      "Anmeldung (Dex)",
+	"caddy":    "Reverse-Proxy (Caddy)",
 }
 
-// mandatoryAppIDs sind die Pflicht-Dienste in sinnvoller
+// mandatoryAppIDs liefert die Pflicht-Dienste in sinnvoller
 // Installations-Reihenfolge (Apps hängen von postgres ab, Logins von dex).
-var mandatoryAppIDs = []string{"postgres", "dex"}
+//
+// Welche Dienste Pflicht sind, hängt an der Betriebsart: im direkten Betrieb
+// hält der Reverse-Proxy Port 80/443 und terminiert TLS — ohne ihn ist keine
+// einzige Adresse erreichbar, auch der Login nicht. Über einen Relay-Tunnel
+// erledigt das die Gegenstelle, und Caddy waere dort nur ein Container, der
+// zwei Ports belegt.
+func mandatoryAppIDs(cfg *config.Config) []string {
+	ids := []string{"postgres", "dex"}
+	if cfg != nil && cfg.Public.Transport == config.TransportDirect {
+		ids = append(ids, "caddy")
+	}
+	return ids
+}
 
-// isMandatoryApp meldet, ob die App ein Pflicht-Dienst ist. Einzige Quelle
-// der Wahrheit dafür ist infraDisplayNames.
-func isMandatoryApp(id string) bool {
-	_, ok := infraDisplayNames[id]
-	return ok
+// isMandatoryApp meldet, ob die App in dieser Betriebsart ein Pflicht-Dienst
+// ist. Einzige Quelle der Wahrheit dafür ist mandatoryAppIDs.
+func isMandatoryApp(cfg *config.Config, id string) bool {
+	for _, m := range mandatoryAppIDs(cfg) {
+		if m == id {
+			return true
+		}
+	}
+	return false
 }
 
 // missingInfraDetails erklärt pro Pflicht-Dienst, warum er installiert werden
@@ -79,15 +96,16 @@ func isMandatoryApp(id string) bool {
 var missingInfraDetails = map[string]string{
 	"postgres": "Pflicht-Dienst — fast alle Apps brauchen die Datenbank. Bitte zuerst installieren.",
 	"dex":      "Pflicht-Dienst — ohne ihn funktioniert kein Login über moin.schule.",
+	"caddy":    "Pflicht-Dienst im direkten Betrieb — er nimmt Port 80/443 entgegen und verteilt sie an die Apps. Ohne ihn ist keine öffentliche Adresse erreichbar.",
 }
 
 // missingInfraIssues liefert Handlungsbedarf-Karten für Pflicht-Dienste, die
 // noch gar nicht installiert sind. Ohne diesen Hinweis landet ein frisch
 // freigeschalteter Admin auf einem leeren Dashboard und erfährt erst beim
 // Installieren einer App von den Abhängigkeiten.
-func missingInfraIssues(st *config.State) []dashIssue {
+func missingInfraIssues(cfg *config.Config, st *config.State) []dashIssue {
 	var issues []dashIssue
-	for _, id := range mandatoryAppIDs {
+	for _, id := range mandatoryAppIDs(cfg) {
 		if _, installed := st.Containers[id]; installed {
 			continue
 		}
@@ -112,7 +130,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// 0) Fehlende Pflicht-Dienste — auf einem frisch freigeschalteten System
 	//    das Erste, was der Admin tun muss. Steht deshalb ganz oben.
-	data.Issues = append(data.Issues, missingInfraIssues(st)...)
+	data.Issues = append(data.Issues, missingInfraIssues(s.cfg, st)...)
 
 	// 1) Dex-Tunnel — die Lebensader für den OIDC-Login. Liegt er, kann sich
 	//    niemand mehr über moin.schule anmelden → höchste Priorität.
@@ -164,7 +182,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Tunnel aktiviert, läuft aber nicht (nur echte Apps, keine Infra).
-		if cs.PublicEnabled && id != "dex" && id != "postgres" && s.publisher != nil {
+		if cs.PublicEnabled && !isMandatoryApp(s.cfg, id) && s.publisher != nil {
 			if status := s.publisher.Status(id); status != publish.StatusRunning {
 				data.Issues = append(data.Issues, dashIssue{
 					Level:       "warning",

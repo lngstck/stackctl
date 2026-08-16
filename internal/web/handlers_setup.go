@@ -1,6 +1,8 @@
 package web
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 	"github.com/lngstck/stackctl/internal/dex"
 	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/preflight"
 	"github.com/lngstck/stackctl/internal/public"
 	"github.com/lngstck/stackctl/internal/registration"
 	"github.com/lngstck/stackctl/internal/secrets"
@@ -26,6 +29,10 @@ type setupData struct {
 	SchoolSlug   string
 	ServerDomain string
 	ContactEmail string
+	Mode         string
+	BaseDomain   string
+	ACMEEmail    string
+	RootDomain   string
 	Error        string
 }
 
@@ -37,8 +44,44 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 
 	data := setupData{
 		ServerDomain: detectLANIP(),
+		// The operator relay is the default because it is the only mode a
+		// school can pick without preparing anything beforehand.
+		Mode:       preflight.ModeRelayOperator,
+		RootDomain: config.DefaultRootDomain,
 	}
 	s.render(w, "setup.html.tmpl", data)
+}
+
+// handleSetupPreflight answers the wizard's live prerequisite checks.
+//
+// It is reachable without a login, like the setup form itself, and closes
+// together with it: once setup is done the endpoint refuses. All it does is
+// resolve names and try to bind two local ports, so the exposure during that
+// window is a DNS lookup for a domain the caller already typed.
+func (s *Server) handleSetupPreflight(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.SetupState != config.SetupStateNeedsSetup {
+		http.Error(w, "Setup ist bereits abgeschlossen", http.StatusForbidden)
+		return
+	}
+
+	in := preflight.Input{
+		Mode:         r.URL.Query().Get("mode"),
+		BaseDomain:   strings.TrimSpace(r.URL.Query().Get("base_domain")),
+		RelaySSHHost: s.cfg.Public.Relay.SSHHost,
+	}
+	if in.RelaySSHHost == "" {
+		in.RelaySSHHost = config.DefaultRelaySSHHost
+	}
+
+	checks := preflight.NewProber().Run(r.Context(), in)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"summary": preflight.Worst(checks),
+		"checks":  checks,
+	}); err != nil {
+		log.Printf("web: encode preflight result: %v", err)
+	}
 }
 
 func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
@@ -58,12 +101,19 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	contactEmail := r.FormValue("contact_email")
 	password := r.FormValue("password")
 	passwordConfirm := r.FormValue("password_confirm")
+	mode := r.FormValue("public_mode")
+	baseDomain := strings.TrimSpace(strings.ToLower(r.FormValue("base_domain")))
+	acmeEmail := strings.TrimSpace(r.FormValue("acme_email"))
 
 	data := setupData{
 		SchoolName:   schoolName,
 		SchoolSlug:   schoolSlug,
 		ServerDomain: serverDomain,
 		ContactEmail: contactEmail,
+		Mode:         mode,
+		BaseDomain:   baseDomain,
+		ACMEEmail:    acmeEmail,
+		RootDomain:   config.DefaultRootDomain,
 	}
 
 	// Validation.
@@ -97,6 +147,16 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the chosen mode into the two config axes. This is the only
+	// place the three wizard cards exist as such; everything downstream sees
+	// a transport and a base domain.
+	transport, baseDomain, err := resolvePublicMode(mode, baseDomain, schoolSlug)
+	if err != nil {
+		data.Error = err.Error()
+		s.render(w, "setup.html.tmpl", data)
+		return
+	}
+
 	// Hash password.
 	hash, err := secrets.HashPassword(password)
 	if err != nil {
@@ -112,17 +172,22 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	s.cfg.School.ContactEmail = contactEmail
 	s.cfg.Admin.PasswordHash = hash
 	s.cfg.Dex.ClientID = schoolSlug
-	// Phase 1 of the public-address rework: setup still hands out an
-	// operator-relay address. Picking a transport and a domain is the wizard
-	// step that follows; from here on everything downstream reads
-	// cfg.Public rather than assembling the address itself.
-	s.cfg.Public.Transport = config.TransportRelay
-	s.cfg.Public.BaseDomain = config.RelayBaseDomain(schoolSlug)
+	s.cfg.Public.Transport = transport
+	s.cfg.Public.BaseDomain = baseDomain
 	if s.cfg.Public.Relay.SSHHost == "" {
 		s.cfg.Public.Relay.SSHHost = config.DefaultRelaySSHHost
 	}
 	if s.cfg.Public.Relay.SSHPort == 0 {
 		s.cfg.Public.Relay.SSHPort = config.DefaultRelaySSHPort
+	}
+	if transport == config.TransportDirect {
+		// Without a contact address Let's Encrypt issues certificates but
+		// nobody is told when renewal starts failing — and the failure only
+		// becomes visible when the certificate expires.
+		if acmeEmail == "" {
+			acmeEmail = contactEmail
+		}
+		s.cfg.Public.Direct.ACMEEmail = acmeEmail
 	}
 	s.cfg.Dex.AuthURL = public.AuthURL(s.cfg)
 
@@ -135,7 +200,9 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.Dex.ClientSecret = dexSecret
 
-	// Generate SSH tunnel key (idempotent — keeps existing key).
+	// Generate SSH tunnel key (idempotent — keeps existing key). This runs
+	// for direct installs too: it costs nothing, and it means a later switch
+	// to a relay finds a key already in place instead of a dead end.
 	if err := tunnel.EnsureKey(); err != nil {
 		log.Printf("web: generate tunnel key: %v", err)
 		data.Error = "SSH-Key konnte nicht erzeugt werden: " + err.Error()
@@ -143,11 +210,17 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sshPubKey, err := tunnel.PublicKey()
-	if err != nil {
-		data.Error = "SSH-Public-Key konnte nicht gelesen werden."
-		s.render(w, "setup.html.tmpl", data)
-		return
+	// The key only belongs in the package when a tunnel is actually going to
+	// be built. A direct install asks the operator for a Dex client and
+	// nothing else.
+	var sshPubKey string
+	if transport == config.TransportRelay {
+		sshPubKey, err = tunnel.PublicKey()
+		if err != nil {
+			data.Error = "SSH-Public-Key konnte nicht gelesen werden."
+			s.render(w, "setup.html.tmpl", data)
+			return
+		}
 	}
 
 	// Build age-encrypted registration package.
@@ -157,6 +230,8 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		ContactEmail:    contactEmail,
 		CreatedAt:       time.Now().UTC().Format(time.RFC3339),
 		ServerDomain:    serverDomain,
+		Transport:       transport,
+		BaseDomain:      baseDomain,
 		SSHPublicKey:    sshPubKey,
 		DexClientID:     schoolSlug,
 		DexClientSecret: dexSecret,
@@ -196,6 +271,33 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/setup/register", http.StatusSeeOther)
+}
+
+// resolvePublicMode maps a wizard card onto the two config axes.
+//
+// The operator relay derives its domain from the slug, so an address typed
+// into the (hidden) field is ignored rather than silently overriding it — the
+// two would otherwise disagree the moment someone switches cards after typing.
+func resolvePublicMode(mode, baseDomain, slug string) (transport, resolved string, err error) {
+	switch mode {
+	case preflight.ModeRelayOperator:
+		return config.TransportRelay, config.RelayBaseDomain(slug), nil
+	case preflight.ModeRelayOwn, preflight.ModeDirect:
+		if baseDomain == "" {
+			return "", "", errors.New("Für diese Betriebsart muss die Domain der Schule angegeben werden.")
+		}
+		if err := config.ValidateBaseDomain(baseDomain); err != nil {
+			return "", "", fmt.Errorf("Domain ungültig: %s", preflight.TranslateDomainError(err))
+		}
+		if mode == preflight.ModeDirect {
+			return config.TransportDirect, baseDomain, nil
+		}
+		return config.TransportRelay, baseDomain, nil
+	case "":
+		return "", "", errors.New("Bitte eine Betriebsart auswählen.")
+	default:
+		return "", "", fmt.Errorf("Unbekannte Betriebsart %q.", mode)
+	}
 }
 
 // registerData is the template context for register.html.tmpl.
@@ -277,14 +379,23 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 
 	authHost := public.AuthHost(s.cfg)
 	redirectURI := public.AuthURL(s.cfg) + "/callback"
-	dexTunnel := checkPublicHost(authHost)
-	oidcClient := false
-	if dexTunnel {
-		oidcClient = checkOIDCClient(s.cfg.Dex.ClientID, redirectURI)
-	}
 
-	// If both checks pass, transition to ready.
-	if dexTunnel && oidcClient {
+	// The gate is the OIDC client alone. It used to require the login host to
+	// answer over HTTPS as well, which was reachable only because a relay
+	// install publishes Dex through a tunnel stackctl opens itself. A direct
+	// install serves that host from a reverse proxy that is not installed yet
+	// — and cannot be installed before setup completes, since the app list
+	// lives behind the login. That made the end-to-end check a deadlock in
+	// exactly the mode it was supposed to protect.
+	//
+	// Asking the central Dex instead works in every mode: it answers about
+	// the registration the operator performs, which is the thing this page is
+	// actually waiting for. Whether the address then resolves is a question
+	// for the dashboard, where it can be fixed.
+	oidcClient := checkOIDCClient(s.cfg.Dex.ClientID, redirectURI)
+	dexTunnel := checkPublicHost(authHost)
+
+	if oidcClient {
 		s.cfg.SetupState = config.SetupStateReady
 		if err := s.cfg.Save(); err != nil {
 			log.Printf("web: save config after registration: %v", err)
@@ -300,7 +411,7 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status":"waiting","dex_tunnel":%t,"oidc_client":%t}`, dexTunnel, oidcClient)
+	fmt.Fprintf(w, `{"status":"waiting","oidc_client":%t,"public_host":%t}`, oidcClient, dexTunnel)
 }
 
 // checkPublicHost tests whether a public hostname of this install is
