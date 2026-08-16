@@ -54,6 +54,16 @@ func StateFile() string    { return filepath.Join(ConfigDir(), "state.yaml") }
 func DexConfigFile() string {
 	return filepath.Join(LearningstackDir(), "dex", "config", "config.yaml")
 }
+// CaddyConfigFile is the host path stackctl writes the Caddyfile to. It sits
+// under the caddy container's own directory, which is bind-mounted into
+// /etc/caddy — keep the name in sync with caddy.yaml's command:.
+//
+// stackctl is the sole writer: the file is regenerated in full on every
+// publish change, exactly like dex-config.yaml.
+func CaddyConfigFile() string {
+	return filepath.Join(LearningstackDir(), "caddy", "config", "Caddyfile")
+}
+
 // LLMConfigDir is the host directory that holds the llmd config.yaml and
 // per-persona prompt files. It is bind-mounted into the llmd container as
 // /etc/llmd (read-only). stackctl is the sole writer.

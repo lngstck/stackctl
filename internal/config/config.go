@@ -133,6 +133,22 @@ type Public struct {
 	// makes no difference to stackctl — it is the same SSH reverse tunnel
 	// either way, and only the operator runbook differs.
 	Relay PublicRelay `yaml:"relay,omitempty"`
+	// Direct configures the local reverse proxy and is only meaningful for
+	// TransportDirect.
+	Direct PublicDirect `yaml:"direct,omitempty"`
+}
+
+// PublicDirect configures the local reverse proxy that terminates TLS when
+// this server publishes itself.
+type PublicDirect struct {
+	// ACMEEmail is the contact address Let's Encrypt uses for expiry
+	// warnings. Optional — certificates are issued without one, but then
+	// nobody gets told when renewal has been failing.
+	ACMEEmail string `yaml:"acme_email,omitempty"`
+	// ACMECA overrides the ACME directory URL. Its purpose is the Let's
+	// Encrypt staging endpoint: real certificates are rate-limited to five
+	// duplicates per week, which a few rounds of debugging burn through.
+	ACMECA string `yaml:"acme_ca,omitempty"`
 }
 
 // PublicRelay stores the sish target. The private key lives next to
