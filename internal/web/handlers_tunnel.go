@@ -2,12 +2,13 @@ package web
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/lngstck/stackctl/internal/catalog"
-	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/public"
-	"github.com/lngstck/stackctl/internal/tunnel"
+	"github.com/lngstck/stackctl/internal/publish"
 )
 
 // tunnelData is the template context for tunnel.html.tmpl.
@@ -22,6 +23,8 @@ type tunnelData struct {
 	Apps            []tunnelAppEntry
 	TestResult      string // "" | "ok" | error message
 	TestDone        bool
+	// CanTest is true when the current publisher can check its own transport.
+	CanTest bool
 }
 
 // tunnelAppEntry is one row in the app tunnel table.
@@ -37,26 +40,27 @@ type tunnelAppEntry struct {
 
 func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	data := tunnelData{
-		PageData: s.pageData("tunnel"),
-		SSHHost:  s.cfg.Public.Relay.SSHHost,
-		SSHPort:  s.cfg.Public.Relay.SSHPort,
+		PageData:        s.pageData("tunnel"),
+		DexSubdomain:    public.AuthHost(s.cfg),
+		DexTunnelStatus: publish.StatusStopped,
 	}
 
-	// SSH key.
-	if pub, err := tunnel.PublicKey(); err == nil {
-		data.SSHPubKey = pub
-		data.KeyExists = true
+	if s.publisher != nil {
+		data.DexTunnelStatus = s.publisher.AuthStatus()
+		_, data.CanTest = s.publisher.(publish.ConnectivityTester)
+
+		// The SSH identity block only exists for transports that dial a
+		// remote endpoint. A server that publishes itself has no relay key.
+		if id, ok := s.publisher.(publish.RelayIdentity); ok {
+			data.SSHHost, data.SSHPort = id.Endpoint()
+			if pub, err := id.PublicKey(); err == nil {
+				data.SSHPubKey = pub
+				data.KeyExists = true
+			}
+		}
 	}
 
-	// Dex tunnel status.
-	data.DexSubdomain = public.AuthHost(s.cfg)
-	if s.tunnelMgr != nil {
-		data.DexTunnelStatus = s.tunnelMgr.Status(tunnel.DexTunnelID)
-	} else {
-		data.DexTunnelStatus = "stopped"
-	}
-
-	// App tunnels.
+	// App publication.
 	for id, cs := range s.snapState().Containers {
 		if id == "postgres" || id == "dex" {
 			continue // infrastructure, not shown in app tunnel list
@@ -71,11 +75,10 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 			Port:            port,
 			TunnelEnabled:   cs.PublicEnabled,
 			TunnelSubdomain: cs.PublicHost,
+			TunnelStatus:    publish.StatusStopped,
 		}
-		if s.tunnelMgr != nil {
-			entry.TunnelStatus = s.tunnelMgr.Status(id)
-		} else {
-			entry.TunnelStatus = "stopped"
+		if s.publisher != nil {
+			entry.TunnelStatus = s.publisher.Status(id)
 		}
 
 		// Check if app has OIDC.
@@ -95,68 +98,123 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "tunnel.html.tmpl", data)
 }
 
-// handleDexTunnelStart (re)starts the Dex tunnel. Previously the Dex tunnel
-// had no manual control — once the monitor gave up on it, the only recovery
-// was restarting the whole stackctl service. Now it gets the same start/stop
-// treatment as app tunnels.
+// handleDexTunnelStart (re)publishes Dex. Previously the Dex tunnel had no
+// manual control — once the monitor gave up on it, the only recovery was
+// restarting the whole stackctl service.
 func (s *Server) handleDexTunnelStart(w http.ResponseWriter, r *http.Request) {
-	if s.tunnelMgr == nil {
-		http.Redirect(w, r, "/tunnel?test=Tunnel-Manager+nicht+verfuegbar", http.StatusSeeOther)
+	if s.publisher == nil {
+		http.Redirect(w, r, "/tunnel?test=Kein+Publisher+verfuegbar", http.StatusSeeOther)
 		return
 	}
-	if err := s.tunnelMgr.StartDexTunnel(); err != nil {
-		http.Redirect(w, r, "/tunnel?test="+fmt.Sprintf("Dex-Tunnel-Start fehlgeschlagen: %v", err), http.StatusSeeOther)
+	if err := s.publisher.StartAuth(); err != nil {
+		http.Redirect(w, r, "/tunnel?test="+fmt.Sprintf("Start des Login-Zugangs fehlgeschlagen: %v", err), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/tunnel", http.StatusSeeOther)
 }
 
-// handleDexTunnelStop stops the Dex tunnel. It stays down until manually
-// started again or until stackctl restarts (EnsureDexTunnel runs at startup).
+// handleDexTunnelStop withdraws Dex. It stays down until started again or
+// until stackctl restarts (EnsureAuth runs at startup).
 func (s *Server) handleDexTunnelStop(w http.ResponseWriter, r *http.Request) {
-	if s.tunnelMgr == nil {
-		http.Redirect(w, r, "/tunnel?test=Tunnel-Manager+nicht+verfuegbar", http.StatusSeeOther)
+	if s.publisher == nil {
+		http.Redirect(w, r, "/tunnel?test=Kein+Publisher+verfuegbar", http.StatusSeeOther)
 		return
 	}
-	if err := s.tunnelMgr.StopDexTunnel(); err != nil {
-		http.Redirect(w, r, "/tunnel?test="+fmt.Sprintf("Dex-Tunnel-Stop fehlgeschlagen: %v", err), http.StatusSeeOther)
+	if err := s.publisher.StopAuth(); err != nil {
+		http.Redirect(w, r, "/tunnel?test="+fmt.Sprintf("Stop des Login-Zugangs fehlgeschlagen: %v", err), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/tunnel", http.StatusSeeOther)
 }
 
 func (s *Server) handleTunnelTest(w http.ResponseWriter, r *http.Request) {
-	keyPath := paths.TunnelKeyFile()
-	err := tunnel.TestConnection(s.cfg.Public.Relay.SSHHost, s.cfg.Public.Relay.SSHPort, keyPath)
-	if err != nil {
+	tester, ok := s.publisher.(publish.ConnectivityTester)
+	if !ok {
+		http.Redirect(w, r, "/tunnel?test=Fuer+diese+Betriebsart+gibt+es+keinen+Verbindungstest", http.StatusSeeOther)
+		return
+	}
+	if err := tester.TestTransport(); err != nil {
 		http.Redirect(w, r, "/tunnel?test="+fmt.Sprintf("Fehler: %v", err), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/tunnel?test=ok", http.StatusSeeOther)
 }
 
+// handleAppTunnelEnable publishes an app and records the result.
+//
+// The publisher does the publishing and reports the host it bound; writing
+// that into state.yaml happens here, on a snapshot, committed under the
+// server's lock. The route holds the op-lock (authPostLocked), so this cannot
+// interleave with a background install job's commit.
 func (s *Server) handleAppTunnelEnable(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
-	if s.tunnelMgr == nil {
-		http.Redirect(w, r, "/apps/"+appID+"?msg=Tunnel-Manager+nicht+verfuegbar&err=1", http.StatusSeeOther)
+	if s.publisher == nil {
+		http.Redirect(w, r, "/apps/"+appID+"?msg=Kein+Publisher+verfuegbar&err=1", http.StatusSeeOther)
 		return
 	}
-	if err := s.tunnelMgr.EnableAppTunnel(appID); err != nil {
-		http.Redirect(w, r, "/apps/"+appID+"?msg=Tunnel+Fehler&err=1", http.StatusSeeOther)
+
+	working := s.snapState()
+	cs, ok := working.Containers[appID]
+	if !ok {
+		http.Redirect(w, r, "/apps?msg=Nicht+installiert&err=1", http.StatusSeeOther)
 		return
+	}
+
+	host, err := s.publisher.Enable(s.publishApp(appID, cs))
+	if err != nil {
+		log.Printf("web: publish %s: %v", appID, err)
+		http.Redirect(w, r, "/apps/"+appID+"?msg=Oeffentlicher+Zugang+fehlgeschlagen&err=1", http.StatusSeeOther)
+		return
+	}
+
+	cs.PublicEnabled = true
+	cs.PublicHost = host
+	if err := s.commitState(working); err != nil {
+		log.Printf("web: save state after publish %s: %v", appID, err)
 	}
 	http.Redirect(w, r, "/apps/"+appID, http.StatusSeeOther)
 }
 
+// handleAppTunnelDisable withdraws an app from the internet.
 func (s *Server) handleAppTunnelDisable(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
-	if s.tunnelMgr == nil {
-		http.Redirect(w, r, "/apps/"+appID+"?msg=Tunnel-Manager+nicht+verfuegbar&err=1", http.StatusSeeOther)
+	if s.publisher == nil {
+		http.Redirect(w, r, "/apps/"+appID+"?msg=Kein+Publisher+verfuegbar&err=1", http.StatusSeeOther)
 		return
 	}
-	if err := s.tunnelMgr.DisableAppTunnel(appID); err != nil {
-		http.Redirect(w, r, "/apps/"+appID+"?msg=Tunnel+Fehler&err=1", http.StatusSeeOther)
+
+	working := s.snapState()
+	cs, ok := working.Containers[appID]
+	if !ok {
+		http.Redirect(w, r, "/apps?msg=Nicht+installiert&err=1", http.StatusSeeOther)
 		return
+	}
+
+	if err := s.publisher.Disable(appID); err != nil {
+		log.Printf("web: unpublish %s: %v", appID, err)
+		http.Redirect(w, r, "/apps/"+appID+"?msg=Zugang+konnte+nicht+beendet+werden&err=1", http.StatusSeeOther)
+		return
+	}
+
+	cs.PublicEnabled = false
+	cs.PublicHost = ""
+	if err := s.commitState(working); err != nil {
+		log.Printf("web: save state after unpublish %s: %v", appID, err)
 	}
 	http.Redirect(w, r, "/apps/"+appID, http.StatusSeeOther)
+}
+
+// publishApp builds the publish.App for an installed container. The container
+// port comes from the catalog definition — a relay ignores it, a local proxy
+// routes to it over the docker network. A missing definition is not fatal:
+// the app is still publishable, the proxy just has less to work with.
+func (s *Server) publishApp(appID string, cs *config.ContainerState) publish.App {
+	app := publish.App{ID: appID}
+	if len(cs.Ports) > 0 {
+		app.LocalPort = cs.Ports[0]
+	}
+	if def, err := catalog.LoadDefinition(appID); err == nil && len(def.Ports) > 0 {
+		app.ContainerPort = def.Ports[0].Container
+	}
+	return app
 }

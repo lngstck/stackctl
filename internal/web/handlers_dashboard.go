@@ -8,7 +8,7 @@ import (
 	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/docker"
-	"github.com/lngstck/stackctl/internal/tunnel"
+	"github.com/lngstck/stackctl/internal/publish"
 )
 
 // dashboardData is the template context for dashboard.html.tmpl. Das Dashboard
@@ -116,8 +116,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// 1) Dex-Tunnel — die Lebensader für den OIDC-Login. Liegt er, kann sich
 	//    niemand mehr über moin.schule anmelden → höchste Priorität.
-	if s.tunnelMgr != nil {
-		if status := s.tunnelMgr.Status(tunnel.DexTunnelID); status != "running" {
+	if s.publisher != nil {
+		if status := s.publisher.AuthStatus(); status != publish.StatusRunning {
 			data.Issues = append(data.Issues, dashIssue{
 				Level:       "danger",
 				Icon:        "⚠",
@@ -164,8 +164,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Tunnel aktiviert, läuft aber nicht (nur echte Apps, keine Infra).
-		if cs.PublicEnabled && id != "dex" && id != "postgres" && s.tunnelMgr != nil {
-			if status := s.tunnelMgr.Status(id); status != "running" {
+		if cs.PublicEnabled && id != "dex" && id != "postgres" && s.publisher != nil {
+			if status := s.publisher.Status(id); status != publish.StatusRunning {
 				data.Issues = append(data.Issues, dashIssue{
 					Level:       "warning",
 					Icon:        "●",

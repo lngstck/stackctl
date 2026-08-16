@@ -49,7 +49,6 @@ type Manager struct {
 	mu      sync.Mutex
 	tunnels map[string]*tunnelProc
 	cfg     *config.Config
-	state   *config.State
 	stopCh  chan struct{} // closed to signal the monitor goroutine to exit
 
 	// probe checks whether a public tunnel host is actually routed by sish
@@ -59,11 +58,15 @@ type Manager struct {
 
 // New creates a tunnel Manager. Call EnsureDexTunnel and StartMonitor after
 // creation in the startup sequence.
-func New(cfg *config.Config, state *config.State) *Manager {
+//
+// The Manager deliberately holds no state.State pointer. It used to, and
+// mutated plus saved state.yaml from inside Enable/Disable — outside the
+// server's stateMu, and racing the clone-and-commit that background jobs use.
+// Ownership of state now sits entirely with the caller (see internal/publish).
+func New(cfg *config.Config) *Manager {
 	return &Manager{
 		tunnels: make(map[string]*tunnelProc),
 		cfg:     cfg,
-		state:   state,
 		stopCh:  make(chan struct{}),
 		probe:   probePublicURL,
 	}
@@ -203,49 +206,29 @@ func (m *Manager) StopDexTunnel() error {
 	return m.Stop(DexTunnelID)
 }
 
-// RestoreAppTunnels restarts tunnels for all apps that had public_enabled=true
-// in state.yaml. Called once during startup.
-func (m *Manager) RestoreAppTunnels() {
-	for id, cs := range m.state.Containers {
-		if cs.PublicEnabled && len(cs.Ports) > 0 {
-			remoteHost := public.AppHost(m.cfg, id)
-			if err := m.Start(id, remoteHost, cs.Ports[0]); err != nil {
-				log.Printf("tunnel: restore %s: %v", id, err)
-			}
-		}
-	}
-}
+// Config returns the config this manager was built with, so relay-specific
+// UI code can read the endpoint without a second copy of the pointer.
+func (m *Manager) Config() *config.Config { return m.cfg }
 
-// EnableAppTunnel starts a tunnel for an installed app and updates state.
-func (m *Manager) EnableAppTunnel(appID string) error {
-	cs, ok := m.state.Containers[appID]
-	if !ok {
-		return fmt.Errorf("app %s not installed", appID)
-	}
-	if len(cs.Ports) == 0 {
-		return fmt.Errorf("app %s has no ports", appID)
+// StartApp opens a tunnel for one app and returns the public host it is
+// bound to. It does not touch state.yaml — the caller records the result.
+func (m *Manager) StartApp(appID string, localPort int) (string, error) {
+	if localPort == 0 {
+		return "", fmt.Errorf("app %s has no port to forward", appID)
 	}
 	remoteHost := public.AppHost(m.cfg, appID)
-	if err := m.Start(appID, remoteHost, cs.Ports[0]); err != nil {
-		return err
+	if remoteHost == "" {
+		return "", fmt.Errorf("app %s: install has no public address", appID)
 	}
-	cs.PublicEnabled = true
-	cs.PublicHost = remoteHost
-	return m.state.Save()
+	if err := m.Start(appID, remoteHost, localPort); err != nil {
+		return "", err
+	}
+	return remoteHost, nil
 }
 
-// DisableAppTunnel stops an app's tunnel and clears the state flags.
-func (m *Manager) DisableAppTunnel(appID string) error {
-	cs, ok := m.state.Containers[appID]
-	if !ok {
-		return fmt.Errorf("app %s not installed", appID)
-	}
-	if err := m.Stop(appID); err != nil {
-		return err
-	}
-	cs.PublicEnabled = false
-	cs.PublicHost = ""
-	return m.state.Save()
+// StopApp closes an app's tunnel. Stopping an unknown tunnel is not an error.
+func (m *Manager) StopApp(appID string) error {
+	return m.Stop(appID)
 }
 
 // Shutdown stops all tunnels and signals the monitor goroutine to exit.

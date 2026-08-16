@@ -16,9 +16,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/lock"
-	"github.com/lngstck/stackctl/internal/tunnel"
+	"github.com/lngstck/stackctl/internal/publish"
 )
 
 // bootID is unique to this process. /healthz returns it in the X-Stackctl-Boot
@@ -50,7 +51,7 @@ type Server struct {
 	sessions  *sessionStore
 	limiter   *rateLimiter
 	pages     map[string]*template.Template // page name → compiled template
-	tunnelMgr *tunnel.Manager
+	publisher publish.Publisher
 	jobs      *jobStore
 	stateMu   sync.Mutex // guards s.state access against background job commits
 	devMode   bool
@@ -61,10 +62,11 @@ type Server struct {
 // Option configures the server.
 type Option func(*Server)
 
-// WithTunnelManager attaches a tunnel.Manager so the web UI can start/stop
-// tunnels and display their status.
-func WithTunnelManager(mgr *tunnel.Manager) Option {
-	return func(s *Server) { s.tunnelMgr = mgr }
+// WithPublisher attaches the publisher so the web UI can publish apps and
+// display their status. Handlers talk to this interface only — they must not
+// branch on the transport.
+func WithPublisher(p publish.Publisher) Option {
+	return func(s *Server) { s.publisher = p }
 }
 
 // WithDevMode enables filesystem-based template/asset loading for live reload.
@@ -512,4 +514,23 @@ func slugify(name string) string {
 	}
 	result = strings.Trim(result, "-")
 	return result
+}
+
+// bootstrapPublisher brings the public access up: the login first, then every
+// app that was public before, then background supervision.
+//
+// It runs twice in a stackctl lifetime — once at startup for an install that
+// is already set up, and once the moment registration completes, so the admin
+// does not have to restart the service to get a login. Both paths must do the
+// same thing, which is why they share this method rather than each keeping
+// their own sequence.
+func (s *Server) bootstrapPublisher() {
+	if s.publisher == nil {
+		return
+	}
+	if err := s.publisher.EnsureAuth(); err != nil {
+		log.Printf("web: publish login: %v", err)
+	}
+	s.publisher.Restore(publish.AppsFrom(s.snapState(), catalog.ContainerPort))
+	s.publisher.StartMonitor()
 }
