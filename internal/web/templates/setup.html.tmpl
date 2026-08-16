@@ -1,7 +1,7 @@
 {{define "page"}}
 {{template "head" .}}
 
-<div class="centered-box">
+<div class="centered-box centered-box--wide">
   <h1 class="mb-2" style="text-align:center;">
     <span class="wordmark wordmark--lg">
       <span class="wordmark__mark"></span>
@@ -30,7 +30,7 @@
           <input type="text" name="school_slug" value="{{.SchoolSlug}}" placeholder="aus Schulname ableiten" id="slug-input" style="flex:1;">
           <button type="button" class="ghost small" id="derive-slug-btn" title="Slug aus Schulname ableiten">Ableiten</button>
         </div>
-        <span class="hint">Kurzform der Schule (a-z, 0-9, Bindestrich, max. 30 Zeichen). Identifiziert die Schule beim zentralen Login und bildet die oeffentliche Adresse: <code>app.<strong>slug</strong>.learningstack.online</code></span>
+        <span class="hint">Kurzform der Schule (a-z, 0-9, Bindestrich, max. 30 Zeichen). Identifiziert die Schule beim zentralen Login.</span>
       </label>
 
       <label data-field class="mb-1">
@@ -44,6 +44,80 @@
         <input type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="admin@schule.de">
         <span class="hint">Fuer Rueckfragen bei der Registrierung.</span>
       </label>
+
+      <h3 class="mb-1">Betriebsart</h3>
+      <p class="sub mb-2" style="font-size:0.85rem;">
+        Wie sollen die Apps aus dem Internet erreichbar sein? Das laesst sich
+        spaeter nur mit Aufwand aendern — die Adresse steckt in jedem Login.
+      </p>
+
+      <div class="mode-choice mb-2">
+        <label class="mode-card">
+          <div class="mode-card__top">
+            <input type="radio" name="public_mode" value="relay_operator" {{if ne .Mode "relay_own"}}{{if ne .Mode "direct"}}checked{{end}}{{end}}>
+            <span class="mode-card__title">Adresse des Betreibers</span>
+            <span class="mode-card__tag">nichts vorzubereiten</span>
+          </div>
+          <div class="mode-card__body">
+            Der Betreiber stellt die Adresse und die Zertifikate. Der Server
+            baut dafuer eine ausgehende Verbindung auf und braucht selbst
+            keine oeffentliche IP und keine freigegebenen Ports.
+          </div>
+          <div class="mode-card__addr" id="preview-relay">app.<span data-slug-preview>slug</span>.{{.RootDomain}}</div>
+        </label>
+
+        <label class="mode-card">
+          <div class="mode-card__top">
+            <input type="radio" name="public_mode" value="relay_own" {{if eq .Mode "relay_own"}}checked{{end}}>
+            <span class="mode-card__title">Eigene Domain ueber den Betreiber</span>
+            <span class="mode-card__tag">DNS noetig</span>
+          </div>
+          <div class="mode-card__body">
+            Wie oben, aber unter der Domain der Schule. Der Wildcard-Eintrag
+            muss dafuer auf den Relay des Betreibers zeigen, nicht auf diesen
+            Server.
+          </div>
+        </label>
+
+        <label class="mode-card">
+          <div class="mode-card__top">
+            <input type="radio" name="public_mode" value="direct" {{if eq .Mode "direct"}}checked{{end}}>
+            <span class="mode-card__title">Direkter Betrieb</span>
+            <span class="mode-card__tag">DNS + Ports 80/443</span>
+          </div>
+          <div class="mode-card__body">
+            Der Server haengt selbst am Internet und holt seine Zertifikate
+            ueber Let's Encrypt. Ohne Umweg ueber den Betreiber — dafuer muss
+            der Wildcard-Eintrag hierher zeigen und Port 80 und 443 muessen
+            von aussen erreichbar sein.
+          </div>
+        </label>
+      </div>
+
+      <div id="domain-fields" hidden>
+        <label data-field class="mb-1">
+          Domain der Schule
+          <input type="text" name="base_domain" value="{{.BaseDomain}}" placeholder="z.B. ls.gymnasium-musterstadt.de" id="base-domain">
+          <span class="hint">
+            Ohne <code>*.</code> und ohne <code>https://</code>. Die Apps liegen
+            darunter: <code id="domain-preview">pylearn.ihre-domain.de</code>
+          </span>
+        </label>
+
+        <div id="acme-field" hidden>
+          <label data-field class="mb-1">
+            E-Mail fuer Zertifikats-Warnungen
+            <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="wie Kontakt-E-Mail" id="acme-email">
+            <span class="hint">Let's Encrypt meldet hierhin, wenn eine Erneuerung laengere Zeit scheitert. Leer = Kontakt-E-Mail von oben.</span>
+          </label>
+        </div>
+
+        <div class="mb-2" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+          <button type="button" class="ghost small" id="check-btn">Voraussetzungen pruefen</button>
+          <span class="sub" style="font-size:0.8rem;" id="check-hint"></span>
+        </div>
+        <div id="check-result" class="mb-2"></div>
+      </div>
 
       <h3 class="mb-2">Admin-Zugang</h3>
 
@@ -119,6 +193,102 @@
 
     return slug.replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
   }
+
+  // --- Operating mode: show only the fields that mode needs ---
+  const modeInputs = document.querySelectorAll('input[name="public_mode"]');
+  const domainFields = document.getElementById('domain-fields');
+  const acmeField = document.getElementById('acme-field');
+  const baseDomain = document.getElementById('base-domain');
+  const domainPreview = document.getElementById('domain-preview');
+  const checkResult = document.getElementById('check-result');
+  const checkHint = document.getElementById('check-hint');
+
+  function currentMode() {
+    for (const el of modeInputs) if (el.checked) return el.value;
+    return 'relay_operator';
+  }
+
+  function syncMode() {
+    const mode = currentMode();
+    domainFields.hidden = (mode === 'relay_operator');
+    acmeField.hidden = (mode !== 'direct');
+    // Results belong to the mode they were produced for — a check that
+    // passed for the relay says nothing about direct operation.
+    checkResult.innerHTML = '';
+    checkHint.textContent = '';
+  }
+
+  modeInputs.forEach(el => el.addEventListener('change', syncMode));
+  syncMode();
+
+  // Slug preview inside the first card.
+  function syncSlugPreview() {
+    const v = slugInput.value.trim() || deriveSlug(nameInput.value.trim()) || 'slug';
+    document.querySelectorAll('[data-slug-preview]').forEach(el => { el.textContent = v; });
+  }
+  slugInput.addEventListener('input', syncSlugPreview);
+  nameInput.addEventListener('input', syncSlugPreview);
+  deriveBtn.addEventListener('click', syncSlugPreview);
+  syncSlugPreview();
+
+  baseDomain.addEventListener('input', function() {
+    const v = baseDomain.value.trim().toLowerCase();
+    domainPreview.textContent = 'pylearn.' + (v || 'ihre-domain.de');
+  });
+
+  // --- Prerequisite check ---
+  const checkBtn = document.getElementById('check-btn');
+  const MARKS = { ok: '✓', warn: '!', fail: '✗', skip: '·' };
+
+  checkBtn.addEventListener('click', function() {
+    const domain = baseDomain.value.trim().toLowerCase();
+    if (!domain) { baseDomain.focus(); return; }
+
+    checkBtn.disabled = true;
+    checkHint.textContent = 'Prüfe …';
+    checkResult.innerHTML = '';
+
+    const params = new URLSearchParams({ mode: currentMode(), base_domain: domain });
+    fetch('/setup/preflight?' + params.toString())
+      .then(resp => resp.json())
+      .then(data => {
+        const list = document.createElement('ul');
+        list.className = 'check-list';
+        (data.checks || []).forEach(c => {
+          const li = document.createElement('li');
+          li.className = 'check check--' + c.status;
+          const mark = document.createElement('span');
+          mark.className = 'check__mark';
+          mark.textContent = MARKS[c.status] || '·';
+          const body = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'check__title';
+          title.textContent = c.title;
+          const detail = document.createElement('div');
+          detail.className = 'check__detail';
+          detail.textContent = c.detail;
+          body.appendChild(title);
+          body.appendChild(detail);
+          li.appendChild(mark);
+          li.appendChild(body);
+          list.appendChild(li);
+        });
+        checkResult.appendChild(list);
+
+        // Failing checks do not block the install: DNS records propagate on
+        // their own schedule, and an admin who prepares the server first is
+        // doing nothing wrong.
+        if (data.summary === 'ok') {
+          checkHint.textContent = 'Alles bereit.';
+        } else if (data.summary === 'fail') {
+          checkHint.textContent = 'Noch nicht vollständig — Setup lässt sich trotzdem abschließen.';
+        } else {
+          checkHint.textContent = 'Mit Einschränkungen bereit.';
+        }
+      })
+      .catch(() => { checkHint.textContent = 'Prüfung fehlgeschlagen.'; })
+      .finally(() => { checkBtn.disabled = false; });
+  });
 
   // --- Password generator ---
   const genBtn = document.getElementById('gen-password-btn');

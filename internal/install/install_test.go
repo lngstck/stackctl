@@ -183,6 +183,48 @@ func TestExpandMessagePlaceholders(t *testing.T) {
 	}
 }
 
+// Die Adress-Platzhalter sind der Ersatz fuer die frueher fest eingebaute
+// Root-Domain: eine Katalog-YAML kann die oeffentliche Adresse nicht mehr aus
+// dem Slug zusammensetzen, weil sie von der Betriebsart abhaengt. caddy.yaml
+// nutzt {public_base_domain} bereits — ohne diese Ersetzung stuende die
+// Klammer woertlich in der Meldung nach der Installation.
+func TestExpandMessagePublicAddressPlaceholders(t *testing.T) {
+	env := envfile.New()
+
+	cases := []struct {
+		name string
+		cfg  *config.Config
+		in   string
+		want string
+	}{
+		{
+			name: "relay des betreibers",
+			cfg: &config.Config{
+				School: config.School{Slug: "phoenix"},
+				Public: config.Public{Transport: config.TransportRelay, BaseDomain: "phoenix.learningstack.online"},
+			},
+			in:   "*.{public_base_domain} → {public_app_url}",
+			want: "*.phoenix.learningstack.online → https://sponsorenlauf.phoenix.learningstack.online",
+		},
+		{
+			name: "eigene domain, direkter betrieb",
+			cfg: &config.Config{
+				School: config.School{Slug: "phoenix"},
+				Public: config.Public{Transport: config.TransportDirect, BaseDomain: "ls.gym-phoenix.de"},
+			},
+			in:   "*.{public_base_domain} → {public_app_url}, Login {public_auth_url}",
+			want: "*.ls.gym-phoenix.de → https://sponsorenlauf.ls.gym-phoenix.de, Login https://auth.ls.gym-phoenix.de",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := expandMessage(tc.in, env, tc.cfg, "sponsorenlauf"); got != tc.want {
+				t.Errorf("expandMessage = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestExpandMessageNilConfig(t *testing.T) {
 	// Defensive: ohne Config duerfen die Env-Platzhalter trotzdem aufloesen.
 	env := envfile.New()

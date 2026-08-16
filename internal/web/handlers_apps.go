@@ -18,6 +18,7 @@ import (
 	"github.com/lngstck/stackctl/internal/install"
 	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/public"
 )
 
 // appsData is the template context for apps.html.tmpl.
@@ -103,8 +104,10 @@ type appInstallData struct {
 }
 
 // expandAdminPlaceholders replaces {school_slug}, {server_domain}, {app_id}
-// in admin_info strings. Kept narrow on purpose — admin_info is rendered
-// directly into the UI, so we don't want to pull in arbitrary .env values.
+// und die {public_*}-Adressen in admin_info strings. Kept narrow on purpose —
+// admin_info is rendered directly into the UI, so we don't want to pull in
+// arbitrary .env values. Das Gegenstueck fuer post_install-Messages ist
+// install.expandMessage; beide Listen zusammen halten.
 func expandAdminPlaceholders(s string, cfg *config.Config, appID string) string {
 	if s == "" {
 		return ""
@@ -113,6 +116,9 @@ func expandAdminPlaceholders(s string, cfg *config.Config, appID string) string 
 		"{school_slug}", cfg.School.Slug,
 		"{server_domain}", cfg.School.ServerDomain,
 		"{app_id}", appID,
+		"{public_base_domain}", public.BaseDomain(cfg),
+		"{public_app_url}", public.AppURL(cfg, appID),
+		"{public_auth_url}", public.AuthURL(cfg),
 	)
 	return r.Replace(s)
 }
@@ -178,7 +184,7 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 			Description: app.Description,
 			Version:     "",
 			IsInstalled: installed,
-			IsMandatory: isMandatoryApp(app.ID),
+			IsMandatory: isMandatoryApp(s.cfg, app.ID),
 		}
 
 		if installed {
@@ -251,7 +257,7 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		TunnelSubdomain: cs.PublicHost,
 		ContainerName:   "ls-" + appID,
 		InstalledAt:     cs.InstalledAt,
-		IsMandatory:        isMandatoryApp(appID),
+		IsMandatory:        isMandatoryApp(s.cfg, appID),
 		AutoUpdateDisabled: cs.AutoUpdateDisabled,
 	}
 

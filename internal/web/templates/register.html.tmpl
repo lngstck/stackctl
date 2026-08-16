@@ -102,11 +102,16 @@
           setTimeout(function() { window.location.href = '/login'; }, 2000);
           return;
         }
+        // Only the first line is what this page waits for. The second is
+        // informational: the public address answers once the services are
+        // installed, which happens after this step — showing it as an open
+        // task here would look like something went wrong.
         statusEl.innerHTML =
           '<p class="sub">' +
-          'Dex-Tunnel: ' + (data.dex_tunnel ? '✓' : '✗') + '<br>' +
-          'OIDC-Client: ' + (data.oidc_client ? '✓' : '✗') +
-          '</p>';
+          'Freischaltung beim Betreiber: ' + (data.oidc_client ? '✓' : 'steht noch aus') + '<br>' +
+          '<span style="opacity:0.7">Öffentliche Adresse erreichbar: ' +
+          (data.public_host ? '✓' : 'noch nicht — kommt mit der Installation der Dienste') +
+          '</span></p>';
         setTimeout(poll, 30000);
       })
       .catch(function() { setTimeout(poll, 30000); });

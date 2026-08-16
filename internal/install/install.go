@@ -29,6 +29,7 @@ import (
 	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/paths"
 	"github.com/lngstck/stackctl/internal/postgres"
+	"github.com/lngstck/stackctl/internal/public"
 	"github.com/lngstck/stackctl/internal/secrets"
 )
 
@@ -771,6 +772,9 @@ func expandMessage(s string, env *envfile.File, cfg *config.Config, appID string
 		"{SCHOOL_SLUG}", cfg.School.Slug,
 		"{server_domain}", cfg.School.ServerDomain,
 		"{app_id}", appID,
+		"{public_base_domain}", public.BaseDomain(cfg),
+		"{public_app_url}", public.AppURL(cfg, appID),
+		"{public_auth_url}", public.AuthURL(cfg),
 	).Replace(s)
 }
 
