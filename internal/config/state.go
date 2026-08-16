@@ -12,7 +12,11 @@ import (
 )
 
 // StateVersion is the schema version of state.yaml.
-const StateVersion = "2.0"
+//
+// 3.0 renamed tunnel_enabled/tunnel_subdomain to public_enabled/public_host.
+// The flag never meant "a tunnel exists" but "this app is reachable from the
+// internet", and with a direct-transport install there is no tunnel at all.
+const StateVersion = "3.0"
 
 // State mirrors state.yaml from ARCHITECTURE.md §12.
 type State struct {
@@ -31,8 +35,13 @@ type ContainerState struct {
 	Ports            []int    `yaml:"ports"`
 	EnvKeys          []string `yaml:"env_keys"`
 	InstalledAt      string   `yaml:"installed_at"`
-	TunnelEnabled    bool     `yaml:"tunnel_enabled"`
-	TunnelSubdomain  string   `yaml:"tunnel_subdomain,omitempty"`
+	// PublicEnabled is true when this app is reachable from the internet —
+	// through a relay tunnel or a local proxy route, depending on the
+	// install's transport.
+	PublicEnabled bool `yaml:"public_enabled"`
+	// PublicHost is the FQDN the app answers on, e.g.
+	// "pylearn.phoenix.learningstack.online".
+	PublicHost string `yaml:"public_host,omitempty"`
 	// AutoUpdateDisabled schliesst diese App vom naechtlichen Auto-Update
 	// aus. Manuelle Updates (Web-UI "Aktualisieren") sind weiterhin moeglich.
 	AutoUpdateDisabled bool `yaml:"auto_update_disabled,omitempty"`

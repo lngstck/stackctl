@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/dex"
 	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/public"
 	"github.com/lngstck/stackctl/internal/registration"
 	"github.com/lngstck/stackctl/internal/secrets"
 	"github.com/lngstck/stackctl/internal/tunnel"
@@ -110,7 +112,19 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	s.cfg.School.ContactEmail = contactEmail
 	s.cfg.Admin.PasswordHash = hash
 	s.cfg.Dex.ClientID = schoolSlug
-	s.cfg.Dex.AuthURL = "https://auth." + schoolSlug + ".learningstack.online"
+	// Phase 1 of the public-address rework: setup still hands out an
+	// operator-relay address. Picking a transport and a domain is the wizard
+	// step that follows; from here on everything downstream reads
+	// cfg.Public rather than assembling the address itself.
+	s.cfg.Public.Transport = config.TransportRelay
+	s.cfg.Public.BaseDomain = config.RelayBaseDomain(schoolSlug)
+	if s.cfg.Public.Relay.SSHHost == "" {
+		s.cfg.Public.Relay.SSHHost = config.DefaultRelaySSHHost
+	}
+	if s.cfg.Public.Relay.SSHPort == 0 {
+		s.cfg.Public.Relay.SSHPort = config.DefaultRelaySSHPort
+	}
+	s.cfg.Dex.AuthURL = public.AuthURL(s.cfg)
 
 	// Generate Dex client secret.
 	dexSecret, err := secrets.RandomHex(20)
@@ -146,6 +160,7 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		SSHPublicKey:    sshPubKey,
 		DexClientID:     schoolSlug,
 		DexClientSecret: dexSecret,
+		DexRedirectURI:  public.AuthURL(s.cfg) + "/callback",
 	}
 	pkgPath, err := registration.BuildAndEncrypt(payload)
 	if err != nil {
@@ -260,11 +275,12 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slug := s.cfg.School.Slug
-	dexTunnel := checkDexTunnel(slug)
+	authHost := public.AuthHost(s.cfg)
+	redirectURI := public.AuthURL(s.cfg) + "/callback"
+	dexTunnel := checkPublicHost(authHost)
 	oidcClient := false
 	if dexTunnel {
-		oidcClient = checkOIDCClient(slug, s.cfg.Dex.ClientSecret)
+		oidcClient = checkOIDCClient(s.cfg.Dex.ClientID, redirectURI)
 	}
 
 	// If both checks pass, transition to ready.
@@ -296,11 +312,14 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"status":"waiting","dex_tunnel":%t,"oidc_client":%t}`, dexTunnel, oidcClient)
 }
 
-// checkDexTunnel tests whether the school's wildcard subdomain is reachable
-// via HTTPS. A successful TLS handshake (any HTTP status) means DNS + cert +
-// sish are all configured. Timeout is short since this runs every 30s.
-func checkDexTunnel(slug string) bool {
-	host := fmt.Sprintf("auth.%s.learningstack.online", slug)
+// checkPublicHost tests whether a public hostname of this install is
+// reachable via HTTPS. A successful TLS handshake (any HTTP status) means DNS
+// and certificate are in place and something is answering. Timeout is short
+// since this runs every 30s.
+func checkPublicHost(host string) bool {
+	if host == "" {
+		return false
+	}
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -318,13 +337,16 @@ func checkDexTunnel(slug string) bool {
 
 // checkOIDCClient tests whether the school is registered as a client in the
 // central Dex by making an authorization request. If the central Dex knows
-// the client_id, it redirects to the login page (302). If not, it returns
-// an error page (4xx).
-func checkOIDCClient(slug, clientSecret string) bool {
+// the client_id *and* the redirect URI the operator registered for it, it
+// redirects to the login page (302). If either is unknown, it returns an
+// error page (4xx) — which is exactly what makes this a useful probe once
+// the address is no longer derivable from the slug.
+func checkOIDCClient(clientID, redirectURI string) bool {
 	authURL := fmt.Sprintf(
-		"https://auth.learningstack.online/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=openid",
-		slug,
-		url.QueryEscape(fmt.Sprintf("https://auth.%s.learningstack.online/callback", slug)),
+		"%s/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=openid",
+		dex.CentralDexIssuer,
+		url.QueryEscape(clientID),
+		url.QueryEscape(redirectURI),
 	)
 	client := &http.Client{
 		Timeout: 5 * time.Second,

@@ -14,8 +14,13 @@ func testConfig() *config.Config {
 		Version:    config.ConfigVersion,
 		SetupState: config.SetupStateReady,
 		School: config.School{
-			Name: "Gymnasium Phoenix",
-			Slug: "phoenix",
+			Name:         "Gymnasium Phoenix",
+			Slug:         "phoenix",
+			ServerDomain: "192.168.1.10",
+		},
+		Public: config.Public{
+			Transport:  config.TransportRelay,
+			BaseDomain: "phoenix.learningstack.online",
 		},
 		Dex: config.Dex{
 			ClientID:     "phoenix",
@@ -151,27 +156,34 @@ func TestAddClientIdempotent(t *testing.T) {
 	}
 }
 
-func TestAuthURL(t *testing.T) {
-	cfg := testConfig()
-	got := AuthURL(cfg)
-	want := "https://auth.phoenix.learningstack.online"
-	if got != want {
-		t.Errorf("AuthURL = %q, want %q", got, want)
-	}
-}
-
 func TestBuildRedirectURI(t *testing.T) {
-	// Tunneled (public URL).
-	got := BuildRedirectURI("/oauth/callback", "langflow", "phoenix", "192.168.1.10", 8320, true)
+	cfg := testConfig()
+
+	// Public URL.
+	got := BuildRedirectURI(cfg, "langflow", "/oauth/callback", 8320, true)
 	want := "https://langflow.phoenix.learningstack.online/oauth/callback"
 	if got != want {
-		t.Errorf("BuildRedirectURI tunneled = %q, want %q", got, want)
+		t.Errorf("BuildRedirectURI public = %q, want %q", got, want)
 	}
 
-	// Local.
-	got = BuildRedirectURI("/oauth/callback", "langflow", "phoenix", "192.168.1.10", 8320, false)
+	// Local URL.
+	got = BuildRedirectURI(cfg, "langflow", "/oauth/callback", 8320, false)
 	want = "http://192.168.1.10:8320/oauth/callback"
 	if got != want {
 		t.Errorf("BuildRedirectURI local = %q, want %q", got, want)
+	}
+}
+
+// A school on its own domain must get its apps and its issuer under that
+// domain — this is the regression the pre-v3 string concatenation could not
+// express at all.
+func TestBuildRedirectURICustomDomain(t *testing.T) {
+	cfg := testConfig()
+	cfg.Public.BaseDomain = "ls.gym-phoenix.de"
+
+	got := BuildRedirectURI(cfg, "pylearn", "/auth/callback", 8330, true)
+	want := "https://pylearn.ls.gym-phoenix.de/auth/callback"
+	if got != want {
+		t.Errorf("BuildRedirectURI = %q, want %q", got, want)
 	}
 }

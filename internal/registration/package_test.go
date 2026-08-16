@@ -25,6 +25,7 @@ func TestBuildAndEncrypt(t *testing.T) {
 		SSHPublicKey:    "ssh-ed25519 AAAA... stackctl-tunnel",
 		DexClientID:     "phoenix",
 		DexClientSecret: "deadbeef1234567890abcdef",
+		DexRedirectURI:  "https://auth.phoenix.learningstack.online/callback",
 	}
 
 	path, err := BuildAndEncrypt(p)

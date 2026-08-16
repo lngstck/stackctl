@@ -17,7 +17,34 @@ import (
 )
 
 // ConfigVersion is the schema version of config.yaml emitted by this build.
-const ConfigVersion = 2
+//
+// v3 replaced the implicit address model — every install lived under
+// "{slug}.learningstack.online" — with an explicit public: block, so a school
+// can also be reached under its own domain, either through a relay or
+// directly from its own server.
+const ConfigVersion = 3
+
+// DefaultRootDomain is the operator-run root that relay-hosted schools get
+// their subdomains under. It is only a default: an install may carry any
+// base_domain, including one the school owns.
+const DefaultRootDomain = "learningstack.online"
+
+// Defaults for the operator-run relay endpoint.
+const (
+	DefaultRelaySSHHost = "sish." + DefaultRootDomain
+	DefaultRelaySSHPort = 2222
+)
+
+// Transport kinds for Public.Transport.
+const (
+	// TransportRelay reaches this install through an SSH reverse tunnel to a
+	// sish endpoint. The server may sit behind NAT. TLS terminates at the
+	// relay, which therefore sees request contents in the clear.
+	TransportRelay = "relay"
+	// TransportDirect reaches this install on the server itself, which holds
+	// public 80/443 and terminates TLS locally.
+	TransportDirect = "direct"
+)
 
 // FilePerm is the on-disk permission for config.yaml and state.yaml.
 // 0640 = owner rw, group r, others none (see ARCHITECTURE.md §16).
@@ -43,7 +70,7 @@ type Config struct {
 	Dex          Dex               `yaml:"dex"`
 	Registration Registration      `yaml:"registration,omitempty"`
 	GlobalEnv    map[string]string `yaml:"global_env,omitempty"`
-	Tunnel       Tunnel            `yaml:"tunnel"`
+	Public       Public            `yaml:"public"`
 	// AutoUpdate steuert das naechtliche Auto-Update aller Apps.
 	AutoUpdate AutoUpdate `yaml:"auto_update,omitempty"`
 }
@@ -90,11 +117,35 @@ type Registration struct {
 	OperatorPubkeyFingerprint string `yaml:"operator_pubkey_fingerprint,omitempty"`
 }
 
-// Tunnel stores the sish target. The private key lives next to config.yaml
-// as tunnel_key (see paths.TunnelKeyFile).
-type Tunnel struct {
+// Public describes how this install is reached from the internet. It is the
+// authoritative source for every public hostname stackctl builds — see
+// internal/public for the constructors that read it.
+type Public struct {
+	// Transport is how traffic arrives: TransportRelay or TransportDirect.
+	Transport string `yaml:"transport"`
+	// BaseDomain is the parent of every public hostname. Apps answer at
+	// {app_id}.{base_domain}, the local Dex at auth.{base_domain}. For an
+	// operator-relay install this is {slug}.learningstack.online; a school
+	// with its own domain carries something like "ls.gym-phoenix.de".
+	BaseDomain string `yaml:"base_domain"`
+	// Relay targets the sish endpoint and is only meaningful for
+	// TransportRelay. Whether that endpoint is operator-run or school-run
+	// makes no difference to stackctl — it is the same SSH reverse tunnel
+	// either way, and only the operator runbook differs.
+	Relay PublicRelay `yaml:"relay,omitempty"`
+}
+
+// PublicRelay stores the sish target. The private key lives next to
+// config.yaml as tunnel_key (see paths.TunnelKeyFile).
+type PublicRelay struct {
 	SSHHost string `yaml:"ssh_host"`
 	SSHPort int    `yaml:"ssh_port"`
+}
+
+// RelayBaseDomain returns the base domain an operator-hosted relay install
+// gets by default.
+func RelayBaseDomain(slug string) string {
+	return slug + "." + DefaultRootDomain
 }
 
 // Default returns a Config pre-populated with the values used for a fresh
@@ -107,9 +158,12 @@ func Default() *Config {
 		Catalog: Catalog{
 			URL: "https://raw.githubusercontent.com/lngstck/catalog/main",
 		},
-		Tunnel: Tunnel{
-			SSHHost: "sish.learningstack.online",
-			SSHPort: 2222,
+		Public: Public{
+			Transport: TransportRelay,
+			Relay: PublicRelay{
+				SSHHost: DefaultRelaySSHHost,
+				SSHPort: DefaultRelaySSHPort,
+			},
 		},
 		GlobalEnv: map[string]string{},
 	}
@@ -183,12 +237,27 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("unknown setup_state %q", c.SetupState)
 	}
+	switch c.Public.Transport {
+	case TransportRelay, TransportDirect:
+	case "":
+		return errors.New("public.transport must be set")
+	default:
+		return fmt.Errorf("unknown public.transport %q", c.Public.Transport)
+	}
+	if c.Public.BaseDomain != "" {
+		if err := ValidateBaseDomain(c.Public.BaseDomain); err != nil {
+			return fmt.Errorf("public.base_domain: %w", err)
+		}
+	}
 	if c.SetupState != SetupStateNeedsSetup {
 		if err := ValidateSlug(c.School.Slug); err != nil {
 			return fmt.Errorf("school.slug: %w", err)
 		}
 		if c.School.Name == "" {
 			return errors.New("school.name must be set after setup")
+		}
+		if c.Public.BaseDomain == "" {
+			return errors.New("public.base_domain must be set after setup")
 		}
 	}
 	return nil

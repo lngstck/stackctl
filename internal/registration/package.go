@@ -2,6 +2,7 @@ package registration
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -41,9 +42,12 @@ func BuildAndEncrypt(p Payload) (string, error) {
 	if p.StackctlVersion == "" {
 		p.StackctlVersion = update.CurrentVersion()
 	}
+	// The redirect URI is the one field the operator pastes verbatim into
+	// `schulen add`, so it must come from the caller's config rather than be
+	// guessed from the slug here — the school's address is no longer
+	// derivable from its name.
 	if p.DexRedirectURI == "" {
-		p.DexRedirectURI = fmt.Sprintf(
-			"https://auth.%s.learningstack.online/callback", p.Slug)
+		return "", errors.New("registration: dex_redirect_uri must be set")
 	}
 
 	// Marshal payload to YAML.

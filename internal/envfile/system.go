@@ -1,6 +1,9 @@
 package envfile
 
-import "github.com/lngstck/stackctl/internal/config"
+import (
+	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/public"
+)
 
 // SystemEnvKeys lists the .env keys that stackctl derives from config and
 // owns in the global section. They are (re)written on every call to
@@ -9,6 +12,7 @@ var SystemEnvKeys = []string{
 	"SCHOOL_NAME",
 	"SCHOOL_SLUG",
 	"SERVER_DOMAIN",
+	"PUBLIC_BASE_DOMAIN",
 	"DEX_AUTH_URL",
 	"ADMIN_PASSWORD",
 }
@@ -31,9 +35,14 @@ func ApplySystemEnv(f *File, cfg *config.Config, adminPassword string) {
 	}
 	f.Set(GlobalSection, "SERVER_DOMAIN", domain)
 
+	// PUBLIC_BASE_DOMAIN lets a container definition build its own public
+	// URLs without knowing the operator's root domain, which is what the
+	// pre-v3 catalog entries hardcoded.
+	f.Set(GlobalSection, "PUBLIC_BASE_DOMAIN", public.BaseDomain(cfg))
+
 	authURL := cfg.Dex.AuthURL
-	if authURL == "" && cfg.School.Slug != "" {
-		authURL = "https://auth." + cfg.School.Slug + ".learningstack.online"
+	if authURL == "" {
+		authURL = public.AuthURL(cfg)
 	}
 	f.Set(GlobalSection, "DEX_AUTH_URL", authURL)
 
