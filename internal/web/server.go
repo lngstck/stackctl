@@ -169,13 +169,21 @@ func (s *Server) routes() {
 	// worker), so it uses authPost like install — not authPostLocked.
 	s.mux.HandleFunc("POST /backups/{name}/restore", s.authPost(s.handleBackupRestore))
 
-	// Tunnel (ready + auth).
-	s.mux.HandleFunc("GET /tunnel", s.requireAuth(s.handleTunnel))
-	s.mux.HandleFunc("POST /tunnel/test", s.authPost(s.handleTunnelTest))
-	s.mux.HandleFunc("POST /tunnel/dex/start", s.authPostLocked(s.handleDexTunnelStart))
-	s.mux.HandleFunc("POST /tunnel/dex/stop", s.authPostLocked(s.handleDexTunnelStop))
-	s.mux.HandleFunc("POST /apps/{id}/tunnel/enable", s.authPostLocked(s.handleAppTunnelEnable))
-	s.mux.HandleFunc("POST /apps/{id}/tunnel/disable", s.authPostLocked(s.handleAppTunnelDisable))
+	// Oeffentlicher Zugang (ready + auth). Hiess bis Config v3 "Tunnel" —
+	// ein Name, der nur eine der beiden Betriebsarten beschreibt.
+	s.mux.HandleFunc("GET /public", s.requireAuth(s.handlePublic))
+	s.mux.HandleFunc("GET /public/health", s.requireAuth(s.handlePublicHealth))
+	s.mux.HandleFunc("POST /public/test", s.authPost(s.handlePublicTest))
+	s.mux.HandleFunc("POST /public/auth/start", s.authPostLocked(s.handleAuthPublishStart))
+	s.mux.HandleFunc("POST /public/auth/stop", s.authPostLocked(s.handleAuthPublishStop))
+	s.mux.HandleFunc("POST /apps/{id}/public/enable", s.authPostLocked(s.handleAppPublishEnable))
+	s.mux.HandleFunc("POST /apps/{id}/public/disable", s.authPostLocked(s.handleAppPublishDisable))
+
+	// Alte Adresse: Lesezeichen und getippte Pfade sollen nicht ins Leere
+	// laufen. Nur GET — die POST-Routen hatten nie externe Aufrufer.
+	s.mux.HandleFunc("GET /tunnel", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/public", http.StatusMovedPermanently)
+	})
 
 	// LLM-Admin (ready + auth). UI sitzt unter /llm mit Tabs (Provider,
 	// Personas, API-Keys); POST-Endpunkte mutieren die config.yaml und

@@ -19,6 +19,7 @@ package preflight
 import (
 	"context"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -89,6 +90,12 @@ type Prober struct {
 	// non-nil when that could not be determined at all (missing privileges),
 	// which is a different answer from "occupied".
 	PortFree func(port int) (bool, error)
+	// TLSPeerCert returns the certificate a host serves. Nil means dial for
+	// real; tests set it to avoid needing a TLS server.
+	TLSPeerCert func(ctx context.Context, host string) (*x509.Certificate, error)
+	// HTTPStatus fetches https://host/ and returns the status code. Nil
+	// means make the request for real.
+	HTTPStatus func(ctx context.Context, host string) (int, error)
 	// randomLabel produces the throwaway label used to prove a wildcard.
 	randomLabel func() string
 }

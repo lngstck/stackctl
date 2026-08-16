@@ -70,7 +70,7 @@
       </table>
       {{if not .TunnelEnabled}}
       <div role="alert" data-variant="warning" class="mt-2" style="font-size:0.85rem;">
-        Diese App nutzt OIDC, ist aber nicht getunnelt. Login funktioniert nur mit aktivem Tunnel.
+        Diese App nutzt OIDC, ist aber nicht oeffentlich erreichbar. Der Login funktioniert erst mit aktivem Zugang.
       </div>
       {{end}}
     </article>
@@ -113,25 +113,25 @@
   <div>
     {{if .HasOIDC}}
     <article class="card mb-2">
-      <h4 class="mb-1">Tunnel</h4>
+      <h4 class="mb-1">Öffentlicher Zugang</h4>
       {{if .TunnelEnabled}}
       <div style="display:flex;align-items:center;gap:0.75rem;">
         <span class="status-dot running"></span>
         <span>Aktiv</span>
         <span class="tunnel-url" style="margin-left:auto;">{{.TunnelSubdomain}}</span>
       </div>
-      <form method="post" action="/apps/{{.ID}}/tunnel/disable" class="mt-2">
+      <form method="post" action="/apps/{{.ID}}/public/disable" class="mt-2">
         {{csrfField $.CSRFToken}}
-        <button class="ghost small" data-variant="danger">Tunnel deaktivieren</button>
+        <button class="ghost small" data-variant="danger">Zugang deaktivieren</button>
       </form>
       {{else}}
       <div style="display:flex;align-items:center;gap:0.75rem;">
         <span class="status-dot stopped"></span>
         <span>Inaktiv</span>
       </div>
-      <form method="post" action="/apps/{{.ID}}/tunnel/enable" class="mt-2">
+      <form method="post" action="/apps/{{.ID}}/public/enable" class="mt-2">
         {{csrfField $.CSRFToken}}
-        <button class="ghost small">Tunnel aktivieren</button>
+        <button class="ghost small">Zugang aktivieren</button>
       </form>
       {{end}}
     </article>
