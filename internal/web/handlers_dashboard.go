@@ -132,17 +132,24 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	//    das Erste, was der Admin tun muss. Steht deshalb ganz oben.
 	data.Issues = append(data.Issues, missingInfraIssues(s.cfg, st)...)
 
-	// 1) Dex-Tunnel — die Lebensader für den OIDC-Login. Liegt er, kann sich
-	//    niemand mehr über moin.schule anmelden → höchste Priorität.
+	// 1) Öffentlicher Zugang zum Login — die Lebensader für OIDC. Liegt er,
+	//    kann sich niemand mehr über moin.schule anmelden → höchste Priorität.
 	if s.publisher != nil {
 		if status := s.publisher.AuthStatus(); status != publish.StatusRunning {
+			// Im direkten Betrieb gibt es keinen Tunnel, der liegen könnte —
+			// dort fehlt eine Route im Reverse-Proxy. Ein Hinweis auf das
+			// falsche Bauteil schickt den Admin an die falsche Stelle.
+			detail := "Der Tunnel für den Login ist nicht aktiv — Logins über moin.schule funktionieren nicht."
+			if s.cfg.Public.Transport == config.TransportDirect {
+				detail = "Der Login wird gerade nicht ausgeliefert — Logins über moin.schule funktionieren nicht. Läuft der Reverse-Proxy?"
+			}
 			data.Issues = append(data.Issues, dashIssue{
 				Level:       "danger",
 				Icon:        "⚠",
 				Title:       "Anmeldung nicht erreichbar",
-				Detail:      "Der Dex-Tunnel ist nicht aktiv — Logins über moin.schule funktionieren nicht.",
-				Action:      "/tunnel",
-				ActionLabel: "Tunnel prüfen",
+				Detail:      detail,
+				Action:      "/public",
+				ActionLabel: "Zugang prüfen",
 			})
 		}
 	}
@@ -188,9 +195,9 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 					Level:       "warning",
 					Icon:        "●",
 					Title:       "Externer Zugang für " + name + " inaktiv",
-					Detail:      "Der Tunnel ist aktiviert, läuft aber gerade nicht.",
-					Action:      "/tunnel",
-					ActionLabel: "Tunnel prüfen",
+					Detail:      "Der öffentliche Zugang ist aktiviert, läuft aber gerade nicht.",
+					Action:      "/public",
+					ActionLabel: "Zugang prüfen",
 				})
 			}
 		}

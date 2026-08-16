@@ -1,0 +1,253 @@
+{{define "page"}}
+{{template "head" .}}
+{{template "sidebar-layout-start" .PageData}}
+
+<h2 class="mb-2">Öffentlicher Zugang</h2>
+
+{{if .TestDone}}
+  {{if eq .TestResult "ok"}}
+    <div role="alert" data-variant="success" class="mb-2">SSH-Verbindung erfolgreich.</div>
+  {{else}}
+    <div role="alert" data-variant="danger" class="mb-2">{{.TestResult}}</div>
+  {{end}}
+{{end}}
+
+{{/* Betriebsart — beantwortet die Frage, auf die sich alles Weitere bezieht */}}
+<article class="card mb-3">
+  <div style="display:flex;align-items:baseline;gap:0.6rem;flex-wrap:wrap;">
+    <h4 style="margin:0;">{{.ModeLabel}}</h4>
+    {{if .BaseDomain}}<code>*.{{.BaseDomain}}</code>{{end}}
+  </div>
+  <p class="sub mb-0" style="font-size:0.85rem;margin-top:0.4rem;">
+    {{if eq .Mode "relay_operator"}}
+      Die Apps sind über den Relay des Betreibers erreichbar. DNS und
+      Zertifikate liegen dort — dieser Server baut nur die ausgehende
+      Verbindung auf.
+    {{else if eq .Mode "relay_own"}}
+      Die Apps sind unter der Domain der Schule erreichbar, der Verkehr läuft
+      aber über den Relay des Betreibers. Der Wildcard-Eintrag muss deshalb
+      auf den Relay zeigen, nicht auf diesen Server.
+    {{else}}
+      Dieser Server nimmt den Verkehr selbst entgegen und holt seine
+      Zertifikate über Let's Encrypt. Voraussetzung bleibt dauerhaft: der
+      Wildcard-Eintrag zeigt hierher und Port 80 und 443 sind aus dem
+      Internet erreichbar.
+    {{end}}
+  </p>
+</article>
+
+{{/* Zustand — was der Assistent einmal geprüft hat, hier laufend */}}
+<article class="card mb-3">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:0.6rem;flex-wrap:wrap;">
+    <h4 style="margin:0;">Zustand</h4>
+    <button type="button" class="ghost small" id="health-btn">Erneut prüfen</button>
+  </div>
+  <div id="health-result" class="mt-2">
+    <p class="sub" style="font-size:0.85rem;">Wird geprüft …</p>
+  </div>
+</article>
+
+{{if .IsRelay}}
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+  {{/* SSH Key card */}}
+  <article class="card">
+    <h4 class="mb-1">SSH-Key</h4>
+    {{if .KeyExists}}
+      <div class="key-display mb-1">{{.SSHPubKey}}</div>
+      <p class="sub" style="font-size:0.85rem;">
+        Ziel: <code>{{.SSHHost}}:{{.SSHPort}}</code>
+      </p>
+    {{else}}
+      <div role="alert" data-variant="warning">
+        Kein SSH-Key vorhanden. Der Key wird beim Setup automatisch erzeugt.
+      </div>
+    {{end}}
+  </article>
+
+  {{/* Connection test card */}}
+  {{if .CanTest}}
+  <article class="card">
+    <h4 class="mb-1">Verbindungstest</h4>
+    <p class="sub mb-2" style="font-size:0.85rem;">
+      Testet den SSH-Handshake zu <code>{{.SSHHost}}</code>.
+    </p>
+    <form method="POST" action="/public/test">
+      {{csrfField $.CSRFToken}}
+      <button type="submit" class="small">Verbindung testen</button>
+    </form>
+  </article>
+  {{end}}
+</div>
+{{end}}
+
+{{/* Login */}}
+<h3 class="mb-1">Anmeldung</h3>
+<p class="sub mb-1" style="font-size:0.85rem;">
+  {{if .IsRelay}}
+    Pflicht-Tunnel fuer den OIDC-Login. Wird beim Start automatisch aufgebaut
+    und bei Abbruch selbsttaetig mit Backoff neu verbunden. Manuelles
+    Stoppen/Starten nur zur Fehlerbehebung.
+  {{else}}
+    Route auf den lokalen Dex. Wird beim Start automatisch gesetzt; manuelles
+    Stoppen/Starten nur zur Fehlerbehebung.
+  {{end}}
+</p>
+<table class="mb-3" style="width:100%;">
+  <thead>
+    <tr><th>Dienst</th><th>Adresse</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Anmeldung (Dex)</td>
+      <td><code>{{.AuthHost}}</code></td>
+      <td>
+        <span class="status-dot {{.AuthStatus}}"></span>
+        {{if eq .AuthStatus "running"}}Aktiv
+        {{else if eq .AuthStatus "error"}}Fehler{{if .IsRelay}} (Reconnect laeuft){{end}}
+        {{else}}Gestoppt
+        {{end}}
+      </td>
+      <td style="text-align:right;">
+        {{if eq .AuthStatus "stopped"}}
+          <form method="POST" action="/public/auth/start" style="display:inline;">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="small">Starten</button>
+          </form>
+        {{else if eq .AuthStatus "error"}}
+          <form method="POST" action="/public/auth/start" style="display:inline;"
+                title="Erneut veroeffentlichen">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="small">Neu verbinden</button>
+          </form>
+          <form method="POST" action="/public/auth/stop" style="display:inline;"
+                onsubmit="return confirm('Anmeldung abschalten? Login ueber moin.schule funktioniert dann fuer ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="small ghost" style="color:var(--danger);">Stoppen</button>
+          </form>
+        {{else}}
+          <form method="POST" action="/public/auth/stop" style="display:inline;"
+                onsubmit="return confirm('Anmeldung abschalten? Login ueber moin.schule funktioniert dann fuer ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="small ghost" style="color:var(--danger);">Stoppen</button>
+          </form>
+        {{end}}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+{{/* Apps */}}
+<h3 class="mb-1">Apps</h3>
+
+{{if .Apps}}
+<table style="width:100%;">
+  <thead>
+    <tr>
+      <th>App</th>
+      <th>Port</th>
+      <th>Oeffentliche URL</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Apps}}
+    <tr>
+      <td>
+        {{.Name}}
+        {{if and .HasOIDC (not .Published)}}
+          <span title="OIDC-App ohne oeffentlichen Zugang — Login funktioniert nicht" style="color:var(--danger);">&#9888;</span>
+        {{end}}
+      </td>
+      <td>{{.Port}}</td>
+      <td>
+        {{if .Published}}
+          <a href="https://{{.PublicHost}}" target="_blank" rel="noopener" class="tunnel-url">{{.PublicHost}}</a>
+        {{else}}
+          <span class="sub">—</span>
+        {{end}}
+      </td>
+      <td>
+        {{if .Published}}
+          <span class="status-dot {{.PublishState}}"></span>
+          {{if eq .PublishState "running"}}Aktiv
+          {{else if eq .PublishState "error"}}Fehler
+          {{else}}Gestoppt
+          {{end}}
+        {{else}}
+          <span class="sub">Aus</span>
+        {{end}}
+      </td>
+      <td style="text-align:right;">
+        {{if .Published}}
+          <form method="POST" action="/apps/{{.ID}}/public/disable" style="display:inline;"
+                onsubmit="return confirm('Oeffentlichen Zugang beenden?{{if .HasOIDC}} OIDC-Login funktioniert dann nicht mehr.{{end}}');">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="small ghost">Deaktivieren</button>
+          </form>
+        {{else}}
+          <form method="POST" action="/apps/{{.ID}}/public/enable" style="display:inline;">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="small">Aktivieren</button>
+          </form>
+        {{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+  <p class="sub">Keine optionalen Apps installiert. (Pflicht-Dienste wie Dex und PostgreSQL werden hier nicht aufgelistet.)</p>
+{{end}}
+
+<script>
+(function() {
+  const btn = document.getElementById('health-btn');
+  const out = document.getElementById('health-result');
+  const MARKS = { ok: '✓', warn: '!', fail: '✗', skip: '·' };
+
+  function load() {
+    btn.disabled = true;
+    out.innerHTML = '<p class="sub" style="font-size:0.85rem;">Wird geprüft …</p>';
+
+    fetch('/public/health')
+      .then(resp => resp.json())
+      .then(data => {
+        const list = document.createElement('ul');
+        list.className = 'check-list';
+        (data.checks || []).forEach(c => {
+          const li = document.createElement('li');
+          li.className = 'check check--' + c.status;
+          const mark = document.createElement('span');
+          mark.className = 'check__mark';
+          mark.textContent = MARKS[c.status] || '·';
+          const body = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'check__title';
+          title.textContent = c.title;
+          const detail = document.createElement('div');
+          detail.className = 'check__detail';
+          detail.textContent = c.detail;
+          body.appendChild(title);
+          body.appendChild(detail);
+          li.appendChild(mark);
+          li.appendChild(body);
+          list.appendChild(li);
+        });
+        out.innerHTML = '';
+        out.appendChild(list);
+      })
+      .catch(() => {
+        out.innerHTML = '<p class="sub" style="font-size:0.85rem;">Prüfung fehlgeschlagen.</p>';
+      })
+      .finally(() => { btn.disabled = false; });
+  }
+
+  btn.addEventListener('click', load);
+  load();
+})();
+</script>
+
+{{template "sidebar-layout-end" .}}
+{{template "foot" .}}
+{{end}}
