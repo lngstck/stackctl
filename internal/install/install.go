@@ -130,6 +130,19 @@ func Install(
 		newEnvKeys = append(newEnvKeys, key)
 	}
 
+	// The app's own public address, so a definition never has to assemble it
+	// from the slug and a root domain that is no longer a constant.
+	addressKeys, redirectURI := applyAddressEnv(def, cfg, env)
+	newEnvKeys = append(newEnvKeys, addressKeys...)
+
+	// A definition that still builds its own redirect URI would disagree with
+	// what gets registered in Dex, and Dex answers a mismatch with an error
+	// page that names neither URI. Better to refuse before anything exists.
+	if err := checkRedirectURIs(def, env, redirectURI); err != nil {
+		rollback()
+		return fail(res, "%v", err)
+	}
+
 	// --- 2. Binaries --------------------------------------------------------
 
 	// (Binary downloads are a Phase 2 concern; stubbed here for completeness.)
@@ -201,17 +214,6 @@ func Install(
 		}
 
 		oidcSecret, _ := env.Get(oidcSecretKey)
-
-		// Build redirect URI. For now, always use the tunneled (public) URL
-		// because OIDC apps must be tunneled for the issuer URL to match.
-		firstPort := 0
-		if len(def.Ports) > 0 {
-			firstPort = def.Ports[0].Host
-		}
-		redirectURI := dex.BuildRedirectURI(
-			cfg, def.ID, def.OIDC.RedirectPath, firstPort,
-			true, // OIDC only works on the public URL
-		)
 
 		client := dex.Client{
 			ID:           def.OIDC.ClientID,
@@ -364,6 +366,16 @@ func Update(
 		}
 	}
 
+	// Same as on install — the address may have changed since (mode switch,
+	// new domain), and an update is the moment to pick that up.
+	addressKeys, redirectURI := applyAddressEnv(def, cfg, env)
+	for _, k := range addressKeys {
+		cs.EnvKeys = appendUnique(cs.EnvKeys, k)
+	}
+	if err := checkRedirectURIs(def, env, redirectURI); err != nil {
+		return fail(res, "%v", err)
+	}
+
 	if err := createDataDirs(def, env); err != nil {
 		return fail(res, "data dirs: %v", err)
 	}
@@ -400,13 +412,6 @@ func Update(
 			cs.EnvKeys = appendUnique(cs.EnvKeys, oidcSecretKey)
 		}
 		oidcSecret, _ := env.Get(oidcSecretKey)
-		firstPort := 0
-		if len(def.Ports) > 0 {
-			firstPort = def.Ports[0].Host
-		}
-		redirectURI := dex.BuildRedirectURI(
-			cfg, def.ID, def.OIDC.RedirectPath, firstPort, true,
-		)
 		client := dex.Client{
 			ID: def.OIDC.ClientID, Secret: oidcSecret, Name: def.Name,
 			RedirectURIs: []string{redirectURI},
@@ -776,6 +781,80 @@ func expandMessage(s string, env *envfile.File, cfg *config.Config, appID string
 		"{public_app_url}", public.AppURL(cfg, appID),
 		"{public_auth_url}", public.AuthURL(cfg),
 	).Replace(s)
+}
+
+// PublicURLEnvKey and RedirectURIEnvKey name the per-app values stackctl
+// writes into .env.
+//
+// The keys carry the app id because .env is one flat namespace — sections in
+// the file are layout, not scope. A plain APP_PUBLIC_URL would be overwritten
+// by the next app installed, and the breakage would show up somewhere else
+// entirely.
+func PublicURLEnvKey(appID string) string   { return envKeyPrefix(appID) + "_PUBLIC_URL" }
+func RedirectURIEnvKey(appID string) string { return envKeyPrefix(appID) + "_OIDC_REDIRECT_URI" }
+
+func envKeyPrefix(appID string) string {
+	return strings.ToUpper(strings.ReplaceAll(appID, "-", "_"))
+}
+
+// applyAddressEnv writes the app's public address into .env and returns the
+// keys it set plus the OIDC redirect URI (empty for apps without a login).
+//
+// It runs in Install *and* Update. A hook that only exists in one of them is
+// a slow-acting bug: the install works, the first update silently drops the
+// value, and the app keeps running on whatever docker cached.
+func applyAddressEnv(def *catalog.Definition, cfg *config.Config, env *envfile.File) (keys []string, redirectURI string) {
+	publicKey := PublicURLEnvKey(def.ID)
+	env.Set(def.ID, publicKey, public.AppURL(cfg, def.ID))
+	keys = append(keys, publicKey)
+
+	if def.OIDC == nil {
+		return keys, ""
+	}
+
+	firstPort := 0
+	if len(def.Ports) > 0 {
+		firstPort = def.Ports[0].Host
+	}
+	redirectURI = dex.BuildRedirectURI(
+		cfg, def.ID, def.OIDC.RedirectPath, firstPort,
+		true, // OIDC only works on the public URL
+	)
+
+	redirectKey := RedirectURIEnvKey(def.ID)
+	env.Set(def.ID, redirectKey, redirectURI)
+	return append(keys, redirectKey), redirectURI
+}
+
+// checkRedirectURIs verifies that no environment value of an OIDC app carries
+// a redirect URI other than the one registered in Dex.
+//
+// The two used to be maintained separately: stackctl computed one for the Dex
+// client, the catalog YAML spelled out another for the app. They agreed only
+// because both derived from the slug under one fixed root domain. With the
+// address depending on the operating mode, a hardcoded catalog value is
+// simply wrong — and the resulting login failure points at neither file.
+func checkRedirectURIs(def *catalog.Definition, env *envfile.File, want string) error {
+	if want == "" {
+		// No OIDC block, so nothing was registered and there is nothing to
+		// contradict. An app may well carry a redirect URI of its own for a
+		// login stackctl knows nothing about.
+		return nil
+	}
+	for _, e := range def.Environment {
+		if !strings.Contains(strings.ToUpper(e.Key), "REDIRECT_URI") {
+			continue
+		}
+		got := expandEnvVars(e.Value, env)
+		if got == want {
+			continue
+		}
+		return fmt.Errorf(
+			"Katalog-Eintrag und OIDC-Registrierung widersprechen sich: %s ist %q, angemeldet wird aber %q. "+
+				"Die Definition sollte ${%s} verwenden statt die Adresse selbst zu bilden",
+			e.Key, got, want, RedirectURIEnvKey(def.ID))
+	}
+	return nil
 }
 
 func expandEnvVars(s string, env *envfile.File) string {

@@ -1,9 +1,11 @@
 package install
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lngstck/stackctl/internal/catalog"
+	"github.com/lngstck/stackctl/internal/compose"
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/envfile"
 )
@@ -231,5 +233,130 @@ func TestExpandMessageNilConfig(t *testing.T) {
 	env.Set(envfile.GlobalSection, "SCHOOL_SLUG", "phoenix")
 	if got := expandMessage("${SCHOOL_SLUG}", env, nil, "x"); got != "phoenix" {
 		t.Errorf("got %q, want %q", got, "phoenix")
+	}
+}
+
+func oidcDef() *catalog.Definition {
+	def := &catalog.Definition{}
+	def.ID = "pylearn"
+	def.Name = "PyLearn"
+	def.OIDC = &catalog.OIDCSpec{ClientID: "pylearn", RedirectPath: "/auth/callback"}
+	def.Ports = []compose.PortSpec{{Host: 8330, Container: 8000}}
+	return def
+}
+
+func directCfgFor(domain string) *config.Config {
+	return &config.Config{
+		School: config.School{Slug: "phoenix"},
+		Public: config.Public{Transport: config.TransportDirect, BaseDomain: domain},
+	}
+}
+
+// Die Adresse der App gehoert in .env, damit eine Katalog-Definition sie nicht
+// mehr selbst aus Slug + Root-Domain zusammenbauen muss.
+func TestApplyAddressEnvWritesPublicAddress(t *testing.T) {
+	env := envfile.New()
+	def := oidcDef()
+
+	keys, redirectURI := applyAddressEnv(def, directCfgFor("ls.gym-phoenix.de"), env)
+
+	if got, _ := env.Get("PYLEARN_PUBLIC_URL"); got != "https://pylearn.ls.gym-phoenix.de" {
+		t.Errorf("PYLEARN_PUBLIC_URL = %q", got)
+	}
+	if got, _ := env.Get("PYLEARN_OIDC_REDIRECT_URI"); got != "https://pylearn.ls.gym-phoenix.de/auth/callback" {
+		t.Errorf("PYLEARN_OIDC_REDIRECT_URI = %q", got)
+	}
+	if redirectURI != "https://pylearn.ls.gym-phoenix.de/auth/callback" {
+		t.Errorf("zurueckgegebene Redirect-URI = %q", redirectURI)
+	}
+	if len(keys) != 2 {
+		t.Errorf("gesetzte Keys = %v, want 2", keys)
+	}
+}
+
+// Die Schluessel tragen die App-ID, weil .env ein flacher Namensraum ist —
+// die Abschnitte im File sind Layout, kein Geltungsbereich. Ohne Praefix
+// wuerde die naechste installierte App den Wert der vorigen ueberschreiben.
+func TestAddressEnvKeysDoNotCollide(t *testing.T) {
+	env := envfile.New()
+	cfg := directCfgFor("ls.gym-phoenix.de")
+
+	first := &catalog.Definition{}
+	first.ID = "pylearn"
+	second := &catalog.Definition{}
+	second.ID = "sponsorenlauf"
+
+	applyAddressEnv(first, cfg, env)
+	applyAddressEnv(second, cfg, env)
+
+	if got, _ := env.Get("PYLEARN_PUBLIC_URL"); got != "https://pylearn.ls.gym-phoenix.de" {
+		t.Errorf("erste App wurde ueberschrieben: %q", got)
+	}
+	if got, _ := env.Get("SPONSORENLAUF_PUBLIC_URL"); got != "https://sponsorenlauf.ls.gym-phoenix.de" {
+		t.Errorf("zweite App = %q", got)
+	}
+}
+
+// Bindestriche sind in Env-Keys nicht erlaubt — open-webui wuerde sonst einen
+// Key erzeugen, den die Shell-Expansion nicht aufloest.
+func TestAddressEnvKeyNormalisesDashes(t *testing.T) {
+	if got := PublicURLEnvKey("open-webui"); got != "OPEN_WEBUI_PUBLIC_URL" {
+		t.Errorf("PublicURLEnvKey = %q", got)
+	}
+}
+
+// Der eigentliche Zweck: eine Definition, die ihre Redirect-URI selbst baut,
+// widerspricht dem, was in Dex landet. Dex meldet den Fall mit einer Seite,
+// die keine der beiden URIs nennt — deshalb hier abbrechen.
+func TestCheckRedirectURIsCatchesHardcodedAddress(t *testing.T) {
+	env := envfile.New()
+	env.Set(envfile.GlobalSection, "SCHOOL_SLUG", "phoenix")
+	def := oidcDef()
+	def.Environment = []compose.EnvVar{
+		{Key: "OIDC_REDIRECT_URI", Value: "https://pylearn.${SCHOOL_SLUG}.learningstack.online/auth/callback"},
+	}
+
+	err := checkRedirectURIs(def, env, "https://pylearn.ls.gym-phoenix.de/auth/callback")
+	if err == nil {
+		t.Fatal("Widerspruch wurde nicht erkannt")
+	}
+	// Die Meldung muss beide Adressen und den Ausweg nennen — sonst sucht
+	// jemand im falschen File.
+	for _, want := range []string{
+		"pylearn.phoenix.learningstack.online",
+		"pylearn.ls.gym-phoenix.de",
+		"PYLEARN_OIDC_REDIRECT_URI",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Meldung nennt %q nicht: %v", want, err)
+		}
+	}
+}
+
+func TestCheckRedirectURIsAcceptsInjectedValue(t *testing.T) {
+	env := envfile.New()
+	def := oidcDef()
+	cfg := directCfgFor("ls.gym-phoenix.de")
+	_, redirectURI := applyAddressEnv(def, cfg, env)
+	def.Environment = []compose.EnvVar{
+		{Key: "OIDC_REDIRECT_URI", Value: "${PYLEARN_OIDC_REDIRECT_URI}"},
+	}
+
+	if err := checkRedirectURIs(def, env, redirectURI); err != nil {
+		t.Errorf("korrekte Definition abgelehnt: %v", err)
+	}
+}
+
+// Ohne OIDC-Block registriert stackctl nichts — dann gibt es auch nichts,
+// dem eine App widersprechen koennte.
+func TestCheckRedirectURIsIgnoresAppsWithoutOIDC(t *testing.T) {
+	def := &catalog.Definition{}
+	def.ID = "grafana"
+	def.Environment = []compose.EnvVar{
+		{Key: "SOME_REDIRECT_URI", Value: "https://irgendwo.example.org/cb"},
+	}
+
+	if err := checkRedirectURIs(def, envfile.New(), ""); err != nil {
+		t.Errorf("App ohne OIDC abgelehnt: %v", err)
 	}
 }
