@@ -18,9 +18,6 @@ func TestApplySystemEnv(t *testing.T) {
 			Transport:  config.TransportRelay,
 			BaseDomain: "phoenix.learningstack.online",
 		},
-		Dex: config.Dex{
-			AuthURL: "https://auth.phoenix.learningstack.online",
-		},
 	}
 
 	ApplySystemEnv(f, cfg, "pw123456")
@@ -36,6 +33,38 @@ func TestApplySystemEnv(t *testing.T) {
 		if v, ok := f.Get(k); !ok || v != want {
 			t.Errorf("%s = %q,%v; want %q", k, v, ok, want)
 		}
+	}
+}
+
+// TestApplySystemEnvAuthURLFollowsBaseDomain pins DEX_AUTH_URL to the school's
+// own domain rather than to its slug. The URL used to be read from a copy
+// stored at setup time, which agreed with the address only as long as every
+// school lived under the operator's root domain.
+func TestApplySystemEnvAuthURLFollowsBaseDomain(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		transport string
+		want      string
+	}{
+		{"relay", config.TransportRelay, "https://auth.ls.gym-phoenix.de"},
+		{"direct", config.TransportDirect, "https://auth.ls.gym-phoenix.de"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := New()
+			cfg := &config.Config{
+				School: config.School{Name: "Phoenix", Slug: "phoenix"},
+				Public: config.Public{
+					Transport:  tc.transport,
+					BaseDomain: "ls.gym-phoenix.de",
+				},
+			}
+
+			ApplySystemEnv(f, cfg, "")
+
+			if v, _ := f.Get("DEX_AUTH_URL"); v != tc.want {
+				t.Errorf("DEX_AUTH_URL = %q; want %q", v, tc.want)
+			}
+		})
 	}
 }
 

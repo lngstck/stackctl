@@ -25,7 +25,6 @@ func testConfig() *config.Config {
 		Dex: config.Dex{
 			ClientID:     "phoenix",
 			ClientSecret: "deadbeef1234567890abcdef1234567890abcdef",
-			AuthURL:      "https://auth.phoenix.learningstack.online",
 		},
 	}
 }

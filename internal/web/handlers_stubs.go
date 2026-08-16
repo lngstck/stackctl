@@ -61,7 +61,7 @@ func (s *Server) settingsData(msg, errMsg string) settingsData {
 		ServerDomain:   s.cfg.School.ServerDomain,
 		ContactEmail:     s.cfg.School.ContactEmail,
 		PublicBaseDomain: public.BaseDomain(s.cfg),
-		DexAuthURL:       s.cfg.Dex.AuthURL,
+		DexAuthURL:       public.AuthURL(s.cfg),
 		AutoUpdate:     s.cfg.AutoUpdate.Enabled,
 		Message:        msg,
 		Error:          errMsg,

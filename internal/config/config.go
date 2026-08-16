@@ -103,11 +103,19 @@ type Admin struct {
 
 // Dex binds this school to a client registration on the central dex.
 // Phase 1 hardcodes the upstream to "moin.schule via central dex", so no
-// upstream selector is stored here. AuthURL is immutable after setup.
+// upstream selector is stored here.
+//
+// The issuer URL is deliberately absent: it follows from Public.Transport and
+// Public.BaseDomain and is read through public.AuthURL. It used to be stored
+// here as well, written once at setup and preferred over the derived value
+// when building .env — two sources for the one string that has to match
+// character for character between browser, container and the redirect URI
+// registered at the central dex. They could not disagree while the address was
+// immutable, which is exactly the kind of agreement that ends quietly the day
+// switching modes becomes possible.
 type Dex struct {
 	ClientID     string `yaml:"client_id"`
 	ClientSecret string `yaml:"client_secret"`
-	AuthURL      string `yaml:"auth_url"`
 }
 
 // Registration tracks progress of the awaiting_registration state.
