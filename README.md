@@ -10,7 +10,7 @@ stackctl ist das einzige Tool, das ein Schul-Admin auf einem frischen Linux-Serv
 
 - **Pflicht-Container**: PostgreSQL und [Dex](https://dexidp.io) (OIDC) werden automatisch eingerichtet.
 - **Apps aus dem Katalog**: Open-WebUI, Langflow, … ein Klick zur Installation.
-- **Tunnel zur Außenwelt**: Apps wahlweise nur im Schul-LAN oder öffentlich unter `<app>.<schule>.learningstack.online`.
+- **Öffentlicher Zugang**: Apps wahlweise nur im Schul-LAN oder öffentlich erreichbar — über den Relay des Betreibers oder direkt vom eigenen Server. Siehe [Betriebsarten](docs/betriebsarten.md).
 - **Single-Sign-On**: Alle Apps authentifizieren gegen den lokalen Dex, der über einen zentralen OIDC-Proxy mit schulischen Identity-Anbietern verbunden wird.
 
 ## Installation
@@ -22,6 +22,8 @@ curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/insta
 Danach `http://<server-ip>:8090` im Browser öffnen und dem Setup-Wizard folgen.
 
 Voraussetzungen: Ubuntu 22.04+ oder Debian 12+, Docker 24+, ein eingehender Port 8090 im lokalen Netz.
+
+Der Assistent fragt als Erstes, wie die Apps aus dem Internet erreichbar sein sollen. Je nach Antwort kommen ein Wildcard-DNS-Eintrag und offene Ports 80/443 dazu — die [Betriebsarten](docs/betriebsarten.md) beschreiben, was wann nötig ist. Die Wahl fällt einmalig bei der Einrichtung.
 
 ## Entwicklung
 
