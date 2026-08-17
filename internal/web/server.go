@@ -54,9 +54,12 @@ type Server struct {
 	publisher publish.Publisher
 	jobs      *jobStore
 	stateMu   sync.Mutex // guards s.state access against background job commits
-	devMode   bool
-	devDir    string // path to internal/web/ for dev-mode FS reload
-	mux       *http.ServeMux
+	// listenPort is the port this server answers on — needed when publishing
+	// the UI itself, where stackctl is its own upstream.
+	listenPort int
+	devMode    bool
+	devDir     string // path to internal/web/ for dev-mode FS reload
+	mux        *http.ServeMux
 }
 
 // Option configures the server.
@@ -67,6 +70,14 @@ type Option func(*Server)
 // branch on the transport.
 func WithPublisher(p publish.Publisher) Option {
 	return func(s *Server) { s.publisher = p }
+}
+
+// WithListenPort tells the server which port it is reachable on, so it can
+// hand that to the publisher when the admin publishes the UI itself. It is
+// passed in rather than read back from the listener because the value comes
+// from a flag and has to be known before ListenAndServe runs.
+func WithListenPort(port int) Option {
+	return func(s *Server) { s.listenPort = port }
 }
 
 // WithDevMode enables filesystem-based template/asset loading for live reload.
@@ -176,6 +187,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /public/test", s.authPost(s.handlePublicTest))
 	s.mux.HandleFunc("POST /public/auth/start", s.authPostLocked(s.handleAuthPublishStart))
 	s.mux.HandleFunc("POST /public/auth/stop", s.authPostLocked(s.handleAuthPublishStop))
+	s.mux.HandleFunc("POST /public/admin/start", s.authPostLocked(s.handleAdminPublishStart))
+	s.mux.HandleFunc("POST /public/admin/stop", s.authPostLocked(s.handleAdminPublishStop))
 	s.mux.HandleFunc("POST /apps/{id}/public/enable", s.authPostLocked(s.handleAppPublishEnable))
 	s.mux.HandleFunc("POST /apps/{id}/public/disable", s.authPostLocked(s.handleAppPublishDisable))
 
@@ -426,15 +439,17 @@ func (s *Server) snapState() *config.State {
 }
 
 // commitState publishes a mutated state clone back as the live state and saves
-// it. The struct's map fields are reassigned in place so the shared pointer
-// held by the tunnel manager stays coherent. Callers hold the op-lock, so two
-// commits never overlap.
+// it. Callers hold the op-lock, so two commits never overlap.
+//
+// The whole struct is assigned through the pointer rather than field by
+// field: the shared pointer held elsewhere stays coherent either way, but a
+// field-by-field copy silently drops anything added to State later — the
+// symptom being a setting that survives until the next background job commits
+// and then quietly reverts. working is a clone, so nothing aliases into it.
 func (s *Server) commitState(working *config.State) error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
-	s.state.Version = working.Version
-	s.state.Containers = working.Containers
-	s.state.Ports = working.Ports
+	*s.state = *working
 	return s.state.Save()
 }
 
@@ -534,12 +549,5 @@ func slugify(name string) string {
 // same thing, which is why they share this method rather than each keeping
 // their own sequence.
 func (s *Server) bootstrapPublisher() {
-	if s.publisher == nil {
-		return
-	}
-	if err := s.publisher.EnsureAuth(); err != nil {
-		log.Printf("web: publish login: %v", err)
-	}
-	s.publisher.Restore(publish.AppsFrom(s.snapState(), catalog.ContainerPort))
-	s.publisher.StartMonitor()
+	publish.Bootstrap(s.publisher, s.snapState(), catalog.ContainerPort, s.listenPort)
 }

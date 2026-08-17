@@ -22,6 +22,15 @@ import "github.com/lngstck/stackctl/internal/config"
 // Dex holds a redirect URI derived from it.
 const AuthSubdomain = "auth"
 
+// AdminSubdomain is the label stackctl's own web UI answers on when the admin
+// publishes it. Unlike the login it is off by default — see the handlers in
+// internal/web for why that is a decision and not a default.
+//
+// It is a reserved label rather than a configurable one: an app whose id is
+// "admin" would otherwise take the address of the control plane, and the
+// collision would only show up once both are published.
+const AdminSubdomain = "admin"
+
 // BaseDomain returns the parent domain of every public hostname.
 //
 // The fallback covers a config whose address has not been written yet — a
@@ -78,6 +87,12 @@ func AuthHost(cfg *config.Config) string { return Host(cfg, AuthSubdomain) }
 // public URL, never a local one: the issuer must match between the browser
 // and the container that mints the tokens.
 func AuthURL(cfg *config.Config) string { return URL(cfg, AuthSubdomain) }
+
+// AdminHost returns the hostname stackctl's own UI answers on once published.
+func AdminHost(cfg *config.Config) string { return Host(cfg, AdminSubdomain) }
+
+// AdminURL returns the public URL of stackctl's own UI once published.
+func AdminURL(cfg *config.Config) string { return URL(cfg, AdminSubdomain) }
 
 // AppHost returns the public hostname of an installed app.
 func AppHost(cfg *config.Config, appID string) string { return Host(cfg, appID) }

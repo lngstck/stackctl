@@ -24,6 +24,10 @@ type State struct {
 	Containers map[string]*ContainerState `yaml:"containers"`
 	// Ports maps host_port -> app_id so we can reject conflicts on install.
 	Ports map[int]string `yaml:"ports"`
+	// AdminPublished records whether the admin asked for stackctl's own UI to
+	// be reachable at admin.{base_domain}. Absent means no, which is the
+	// answer every install that predates the option should get.
+	AdminPublished bool `yaml:"admin_published,omitempty"`
 }
 
 // ContainerState tracks everything we know about an installed app from the
@@ -109,10 +113,15 @@ func (s *State) Clone() *State {
 	if s == nil {
 		return NewState()
 	}
+	// Every scalar field has to be listed here. A field forgotten in this
+	// literal is not a compile error — it silently resets to its zero value
+	// the next time a background job commits its clone. TestCloneCopiesEvery
+	// Field fails when that happens.
 	ns := &State{
-		Version:    s.Version,
-		Containers: make(map[string]*ContainerState, len(s.Containers)),
-		Ports:      make(map[int]string, len(s.Ports)),
+		Version:        s.Version,
+		AdminPublished: s.AdminPublished,
+		Containers:     make(map[string]*ContainerState, len(s.Containers)),
+		Ports:          make(map[int]string, len(s.Ports)),
 	}
 	for id, cs := range s.Containers {
 		cp := *cs

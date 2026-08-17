@@ -98,3 +98,28 @@ func TestNoAddressYieldsEmptyString(t *testing.T) {
 		t.Errorf("AuthURL(nil) = %q, want empty", got)
 	}
 }
+
+// The admin label is reserved: an app called "admin" would otherwise answer on
+// the address of the control plane, and only once both are published.
+func TestAdminAddress(t *testing.T) {
+	cfg := &config.Config{
+		School: config.School{Slug: "phoenix"},
+		Public: config.Public{
+			Transport:  config.TransportDirect,
+			BaseDomain: "ls.gym-phoenix.de",
+		},
+	}
+
+	if got, want := AdminHost(cfg), "admin.ls.gym-phoenix.de"; got != want {
+		t.Errorf("AdminHost = %q, want %q", got, want)
+	}
+	if got, want := AdminURL(cfg), "https://admin.ls.gym-phoenix.de"; got != want {
+		t.Errorf("AdminURL = %q, want %q", got, want)
+	}
+	if AdminHost(cfg) == AppHost(cfg, AuthSubdomain) {
+		t.Error("admin and auth must not share a hostname")
+	}
+	if got := AdminHost(nil); got != "" {
+		t.Errorf("AdminHost(nil) = %q, want empty", got)
+	}
+}
