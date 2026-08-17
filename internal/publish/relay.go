@@ -3,10 +3,12 @@
 package publish
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/public"
 	"github.com/lngstck/stackctl/internal/tunnel"
 )
 
@@ -45,6 +47,24 @@ func (r *Relay) EnsureAuth() error {
 func (r *Relay) AuthStatus() string { return r.mgr.Status(tunnel.DexTunnelID) }
 func (r *Relay) StartAuth() error   { return r.mgr.StartDexTunnel() }
 func (r *Relay) StopAuth() error    { return r.mgr.StopDexTunnel() }
+
+// StartAdmin forwards admin.{base_domain} to the port stackctl listens on.
+// Same machinery as any app tunnel — the local end just happens to be
+// stackctl itself rather than a container.
+func (r *Relay) StartAdmin(localPort int) error {
+	if localPort <= 0 {
+		return fmt.Errorf("publish: unknown stackctl port")
+	}
+	remoteHost := public.AdminHost(r.mgr.Config())
+	if remoteHost == "" {
+		return fmt.Errorf("publish: install has no public address")
+	}
+	return r.mgr.Start(tunnel.AdminTunnelID, remoteHost, localPort)
+}
+
+func (r *Relay) StopAdmin() error { return r.mgr.Stop(tunnel.AdminTunnelID) }
+
+func (r *Relay) AdminStatus() string { return r.mgr.Status(tunnel.AdminTunnelID) }
 
 func (r *Relay) Enable(app App) (string, error) {
 	return r.mgr.StartApp(app.ID, app.LocalPort)

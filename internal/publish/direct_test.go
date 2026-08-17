@@ -165,3 +165,101 @@ func mustEnable(t *testing.T, d *Direct, id string, containerPort int) {
 		t.Fatalf("Enable %s: %v", id, err)
 	}
 }
+
+// The UI is the one upstream that is not a container: stackctl runs under
+// systemd, so the proxy has to reach it through the host, not by service name.
+func TestDirectPublishesAdminUIViaHostAddress(t *testing.T) {
+	d := NewDirect(directCfg(t))
+	d.hostAddress = func() (string, error) { return "172.18.0.1", nil }
+
+	if err := d.StartAdmin(8090); err != nil {
+		t.Fatalf("StartAdmin: %v", err)
+	}
+
+	conf := caddyfile(t)
+	if !strings.Contains(conf, "admin.ls.gym-phoenix.de") {
+		t.Errorf("Caddyfile has no admin route:\n%s", conf)
+	}
+	if !strings.Contains(conf, "172.18.0.1:8090") {
+		t.Errorf("admin route does not point at the host:\n%s", conf)
+	}
+	if got := d.AdminStatus(); got == StatusStopped {
+		t.Error("AdminStatus still reports stopped after publishing")
+	}
+}
+
+func TestDirectStopAdminRemovesRoute(t *testing.T) {
+	d := NewDirect(directCfg(t))
+	d.hostAddress = func() (string, error) { return "172.18.0.1", nil }
+
+	if err := d.StartAdmin(8090); err != nil {
+		t.Fatalf("StartAdmin: %v", err)
+	}
+	if err := d.StopAdmin(); err != nil {
+		t.Fatalf("StopAdmin: %v", err)
+	}
+
+	if conf := caddyfile(t); strings.Contains(conf, "admin.ls.gym-phoenix.de") {
+		t.Errorf("admin route survived StopAdmin:\n%s", conf)
+	}
+	if got := d.AdminStatus(); got != StatusStopped {
+		t.Errorf("AdminStatus = %q, want %q", got, StatusStopped)
+	}
+}
+
+// Publishing the UI must not disturb what is already published. The whole
+// Caddyfile is rewritten on every change, so this is worth pinning.
+func TestDirectAdminRouteLeavesOthersAlone(t *testing.T) {
+	d := NewDirect(directCfg(t))
+	d.hostAddress = func() (string, error) { return "172.18.0.1", nil }
+
+	if err := d.EnsureAuth(); err != nil {
+		t.Fatalf("EnsureAuth: %v", err)
+	}
+	if _, err := d.Enable(App{ID: "pylearn", LocalPort: 8330, ContainerPort: 8000}); err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+	if err := d.StartAdmin(8090); err != nil {
+		t.Fatalf("StartAdmin: %v", err)
+	}
+
+	conf := caddyfile(t)
+	for _, want := range []string{
+		"auth.ls.gym-phoenix.de",
+		"pylearn.ls.gym-phoenix.de",
+		"admin.ls.gym-phoenix.de",
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("route %q missing:\n%s", want, conf)
+		}
+	}
+}
+
+// Without a reachable host address there is no route worth writing. Failing
+// here beats a route that resolves and answers nothing.
+func TestDirectAdminFailsWithoutHostAddress(t *testing.T) {
+	d := NewDirect(directCfg(t))
+	d.hostAddress = func() (string, error) { return "", errNoGateway }
+
+	if err := d.StartAdmin(8090); err == nil {
+		t.Fatal("StartAdmin succeeded without a host address")
+	}
+	if got := d.AdminStatus(); got != StatusStopped {
+		t.Errorf("AdminStatus = %q after a failed publish, want %q", got, StatusStopped)
+	}
+}
+
+func TestDirectAdminRejectsUnknownPort(t *testing.T) {
+	d := NewDirect(directCfg(t))
+	d.hostAddress = func() (string, error) { return "172.18.0.1", nil }
+
+	if err := d.StartAdmin(0); err == nil {
+		t.Error("StartAdmin accepted port 0")
+	}
+}
+
+type gatewayErr string
+
+func (e gatewayErr) Error() string { return string(e) }
+
+const errNoGateway = gatewayErr("no gateway")

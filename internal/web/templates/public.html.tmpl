@@ -80,17 +80,13 @@
 </div>
 {{end}}
 
-{{/* Login */}}
-<h3 class="mb-1">Anmeldung</h3>
+{{/* Dienste von stackctl selbst — im Gegensatz zu den Apps weiter unten */}}
+<h3 class="mb-1">Anmeldung und Verwaltung</h3>
 <p class="sub mb-1" style="font-size:0.85rem;">
-  {{if .IsRelay}}
-    Pflicht-Tunnel fuer den OIDC-Login. Wird beim Start automatisch aufgebaut
-    und bei Abbruch selbsttaetig mit Backoff neu verbunden. Manuelles
-    Stoppen/Starten nur zur Fehlerbehebung.
-  {{else}}
-    Route auf den lokalen Dex. Wird beim Start automatisch gesetzt; manuelles
-    Stoppen/Starten nur zur Fehlerbehebung.
-  {{end}}
+  Die Anmeldung ist Pflicht und wird beim Start automatisch veröffentlicht
+  ({{if .IsRelay}}Tunnel, bei Abbruch selbsttätig mit Backoff neu verbunden{{else}}Route auf den lokalen Dex{{end}});
+  manuelles Stoppen/Starten nur zur Fehlerbehebung. Die Verwaltung ist das
+  Gegenteil: standardmäßig aus, und nur auf ausdrückliche Entscheidung hin an.
 </p>
 <table class="mb-3" style="width:100%;">
   <thead>
@@ -133,8 +129,46 @@
         {{end}}
       </td>
     </tr>
+    <tr>
+      <td>
+        Verwaltung (diese Oberfläche)
+        <span class="sub" style="display:block;font-size:0.78rem;">
+          Im Schulnetz: <code>{{.AdminLocalAddr}}</code>
+        </span>
+      </td>
+      <td><code>{{.AdminHost}}</code></td>
+      <td>
+        {{/* "Aus" ist hier der Normalzustand, kein Alarm — deshalb ein
+             neutraler Punkt statt des roten aus der Anmeldungszeile. */}}
+        <span class="status-dot {{if eq .AdminStatus "stopped"}}off{{else}}{{.AdminStatus}}{{end}}"></span>
+        {{if eq .AdminStatus "running"}}Aktiv
+        {{else if eq .AdminStatus "error"}}Fehler
+        {{else}}Aus
+        {{end}}
+      </td>
+      <td style="text-align:right;">
+        {{if eq .AdminStatus "stopped"}}
+          <form method="POST" action="/public/admin/start" style="display:inline;"
+                onsubmit="return confirm('Diese Oberfläche aus dem Internet erreichbar machen?\n\nSie kann Apps installieren, Passwörter und Schlüssel anzeigen und Backups zurückspielen — geschützt nur durch das Admin-Passwort, ohne zweiten Faktor.\n\nDer Zugang im Schulnetz ({{.AdminLocalAddr}}) bleibt daneben bestehen.');">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="small ghost">Einschalten</button>
+          </form>
+        {{else}}
+          <form method="POST" action="/public/admin/stop" style="display:inline;">
+            {{csrfField $.CSRFToken}}
+            <button type="submit" class="small ghost">Ausschalten</button>
+          </form>
+        {{end}}
+      </td>
+    </tr>
   </tbody>
 </table>
+
+<p class="sub mb-3" style="font-size:0.82rem;">
+  Die Verwaltung bleibt im Schulnetz erreichbar, auch eingeschaltet. Das
+  Einschalten stellt sie <em>zusätzlich</em> ins Internet — ein falsch
+  gesetzter DNS-Eintrag kann also niemanden aussperren.
+</p>
 
 {{/* Apps */}}
 <h3 class="mb-1">Apps</h3>

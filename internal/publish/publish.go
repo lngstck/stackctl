@@ -18,6 +18,7 @@
 package publish
 
 import (
+	"log"
 	"sort"
 
 	"github.com/lngstck/stackctl/internal/config"
@@ -72,6 +73,19 @@ type Publisher interface {
 	StartAuth() error
 	StopAuth() error
 
+	// StartAdmin publishes stackctl's own web UI at admin.{base_domain},
+	// listening on localPort. Unlike the login this is off unless the admin
+	// asks for it: it puts the control plane of the whole install — installs,
+	// secrets, restores — behind one password on the open internet.
+	//
+	// It does not change what stackctl listens on. The LAN port stays open,
+	// so a route that does not work costs nothing but a wrong bookmark.
+	StartAdmin(localPort int) error
+	// StopAdmin withdraws it. Withdrawing something unpublished is not an error.
+	StopAdmin() error
+	// AdminStatus reports the publication status of the UI itself.
+	AdminStatus() string
+
 	// Enable publishes an app and returns the public host it now answers on.
 	Enable(app App) (host string, err error)
 	// Disable withdraws it. Disabling something that is not published is not
@@ -118,6 +132,31 @@ type RelayIdentity interface {
 // Callers pass a snapshot, never the live state — the returned slice is what
 // a Publisher works from, and it must not alias a map another goroutine may
 // be committing to.
+// Bootstrap brings public access up from a saved state: the login first, then
+// every app that was published before, then the UI itself if the admin asked
+// for that, then background supervision.
+//
+// It exists so the two callers cannot drift. One runs at service start, the
+// other the moment registration completes — and an install-time step that
+// only one of them performs is a slow-acting bug: it works until the next
+// restart, or only after one. Failures are logged rather than fatal; a server
+// that cannot publish must still serve the UI that fixes it.
+func Bootstrap(p Publisher, state *config.State, containerPort func(string) int, adminPort int) {
+	if p == nil {
+		return
+	}
+	if err := p.EnsureAuth(); err != nil {
+		log.Printf("publish: login: %v", err)
+	}
+	p.Restore(AppsFrom(state, containerPort))
+	if state != nil && state.AdminPublished {
+		if err := p.StartAdmin(adminPort); err != nil {
+			log.Printf("publish: admin UI: %v", err)
+		}
+	}
+	p.StartMonitor()
+}
+
 func AppsFrom(state *config.State, containerPort func(string) int) []App {
 	if state == nil {
 		return nil

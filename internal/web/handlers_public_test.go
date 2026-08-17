@@ -22,6 +22,11 @@ type fakePublisher struct {
 	disabled  []string
 	enableErr error
 	host      string
+
+	adminPorts   []int // every port StartAdmin was called with
+	adminStopped int
+	adminErr     error
+	adminStatus  string
 }
 
 func (f *fakePublisher) Kind() string       { return publish.KindRelay }
@@ -29,6 +34,23 @@ func (f *fakePublisher) EnsureAuth() error  { return nil }
 func (f *fakePublisher) AuthStatus() string { return publish.StatusRunning }
 func (f *fakePublisher) StartAuth() error   { return nil }
 func (f *fakePublisher) StopAuth() error    { return nil }
+func (f *fakePublisher) StartAdmin(port int) error {
+	if f.adminErr != nil {
+		return f.adminErr
+	}
+	f.adminPorts = append(f.adminPorts, port)
+	return nil
+}
+func (f *fakePublisher) StopAdmin() error {
+	f.adminStopped++
+	return nil
+}
+func (f *fakePublisher) AdminStatus() string {
+	if f.adminStatus == "" {
+		return publish.StatusStopped
+	}
+	return f.adminStatus
+}
 func (f *fakePublisher) Enable(app publish.App) (string, error) {
 	if f.enableErr != nil {
 		return "", f.enableErr
@@ -284,5 +306,92 @@ func TestOldTunnelPathRedirects(t *testing.T) {
 	}
 	if got := rec.Header().Get("Location"); got != "/public" {
 		t.Errorf("Location = %q, want /public", got)
+	}
+}
+
+// Publishing the UI records the admin's decision — and hands the publisher
+// the port this server actually listens on. Getting that wrong produces a
+// route that resolves, answers nothing, and looks like a DNS problem.
+func TestAdminPublishStartRecordsDecision(t *testing.T) {
+	fake := &fakePublisher{}
+	s, _ := testServerWithPublisher(t, fake)
+	s.listenPort = 8090
+
+	rec := postTo(s.handleAdminPublishStart, "/public/admin/start", "")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if got := rec.Header().Get("Location"); got != "/public" {
+		t.Errorf("Location = %q, want /public", got)
+	}
+
+	if len(fake.adminPorts) != 1 || fake.adminPorts[0] != 8090 {
+		t.Errorf("StartAdmin called with %v, want [8090]", fake.adminPorts)
+	}
+	if !s.snapState().AdminPublished {
+		t.Error("state should record that the UI is published")
+	}
+}
+
+// A failed publish must not be recorded. Otherwise the next restart replays a
+// publication that never worked, and the page claims a state it is not in.
+func TestAdminPublishStartLeavesStateAloneOnFailure(t *testing.T) {
+	fake := &fakePublisher{adminErr: errFake}
+	s, _ := testServerWithPublisher(t, fake)
+	s.listenPort = 8090
+
+	rec := postTo(s.handleAdminPublishStart, "/public/admin/start", "")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if s.snapState().AdminPublished {
+		t.Error("state records a publication that failed")
+	}
+}
+
+func TestAdminPublishStop(t *testing.T) {
+	fake := &fakePublisher{adminStatus: publish.StatusRunning}
+	s, st := testServerWithPublisher(t, fake)
+	st.AdminPublished = true
+
+	rec := postTo(s.handleAdminPublishStop, "/public/admin/stop", "")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if fake.adminStopped != 1 {
+		t.Errorf("StopAdmin calls = %d, want 1", fake.adminStopped)
+	}
+	if s.snapState().AdminPublished {
+		t.Error("state should no longer record the UI as published")
+	}
+}
+
+// The default matters more than the toggle: an install that never asked for
+// this must not end up with its control plane on the internet.
+func TestAdminNotPublishedByDefault(t *testing.T) {
+	fake := &fakePublisher{}
+	s, _ := testServerWithPublisher(t, fake)
+
+	if s.snapState().AdminPublished {
+		t.Error("fresh state has the UI published")
+	}
+	publish.Bootstrap(fake, s.snapState(), nil, 8090)
+	if len(fake.adminPorts) != 0 {
+		t.Errorf("Bootstrap published the UI unasked: %v", fake.adminPorts)
+	}
+}
+
+// ...and an install that did ask gets it back after a restart, without the
+// admin touching anything.
+func TestBootstrapRepublishesAdminUI(t *testing.T) {
+	fake := &fakePublisher{}
+	s, st := testServerWithPublisher(t, fake)
+	st.AdminPublished = true
+	s.listenPort = 9091
+
+	s.bootstrapPublisher()
+
+	if len(fake.adminPorts) != 1 || fake.adminPorts[0] != 9091 {
+		t.Errorf("StartAdmin called with %v, want [9091]", fake.adminPorts)
 	}
 }

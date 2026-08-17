@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/config"
@@ -31,9 +34,17 @@ type publicData struct {
 	SSHPort    int
 	AuthStatus string // "running" | "stopped" | "error"
 	AuthHost   string
-	Apps       []publicAppEntry
-	TestResult string // "" | "ok" | error message
-	TestDone   bool
+	// AdminHost/AdminStatus describe stackctl's own UI. It is published only
+	// on request, so unlike the login it is usually "stopped".
+	AdminHost   string
+	AdminStatus string
+	// AdminLocalAddr is where this UI answers on the LAN. It is shown next to
+	// the public address because that pair is the whole point: publishing
+	// adds a way in, it does not move one.
+	AdminLocalAddr string
+	Apps           []publicAppEntry
+	TestResult     string // "" | "ok" | error message
+	TestDone       bool
 	// CanTest is true when the current publisher can check its own transport.
 	CanTest bool
 }
@@ -59,10 +70,15 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		BaseDomain: public.BaseDomain(s.cfg),
 		AuthHost:   public.AuthHost(s.cfg),
 		AuthStatus: publish.StatusStopped,
+
+		AdminHost:      public.AdminHost(s.cfg),
+		AdminStatus:    publish.StatusStopped,
+		AdminLocalAddr: s.adminLocalAddr(),
 	}
 
 	if s.publisher != nil {
 		data.AuthStatus = s.publisher.AuthStatus()
+		data.AdminStatus = s.publisher.AdminStatus()
 		_, data.CanTest = s.publisher.(publish.ConnectivityTester)
 
 		// The SSH identity block only exists for transports that dial a
@@ -162,6 +178,75 @@ func (s *Server) handleAuthPublishStop(w http.ResponseWriter, r *http.Request) {
 	if err := s.publisher.StopAuth(); err != nil {
 		http.Redirect(w, r, "/public?test="+fmt.Sprintf("Stop des Login-Zugangs fehlgeschlagen: %v", err), http.StatusSeeOther)
 		return
+	}
+	http.Redirect(w, r, "/public", http.StatusSeeOther)
+}
+
+// adminLocalAddr renders the LAN address of this UI, e.g.
+// "192.168.1.10:8090". The port is the one this process actually listens on,
+// not the default — telling an admin a port that is not in use would send
+// them looking for a network fault that does not exist.
+func (s *Server) adminLocalAddr() string {
+	host := s.cfg.School.ServerDomain
+	if host == "" {
+		host = "<server-ip>"
+	}
+	if s.listenPort <= 0 {
+		return host
+	}
+	return net.JoinHostPort(host, strconv.Itoa(s.listenPort))
+}
+
+// handleAdminPublishStart puts stackctl's own UI on the public address.
+//
+// This is the one publish action that changes what an attacker can reach: the
+// control plane installs containers, reads secrets and restores backups, and
+// it is guarded by a single password with no second factor. It is therefore
+// off by default and switched on deliberately, never as a side effect.
+//
+// What it does not do is close the LAN port. Rebinding stackctl to the
+// loopback interface is the other half of this feature and deliberately not
+// in it: a route that turns out not to work would then be indistinguishable
+// from a locked-out server, and the fix would need SSH. Two ways in is the
+// point until the route has proven itself.
+func (s *Server) handleAdminPublishStart(w http.ResponseWriter, r *http.Request) {
+	if s.publisher == nil {
+		http.Redirect(w, r, "/public?test=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		return
+	}
+	if err := s.publisher.StartAdmin(s.listenPort); err != nil {
+		log.Printf("web: publish admin UI: %v", err)
+		http.Redirect(w, r, "/public?test="+url.QueryEscape(
+			fmt.Sprintf("Oeffentlicher Zugang zur Verwaltung fehlgeschlagen: %v", err)), http.StatusSeeOther)
+		return
+	}
+
+	working := s.snapState()
+	working.AdminPublished = true
+	if err := s.commitState(working); err != nil {
+		log.Printf("web: save state after publishing admin UI: %v", err)
+	}
+	http.Redirect(w, r, "/public", http.StatusSeeOther)
+}
+
+// handleAdminPublishStop takes the UI back off the public address. The LAN
+// port was never closed, so this cannot strand the admin.
+func (s *Server) handleAdminPublishStop(w http.ResponseWriter, r *http.Request) {
+	if s.publisher == nil {
+		http.Redirect(w, r, "/public?test=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		return
+	}
+	if err := s.publisher.StopAdmin(); err != nil {
+		log.Printf("web: unpublish admin UI: %v", err)
+		http.Redirect(w, r, "/public?test="+url.QueryEscape(
+			fmt.Sprintf("Zuruecknehmen fehlgeschlagen: %v", err)), http.StatusSeeOther)
+		return
+	}
+
+	working := s.snapState()
+	working.AdminPublished = false
+	if err := s.commitState(working); err != nil {
+		log.Printf("web: save state after unpublishing admin UI: %v", err)
 	}
 	http.Redirect(w, r, "/public", http.StatusSeeOther)
 }

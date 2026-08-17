@@ -22,6 +22,10 @@ const (
 // DexTunnelID is the fixed tunnel ID for the always-on Dex tunnel.
 const DexTunnelID = "_dex"
 
+// AdminTunnelID is the fixed tunnel ID for stackctl's own web UI. Like
+// DexTunnelID it starts with an underscore, which no app id can.
+const AdminTunnelID = "_admin"
+
 // tunnelProc tracks a single autossh/ssh child process.
 type tunnelProc struct {
 	cmd        *exec.Cmd

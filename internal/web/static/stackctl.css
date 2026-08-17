@@ -20,6 +20,9 @@
 .status-dot.starting { background: var(--warning); }
 .status-dot.error    { background: var(--danger); }
 .status-dot.unknown  { background: var(--faint-foreground); }
+/* "off" ist eine Entscheidung, kein Defekt: der oeffentliche Zugang zur
+   Verwaltung ist standardmaessig aus und darf nicht wie ein Fehler aussehen. */
+.status-dot.off      { background: var(--faint-foreground); }
 
 /* ── App-Karten-Raster – subgrid für bündige Fußzeilen ──────── */
 .app-grid {

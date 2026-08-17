@@ -5,11 +5,14 @@ package publish
 import (
 	"fmt"
 	"log"
+	"net"
+	"strconv"
 	"sync"
 
 	"github.com/lngstck/stackctl/internal/caddy"
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/dex"
+	"github.com/lngstck/stackctl/internal/docker"
 	"github.com/lngstck/stackctl/internal/public"
 )
 
@@ -29,17 +32,29 @@ const dexContainerPort = 5556
 type Direct struct {
 	cfg *config.Config
 
+	// hostAddress reports the address containers reach this host on. It is a
+	// field so tests can answer it without a docker daemon.
+	hostAddress func() (string, error)
+
 	mu     sync.Mutex
-	routes map[string]caddy.Route // key: app id, or authRouteKey for Dex
+	routes map[string]caddy.Route // key: app id, authRouteKey or adminRouteKey
 }
 
-// authRouteKey identifies the Dex route in the table. It cannot collide with
-// an app id, which is a validated slug and never starts with an underscore.
-const authRouteKey = "_auth"
+// authRouteKey and adminRouteKey identify the two routes that are not apps.
+// Neither can collide with an app id, which is a validated slug and never
+// starts with an underscore.
+const (
+	authRouteKey  = "_auth"
+	adminRouteKey = "_admin"
+)
 
 // NewDirect wires a publisher for an install that serves itself.
 func NewDirect(cfg *config.Config) *Direct {
-	return &Direct{cfg: cfg, routes: map[string]caddy.Route{}}
+	return &Direct{
+		cfg:         cfg,
+		hostAddress: docker.NetworkGateway,
+		routes:      map[string]caddy.Route{},
+	}
 }
 
 func (d *Direct) Kind() string { return KindDirect }
@@ -68,6 +83,53 @@ func (d *Direct) StartAuth() error { return d.EnsureAuth() }
 // UI asks before offering it — but the control has to exist, otherwise a
 // broken route could only be cleared by editing files on the server.
 func (d *Direct) StopAuth() error { return d.remove(authRouteKey) }
+
+// StartAdmin routes admin.{base_domain} to stackctl itself.
+//
+// The upstream is the host, not a container: stackctl runs under systemd. The
+// proxy reaches it at the gateway address of the shared network, which is
+// also why this keeps working only as long as stackctl listens on more than
+// the loopback interface.
+func (d *Direct) StartAdmin(localPort int) error {
+	host := public.AdminHost(d.cfg)
+	if host == "" {
+		return fmt.Errorf("publish: install has no public address")
+	}
+	if localPort <= 0 {
+		return fmt.Errorf("publish: unknown stackctl port")
+	}
+	gateway, err := d.hostAddress()
+	if err != nil {
+		// The usual cause is that the proxy was never installed, so its
+		// network does not exist. Saying that beats passing the daemon's
+		// wording through to an admin who did not ask about networks.
+		return fmt.Errorf("der Reverse-Proxy ist noch nicht eingerichtet — bitte zuerst Caddy installieren (%w)", err)
+	}
+
+	d.mu.Lock()
+	previous, existed := d.routes[adminRouteKey]
+	d.routes[adminRouteKey] = caddy.Route{
+		Host:     host,
+		Upstream: net.JoinHostPort(gateway, strconv.Itoa(localPort)),
+	}
+	d.mu.Unlock()
+
+	if err := d.apply(); err != nil {
+		d.mu.Lock()
+		if existed {
+			d.routes[adminRouteKey] = previous
+		} else {
+			delete(d.routes, adminRouteKey)
+		}
+		d.mu.Unlock()
+		return err
+	}
+	return nil
+}
+
+func (d *Direct) StopAdmin() error { return d.remove(adminRouteKey) }
+
+func (d *Direct) AdminStatus() string { return d.statusFor(adminRouteKey) }
 
 // Enable adds an app's route and reloads the proxy.
 func (d *Direct) Enable(app App) (string, error) {

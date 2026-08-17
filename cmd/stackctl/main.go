@@ -97,16 +97,12 @@ func cmdWeb(args []string, stdout, stderr io.Writer) int {
 	// above this line branches on it.
 	publisher := publish.For(cfg)
 	if cfg.SetupState == config.SetupStateReady {
-		if err := publisher.EnsureAuth(); err != nil {
-			log.Printf("publish: login: %v", err)
-		}
-		publisher.Restore(publish.AppsFrom(state, catalog.ContainerPort))
-		publisher.StartMonitor()
+		publish.Bootstrap(publisher, state, catalog.ContainerPort, *port)
 	}
 
 	// Build server options.
 	var opts []web.Option
-	opts = append(opts, web.WithPublisher(publisher))
+	opts = append(opts, web.WithPublisher(publisher), web.WithListenPort(*port))
 	if *dev {
 		// In dev mode, find the web package dir relative to the binary or CWD.
 		webDir := filepath.Join(paths.StackctlDir(), "internal", "web")

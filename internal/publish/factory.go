@@ -43,6 +43,9 @@ func (u unsupported) EnsureAuth() error          { return errUnsupported }
 func (u unsupported) AuthStatus() string         { return StatusError }
 func (u unsupported) StartAuth() error           { return errUnsupported }
 func (u unsupported) StopAuth() error            { return nil }
+func (u unsupported) StartAdmin(int) error       { return errUnsupported }
+func (u unsupported) StopAdmin() error           { return nil }
+func (u unsupported) AdminStatus() string        { return StatusError }
 func (u unsupported) Enable(App) (string, error) { return "", errUnsupported }
 func (u unsupported) Disable(string) error       { return nil }
 func (u unsupported) Restore([]App)              {}

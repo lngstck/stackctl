@@ -232,10 +232,13 @@ davon fünf pro Woche und Domain.
 - **Eigene Domain am Relay** setzt eine Freigabe auf Betreiberseite voraus. Der
   Relay prüft beim Verbinden per DNS, ob der Tunnel den angefragten Namen führen
   darf; für fremde Domains ist dieser Ablauf noch nicht automatisiert.
-- **Die stackctl-Oberfläche selbst** bleibt in allen Betriebsarten auf Port 8090
-  im lokalen Netz. Sie liegt bewusst nicht hinter dem öffentlichen Zugang — wäre
-  sie es, würde ein Fehler in der Adresskonfiguration genau das Werkzeug
-  aussperren, mit dem man ihn beheben müsste.
+- **Die stackctl-Oberfläche selbst** ist in allen Betriebsarten auf Port 8090
+  im lokalen Netz erreichbar. Sie lässt sich auf der Seite *Öffentlicher
+  Zugang* zusätzlich unter `admin.ihre-domain.de` ins Internet stellen — das
+  ist standardmäßig aus und will überlegt sein: die Oberfläche installiert
+  Apps, zeigt Passwörter und spielt Backups zurück, geschützt nur durch das
+  Admin-Passwort. Der Zugang im Schulnetz bleibt dabei bestehen, ein falscher
+  DNS-Eintrag kann also niemanden aussperren.
 - **Alle übrigen Container** binden auf `127.0.0.1`. Nach außen sichtbar wird
   eine App ausschließlich über den öffentlichen Zugang, nie durch einen offenen
   Port.

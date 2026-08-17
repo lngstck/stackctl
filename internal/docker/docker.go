@@ -51,6 +51,33 @@ func EnsureNetwork() error {
 	return nil
 }
 
+// NetworkGateway returns the address the host holds on the shared network.
+//
+// Containers on the bridge reach the host at its gateway address. Everything
+// stackctl proxies to normally is another container, addressed by service
+// name — but stackctl itself is a systemd process on the host, not a
+// container, so a proxy that has to reach it needs this address.
+//
+// The alternative, host.docker.internal, would mean an extra_hosts entry in
+// the proxy's catalog definition and therefore a reinstall on every existing
+// install. The gateway is already there.
+func NetworkGateway() (string, error) {
+	_, out, err := run(nil, "docker", "network", "inspect", NetworkName,
+		"-f", "{{range .IPAM.Config}}{{if .Gateway}}{{.Gateway}}\n{{end}}{{end}}")
+	if err != nil {
+		return "", fmt.Errorf("inspect network %s: %s", NetworkName, strings.TrimSpace(out))
+	}
+	// A dual-stack network reports one entry per family. The first one wins:
+	// callers embed this in a proxy upstream, and one address is what they
+	// can use.
+	for _, line := range strings.Split(out, "\n") {
+		if gw := strings.TrimSpace(line); gw != "" {
+			return gw, nil
+		}
+	}
+	return "", fmt.Errorf("network %s has no gateway address", NetworkName)
+}
+
 // ComposeUp runs `docker compose up -d` for the given services (or all if
 // empty). composeFile is the path to docker-compose.yml.
 func ComposeUp(composeFile string, services ...string) (int, string) {
