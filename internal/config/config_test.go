@@ -38,9 +38,6 @@ func TestDefaultConfig(t *testing.T) {
 	if c.Public.Relay.SSHPort != 2222 {
 		t.Errorf("Public.Relay.SSHPort = %d, want 2222", c.Public.Relay.SSHPort)
 	}
-	if c.GlobalEnv == nil {
-		t.Error("GlobalEnv should be non-nil map")
-	}
 }
 
 func TestLoadMissingReturnsNotExist(t *testing.T) {
@@ -67,8 +64,6 @@ func TestSaveAndReload(t *testing.T) {
 		ClientID:     "phoenix",
 		ClientSecret: "deadbeef",
 	}
-	c.GlobalEnv["LLM_ENDPOINT"] = "https://llm.example/v1"
-
 	if err := c.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -99,9 +94,6 @@ func TestSaveAndReload(t *testing.T) {
 	}
 	if loaded.Dex.ClientSecret != "deadbeef" {
 		t.Errorf("Dex.ClientSecret round-trip: %q", loaded.Dex.ClientSecret)
-	}
-	if loaded.GlobalEnv["LLM_ENDPOINT"] != "https://llm.example/v1" {
-		t.Errorf("GlobalEnv round-trip failed")
 	}
 }
 
@@ -339,5 +331,46 @@ func writeConfigFile(t *testing.T, content string) {
 	}
 	if err := os.WriteFile(paths.ConfigFile(), []byte(content), 0o640); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// global_env was never read by anything — the map existed, was kept non-nil,
+// and no code path ever looked at it. Removing the field means an existing
+// block is ignored on load and dropped on the next save. That is deliberate:
+// a key sitting in config.yaml that looks like configuration but does nothing
+// is worse than no key at all. The live LLM_API_KEY lives in .env.
+func TestLoadIgnoresRemovedGlobalEnv(t *testing.T) {
+	withTempStackctlDir(t)
+	writeConfigFile(t, `version: 3
+setup_state: ready
+school:
+    slug: phoenix
+public:
+    transport: relay
+    base_domain: phoenix.learningstack.online
+global_env:
+    LLM_ENDPOINT: https://api.openai.com/v1
+    LLM_API_KEY: sk-alt
+`)
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := c.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	raw, err := os.ReadFile(paths.ConfigFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "global_env") {
+		t.Errorf("global_env survived the rewrite:\n%s", raw)
+	}
+	// The rest of the file has to be intact — this is a dropped field, not a
+	// dropped file.
+	if c.Public.BaseDomain != "phoenix.learningstack.online" {
+		t.Errorf("BaseDomain = %q", c.Public.BaseDomain)
 	}
 }

@@ -31,9 +31,9 @@ func TestValidName(t *testing.T) {
 		"backup.tar.gz",
 		"../etc/passwd",
 		"backup-school-20260624-143000.tar.gz/../x",
-		"backup-school-2026-143000.tar.gz",      // short date
-		"backup-School-20260624-143000.tar.gz",  // uppercase slug
-		"backup-school-20260624-143000.zip",     // wrong ext
+		"backup-school-2026-143000.tar.gz",       // short date
+		"backup-School-20260624-143000.tar.gz",   // uppercase slug
+		"backup-school-20260624-143000.zip",      // wrong ext
 		"backup-school-20260624-143000.tar.gz.x", // wrong trailing ext
 	}
 	for _, n := range bad {

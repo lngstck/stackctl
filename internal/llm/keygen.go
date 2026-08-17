@@ -11,7 +11,8 @@ import (
 )
 
 // GenerateAPIKey erzeugt einen neuen Klartext-Key fuer llmd im Format
-//   llm-<8-hex-prefix>-<43-char-base64url-secret>
+//
+//	llm-<8-hex-prefix>-<43-char-base64url-secret>
 //
 // Liefert (plaintext, prefix, bcrypt-hash, error). Der Plaintext wird
 // nur einmalig dem Aufrufer gezeigt — er ist nicht aus dem Hash
@@ -42,7 +43,9 @@ func GenerateAPIKey() (plaintext, prefix, hashStr string, err error) {
 }
 
 // HashAPIKey nimmt einen bestehenden Klartext-Key im Format
-//   llm-<8hex>-<secret>
+//
+//	llm-<8hex>-<secret>
+//
 // und liefert (prefix, bcrypt-hash) — analog zu GenerateAPIKey, aber ohne
 // neuen Zufall. Wird beim Re-Seed von llmd genutzt: wenn LLM_API_KEY schon
 // in .env steht (z.B. von einem vorherigen Install), darf seedLLMConfig den

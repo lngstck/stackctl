@@ -10,8 +10,8 @@ func TestComputeBackoff(t *testing.T) {
 		failures int
 		want     time.Duration
 	}{
-		{0, baseBackoff},  // clamped to ≥1 → baseBackoff
-		{1, baseBackoff},  // 5s
+		{0, baseBackoff}, // clamped to ≥1 → baseBackoff
+		{1, baseBackoff}, // 5s
 		{2, 10 * time.Second},
 		{3, 20 * time.Second},
 		{4, 40 * time.Second},

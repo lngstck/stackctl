@@ -61,9 +61,8 @@ type Result struct {
 // Install runs the full install flow for a single app. The caller must have
 // already resolved prompts and put their values into promptValues.
 //
-// cfg and state are loaded and saved by the caller; Install mutates both
-// (registers the app in state, may update GlobalEnv in cfg) but does NOT
-// call Save — the caller does that after updating .env.
+// cfg and state are loaded and saved by the caller; Install registers the app
+// in state but does NOT call Save — the caller does that after updating .env.
 func Install(
 	def *catalog.Definition,
 	cfg *config.Config,

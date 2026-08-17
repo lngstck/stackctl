@@ -23,10 +23,10 @@ type llmData struct {
 	// Flash-States via Query-Param. NewKey wird *einmalig* nach
 	// Key-Erstellung angezeigt; ein Reload entfernt ihn, weil er nur in
 	// der URL lebt und nirgends gespeichert wird.
-	Message string
-	Error   string
-	NewKey  string // plaintext, wird nur direkt nach create gezeigt
-	NewKeyID string
+	Message   string
+	Error     string
+	NewKey    string // plaintext, wird nur direkt nach create gezeigt
+	NewKeyID  string
 	ActiveTab string // "providers" (default), "personas", "keys"
 }
 
@@ -188,8 +188,9 @@ func (s *Server) handleLLMProviderDelete(w http.ResponseWriter, r *http.Request)
 // im Dropdown waehlt — Result populiert das <datalist> fuer Upstream-IDs.
 //
 // Response-Schema:
-//   200 {"models":["gpt-4o","gpt-4o-mini",...]}
-//   200 {"models":[],"error":"GET .../v1/models: HTTP 401: ..."}
+//
+//	200 {"models":["gpt-4o","gpt-4o-mini",...]}
+//	200 {"models":[],"error":"GET .../v1/models: HTTP 401: ..."}
 //
 // Wir benutzen IMMER 200, damit Fehler den HTTP-Status nicht ueberladen —
 // das Frontend zeigt den Fehler als Hint neben dem Freitext-Eingabefeld.

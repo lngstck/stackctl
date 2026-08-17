@@ -56,8 +56,8 @@ type ReleaseInfo struct {
 
 // CheckResult is returned by Check.
 type CheckResult struct {
-	CurrentVersion string
-	LatestVersion  string
+	CurrentVersion  string
+	LatestVersion   string
 	UpdateAvailable bool
 	Release         *ReleaseInfo
 }

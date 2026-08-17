@@ -60,24 +60,24 @@ func pinMandatoryFirst(entries []appListEntry) {
 // appDetailData is the template context for app_detail.html.tmpl.
 type appDetailData struct {
 	PageData
-	ID              string
-	Name            string
-	Category        string
-	Description     string
-	Version         string
-	Status          string
-	Port            int
-	ServerDomain    string
-	TunnelEnabled   bool
-	TunnelSubdomain string
-	ContainerName   string
-	InstalledAt     string
-	HasOIDC         bool
-	OIDCClientID    string
-	OIDCRedirectURI string
-	Homepage        string
-	Docs            string
-	IsMandatory     bool
+	ID                 string
+	Name               string
+	Category           string
+	Description        string
+	Version            string
+	Status             string
+	Port               int
+	ServerDomain       string
+	TunnelEnabled      bool
+	TunnelSubdomain    string
+	ContainerName      string
+	InstalledAt        string
+	HasOIDC            bool
+	OIDCClientID       string
+	OIDCRedirectURI    string
+	Homepage           string
+	Docs               string
+	IsMandatory        bool
 	AdminLogin         string
 	AdminPassword      string
 	AdminNotes         template.HTML
@@ -246,17 +246,17 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := appDetailData{
-		PageData:        s.pageData("apps"),
-		ID:              appID,
-		Name:            cs.Name,
-		Version:         cs.VersionInstalled,
-		Status:          status,
-		Port:            port,
-		ServerDomain:    s.cfg.School.ServerDomain,
-		TunnelEnabled:   cs.PublicEnabled,
-		TunnelSubdomain: cs.PublicHost,
-		ContainerName:   "ls-" + appID,
-		InstalledAt:     cs.InstalledAt,
+		PageData:           s.pageData("apps"),
+		ID:                 appID,
+		Name:               cs.Name,
+		Version:            cs.VersionInstalled,
+		Status:             status,
+		Port:               port,
+		ServerDomain:       s.cfg.School.ServerDomain,
+		TunnelEnabled:      cs.PublicEnabled,
+		TunnelSubdomain:    cs.PublicHost,
+		ContainerName:      "ls-" + appID,
+		InstalledAt:        cs.InstalledAt,
 		IsMandatory:        isMandatoryApp(s.cfg, appID),
 		AutoUpdateDisabled: cs.AutoUpdateDisabled,
 	}

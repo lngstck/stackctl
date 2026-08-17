@@ -138,7 +138,9 @@ func dispatchProvider(args []string, stdout, stderr io.Writer) int {
 // splitPositional zieht das erste Argument als ID ab und gibt den Rest
 // fuer fs.Parse zurueck. Workaround fuer Go's flag-Package, das beim
 // ersten Positional aufhoert zu parsen — damit Aufrufe wie
-//   stackctl llm persona set my-id --provider X --upstream-id Y
+//
+//	stackctl llm persona set my-id --provider X --upstream-id Y
+//
 // funktionieren.
 //
 // Konvention fuer alle Subbefehle mit ID-Argument: ID MUSS unmittelbar

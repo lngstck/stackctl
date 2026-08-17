@@ -60,7 +60,7 @@ func GenerateConfig(cfg *config.Config, clients []Client) ([]byte, error) {
 		},
 		"oauth2": map[string]any{
 			"skipApprovalScreen": true,
-			"responseTypes":     []string{"code"},
+			"responseTypes":      []string{"code"},
 		},
 		// Token/session expiry — keeps the SQLite store from growing forever.
 		// Auth-Request + Device-Request are short-lived UX windows. Refresh
@@ -85,12 +85,12 @@ func GenerateConfig(cfg *config.Config, clients []Client) ([]byte, error) {
 		"id":   "central-dex",
 		"name": "learningstack",
 		"config": map[string]any{
-			"issuer":                   CentralDexIssuer,
-			"clientID":                 cfg.Dex.ClientID,
-			"clientSecret":             cfg.Dex.ClientSecret,
-			"redirectURI":              authURL + "/callback",
-			"scopes":                   []string{"openid", "profile", "email", "groups"},
-			"getUserInfo":              true,
+			"issuer":                    CentralDexIssuer,
+			"clientID":                  cfg.Dex.ClientID,
+			"clientSecret":              cfg.Dex.ClientSecret,
+			"redirectURI":               authURL + "/callback",
+			"scopes":                    []string{"openid", "profile", "email", "groups"},
+			"getUserInfo":               true,
 			"insecureSkipEmailVerified": true,
 			"insecureEnableGroups":      true,
 			// Kein claimMapping: der zentrale Dex liefert email/groups/

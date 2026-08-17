@@ -19,9 +19,9 @@ func TestUsageLevel(t *testing.T) {
 
 func TestHumanBytes(t *testing.T) {
 	cases := map[uint64]string{
-		512:                   "512 B",
-		2048:                  "2.0 KiB",
-		3 * 1024 * 1024:       "3.0 MiB",
+		512:                    "512 B",
+		2048:                   "2.0 KiB",
+		3 * 1024 * 1024:        "3.0 MiB",
 		8 * 1024 * 1024 * 1024: "8.0 GiB",
 	}
 	for n, want := range cases {
