@@ -66,7 +66,6 @@ func TestSaveAndReload(t *testing.T) {
 	c.Dex = Dex{
 		ClientID:     "phoenix",
 		ClientSecret: "deadbeef",
-		AuthURL:      "https://auth.phoenix.learningstack.online",
 	}
 	c.GlobalEnv["LLM_ENDPOINT"] = "https://llm.example/v1"
 
@@ -98,8 +97,8 @@ func TestSaveAndReload(t *testing.T) {
 	if loaded.SetupState != SetupStateReady {
 		t.Errorf("SetupState round-trip: %q", loaded.SetupState)
 	}
-	if loaded.Dex.AuthURL != "https://auth.phoenix.learningstack.online" {
-		t.Errorf("Dex.AuthURL round-trip: %q", loaded.Dex.AuthURL)
+	if loaded.Dex.ClientSecret != "deadbeef" {
+		t.Errorf("Dex.ClientSecret round-trip: %q", loaded.Dex.ClientSecret)
 	}
 	if loaded.GlobalEnv["LLM_ENDPOINT"] != "https://llm.example/v1" {
 		t.Errorf("GlobalEnv round-trip failed")

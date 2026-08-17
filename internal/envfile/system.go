@@ -40,11 +40,11 @@ func ApplySystemEnv(f *File, cfg *config.Config, adminPassword string) {
 	// pre-v3 catalog entries hardcoded.
 	f.Set(GlobalSection, "PUBLIC_BASE_DOMAIN", public.BaseDomain(cfg))
 
-	authURL := cfg.Dex.AuthURL
-	if authURL == "" {
-		authURL = public.AuthURL(cfg)
-	}
-	f.Set(GlobalSection, "DEX_AUTH_URL", authURL)
+	// Same source as the issuer in the generated Dex config and as the
+	// redirect URIs registered with it — an app that trusts DEX_AUTH_URL and
+	// a Dex that mints tokens under a different issuer would fail validation
+	// on every login.
+	f.Set(GlobalSection, "DEX_AUTH_URL", public.AuthURL(cfg))
 
 	if adminPassword != "" {
 		f.Set(GlobalSection, "ADMIN_PASSWORD", adminPassword)

@@ -189,7 +189,6 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		}
 		s.cfg.Public.Direct.ACMEEmail = acmeEmail
 	}
-	s.cfg.Dex.AuthURL = public.AuthURL(s.cfg)
 
 	// Generate Dex client secret.
 	dexSecret, err := secrets.RandomHex(20)
