@@ -68,9 +68,8 @@ type Config struct {
 	Catalog      Catalog           `yaml:"catalog"`
 	Admin        Admin             `yaml:"admin"`
 	Dex          Dex               `yaml:"dex"`
-	Registration Registration      `yaml:"registration,omitempty"`
-	GlobalEnv    map[string]string `yaml:"global_env,omitempty"`
-	Public       Public            `yaml:"public"`
+	Registration Registration `yaml:"registration,omitempty"`
+	Public       Public       `yaml:"public"`
 	// AutoUpdate steuert das naechtliche Auto-Update aller Apps.
 	AutoUpdate AutoUpdate `yaml:"auto_update,omitempty"`
 }
@@ -189,7 +188,6 @@ func Default() *Config {
 				SSHPort: DefaultRelaySSHPort,
 			},
 		},
-		GlobalEnv: map[string]string{},
 	}
 }
 
@@ -210,9 +208,6 @@ func Load() (*Config, error) {
 	}
 	if c.SetupState == "" {
 		c.SetupState = SetupStateNeedsSetup
-	}
-	if c.GlobalEnv == nil {
-		c.GlobalEnv = map[string]string{}
 	}
 	upgradeFromV2(&c, data)
 	return &c, nil
