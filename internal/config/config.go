@@ -214,7 +214,62 @@ func Load() (*Config, error) {
 	if c.GlobalEnv == nil {
 		c.GlobalEnv = map[string]string{}
 	}
+	upgradeFromV2(&c, data)
 	return &c, nil
+}
+
+// legacyConfig is the part of schema v2 that moved rather than disappeared.
+// It is a separate type so Config itself carries no field that exists only to
+// be thrown away — and so this whole block can be deleted in one piece once no
+// v2 file is left in the field.
+type legacyConfig struct {
+	Tunnel PublicRelay `yaml:"tunnel"`
+}
+
+// upgradeFromV2 fills in what schema v3 expects from what schema v2 wrote.
+//
+// v2 had no public: section at all: the address was implicit
+// ({slug}.learningstack.online) and the relay endpoint lived in a top-level
+// tunnel: block. Loading such a file without this step yields an empty relay
+// host and port — and the first Save then drops the old block, so the values
+// are gone for good. The visible failure is worse than it sounds: ssh dials
+// port 0, the login tunnel never comes up, and the school is offline until
+// somebody reconstructs the file by hand.
+//
+// Each step only fills a value that is not already set, so running this on a
+// current file changes nothing.
+func upgradeFromV2(c *Config, raw []byte) {
+	if c.Public.Transport == "" {
+		// Every v2 install was a relay install. That is not a guess: the
+		// direct transport did not exist.
+		c.Public.Transport = TransportRelay
+	}
+	if c.Public.BaseDomain == "" && c.School.Slug != "" {
+		c.Public.BaseDomain = RelayBaseDomain(c.School.Slug)
+	}
+	// The old block is read only from an older file. On a current file a
+	// leftover tunnel: key must not win over what public.relay says.
+	if c.Version < ConfigVersion && c.Public.Transport == TransportRelay && c.Public.Relay.SSHHost == "" {
+		var legacy legacyConfig
+		// A parse error here means the tunnel: block is malformed or absent;
+		// the defaults below cover both.
+		_ = yaml.Unmarshal(raw, &legacy)
+		c.Public.Relay = legacy.Tunnel
+	}
+	if c.Public.Transport == TransportRelay {
+		if c.Public.Relay.SSHHost == "" {
+			c.Public.Relay.SSHHost = DefaultRelaySSHHost
+		}
+		if c.Public.Relay.SSHPort == 0 {
+			c.Public.Relay.SSHPort = DefaultRelaySSHPort
+		}
+	}
+	// Mark the file as current so the next Save writes today's schema. A file
+	// from a *newer* build is left alone: rewriting it downward would silently
+	// discard whatever that build added.
+	if c.Version < ConfigVersion {
+		c.Version = ConfigVersion
+	}
 }
 
 // Save writes config.yaml atomically with 0640 permissions. The parent

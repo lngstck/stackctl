@@ -1,8 +1,11 @@
 package config
 
 import (
+	"os"
 	"reflect"
 	"testing"
+
+	"github.com/lngstck/stackctl/internal/paths"
 )
 
 // populatedState is a State in which every field carries a non-zero value.
@@ -129,5 +132,118 @@ func TestLoadStateWithoutAdminPublished(t *testing.T) {
 	}
 	if loaded.AdminPublished {
 		t.Error("AdminPublished defaulted to true")
+	}
+}
+
+// v2State is a state.yaml exactly as stackctl v0.10.1 wrote it. The renamed
+// pair is the point: tunnel_subdomain held the full FQDN despite its name.
+const v2State = `version: "2.0"
+containers:
+    pylearn:
+        id: pylearn
+        name: PyLearn
+        version_installed: 0.8.0
+        ports:
+            - 8330
+        env_keys:
+            - PYLEARN_DB_PASSWORD
+        installed_at: "2026-06-01T09:00:00Z"
+        tunnel_enabled: true
+        tunnel_subdomain: pylearn.testschulev02.learningstack.online
+    postgres:
+        id: postgres
+        name: PostgreSQL
+        ports:
+            - 5432
+        env_keys: []
+        installed_at: "2026-06-01T08:00:00Z"
+        tunnel_enabled: false
+ports:
+    8330: pylearn
+    5432: postgres
+`
+
+// Without the rename being carried over, every published app reads back as
+// private: nothing gets republished at start, the apps drop off the internet,
+// and the first save erases the evidence that they ever were public.
+func TestLoadStateUpgradesV2(t *testing.T) {
+	withTempStackctlDir(t)
+	writeStateFile(t, v2State)
+
+	s, err := LoadState()
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+
+	if s.Version != StateVersion {
+		t.Errorf("Version = %q, want %q", s.Version, StateVersion)
+	}
+	pylearn := s.Containers["pylearn"]
+	if pylearn == nil {
+		t.Fatal("pylearn missing")
+	}
+	if !pylearn.PublicEnabled {
+		t.Error("tunnel_enabled did not become public_enabled — the app would silently stop being published")
+	}
+	if want := "pylearn.testschulev02.learningstack.online"; pylearn.PublicHost != want {
+		t.Errorf("PublicHost = %q, want %q", pylearn.PublicHost, want)
+	}
+	if pg := s.Containers["postgres"]; pg.PublicEnabled {
+		t.Error("an app that was not published must not become published")
+	}
+}
+
+func TestUpgradedV2StateSurvivesSave(t *testing.T) {
+	withTempStackctlDir(t)
+	writeStateFile(t, v2State)
+
+	s, err := LoadState()
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	again, err := LoadState()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	cs := again.Containers["pylearn"]
+	if !cs.PublicEnabled || cs.PublicHost == "" {
+		t.Errorf("publication lost across save/reload: %+v", cs)
+	}
+}
+
+// The upgrade must not undo a deliberate unpublish: a current file whose
+// public_enabled is false stays false, whatever an old key might still say.
+func TestLoadStateDoesNotResurrectUnpublished(t *testing.T) {
+	withTempStackctlDir(t)
+	writeStateFile(t, `version: "3.0"
+containers:
+    pylearn:
+        id: pylearn
+        ports: [8330]
+        public_enabled: false
+        tunnel_enabled: true
+ports: {}
+`)
+
+	s, err := LoadState()
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if s.Containers["pylearn"].PublicEnabled {
+		t.Error("a stale tunnel_enabled overrode the current public_enabled")
+	}
+}
+
+func writeStateFile(t *testing.T, content string) {
+	t.Helper()
+	if err := os.MkdirAll(paths.ConfigDir(), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.StateFile(), []byte(content), 0o640); err != nil {
+		t.Fatal(err)
 	}
 }
