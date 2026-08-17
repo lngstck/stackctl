@@ -99,8 +99,8 @@ func readDisk(info *Info, path string) {
 	}
 	info.DiskOK = true
 	info.DiskTotal = total
-	info.DiskFree = st.Bavail * bs            // usable by non-root
-	info.DiskUsed = total - st.Bfree*bs       // includes root-reserved blocks
+	info.DiskFree = st.Bavail * bs      // usable by non-root
+	info.DiskUsed = total - st.Bfree*bs // includes root-reserved blocks
 	info.DiskPercent = percent(info.DiskUsed, total)
 }
 

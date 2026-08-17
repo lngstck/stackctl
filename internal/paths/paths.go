@@ -44,9 +44,10 @@ func LearningstackDir() string {
 
 // -- config tree ------------------------------------------------------------
 
-func ConfigDir() string    { return filepath.Join(StackctlDir(), "config") }
-func ConfigFile() string   { return filepath.Join(ConfigDir(), "config.yaml") }
-func StateFile() string    { return filepath.Join(ConfigDir(), "state.yaml") }
+func ConfigDir() string  { return filepath.Join(StackctlDir(), "config") }
+func ConfigFile() string { return filepath.Join(ConfigDir(), "config.yaml") }
+func StateFile() string  { return filepath.Join(ConfigDir(), "state.yaml") }
+
 // DexConfigFile is the host path stackctl writes the Dex config to. It
 // lives under the dex container's data dir so the same directory that is
 // bind-mounted into /etc/dex contains the file. The container reads it as
@@ -54,6 +55,7 @@ func StateFile() string    { return filepath.Join(ConfigDir(), "state.yaml") }
 func DexConfigFile() string {
 	return filepath.Join(LearningstackDir(), "dex", "config", "config.yaml")
 }
+
 // CaddyConfigFile is the host path stackctl writes the Caddyfile to. It sits
 // under the caddy container's own directory, which is bind-mounted into
 // /etc/caddy — keep the name in sync with caddy.yaml's command:.

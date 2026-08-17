@@ -43,11 +43,11 @@ func TestRenderBackupsPage(t *testing.T) {
 		"backup-musterschule-20260624-143000.tar.gz.age",
 		"/download",
 		"tok",
-		"/restore",        // restore form action
-		"confirm_slug",    // slug confirmation field
-		"musterschule",    // promoted SchoolSlug from embedded PageData
+		"/restore",            // restore form action
+		"confirm_slug",        // slug confirmation field
+		"musterschule",        // promoted SchoolSlug from embedded PageData
 		"name=\"passphrase\"", // shown because the backup is encrypted
-		"/backups/upload", // upload form
+		"/backups/upload",     // upload form
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("rendered page missing %q", want)

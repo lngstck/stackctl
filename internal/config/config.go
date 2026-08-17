@@ -54,20 +54,20 @@ const FilePerm = 0o640
 type SetupState string
 
 const (
-	SetupStateNeedsSetup            SetupState = "needs_setup"
-	SetupStateAwaitingRegistration  SetupState = "awaiting_registration"
-	SetupStateReady                 SetupState = "ready"
+	SetupStateNeedsSetup           SetupState = "needs_setup"
+	SetupStateAwaitingRegistration SetupState = "awaiting_registration"
+	SetupStateReady                SetupState = "ready"
 )
 
 // Config mirrors config.yaml. Field tags use snake_case to match the format
 // shown in ARCHITECTURE.md §12.
 type Config struct {
-	Version      int               `yaml:"version"`
-	SetupState   SetupState        `yaml:"setup_state"`
-	School       School            `yaml:"school"`
-	Catalog      Catalog           `yaml:"catalog"`
-	Admin        Admin             `yaml:"admin"`
-	Dex          Dex               `yaml:"dex"`
+	Version      int          `yaml:"version"`
+	SetupState   SetupState   `yaml:"setup_state"`
+	School       School       `yaml:"school"`
+	Catalog      Catalog      `yaml:"catalog"`
+	Admin        Admin        `yaml:"admin"`
+	Dex          Dex          `yaml:"dex"`
 	Registration Registration `yaml:"registration,omitempty"`
 	Public       Public       `yaml:"public"`
 	// AutoUpdate steuert das naechtliche Auto-Update aller Apps.

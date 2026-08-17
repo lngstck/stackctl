@@ -7,8 +7,8 @@ func TestSanitizeIdent(t *testing.T) {
 		"langflow":   "langflow",
 		"open-webui": "open_webui",
 		"my.app":     "myapp",
-		"MY-APP":     "my_app",  // lowercased + hyphen → underscore
-		"---":        "___",  // hyphens → underscores
+		"MY-APP":     "my_app", // lowercased + hyphen → underscore
+		"---":        "___",    // hyphens → underscores
 		"a1b":        "a1b",
 	}
 	for input, want := range cases {

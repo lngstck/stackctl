@@ -25,9 +25,9 @@ type settingsData struct {
 	// install — no longer derivable from the slug, so the UI reads it.
 	PublicBaseDomain string
 	DexAuthURL       string
-	AutoUpdate   bool
-	Error        string
-	Message      string
+	AutoUpdate       bool
+	Error            string
+	Message          string
 
 	// System-Tab (ehemals /system).
 	CurrentVersion  string
@@ -55,18 +55,18 @@ type settingsData struct {
 
 func (s *Server) settingsData(msg, errMsg string) settingsData {
 	return settingsData{
-		PageData:       s.pageData("settings"),
-		SchoolName:     s.cfg.School.Name,
-		SchoolSlug:     s.cfg.School.Slug,
-		ServerDomain:   s.cfg.School.ServerDomain,
+		PageData:         s.pageData("settings"),
+		SchoolName:       s.cfg.School.Name,
+		SchoolSlug:       s.cfg.School.Slug,
+		ServerDomain:     s.cfg.School.ServerDomain,
 		ContactEmail:     s.cfg.School.ContactEmail,
 		PublicBaseDomain: public.BaseDomain(s.cfg),
 		DexAuthURL:       public.AuthURL(s.cfg),
-		AutoUpdate:     s.cfg.AutoUpdate.Enabled,
-		Message:        msg,
-		Error:          errMsg,
-		CurrentVersion: update.CurrentVersion(),
-		Sys:            buildSysView(),
+		AutoUpdate:       s.cfg.AutoUpdate.Enabled,
+		Message:          msg,
+		Error:            errMsg,
+		CurrentVersion:   update.CurrentVersion(),
+		Sys:              buildSysView(),
 	}
 }
 
