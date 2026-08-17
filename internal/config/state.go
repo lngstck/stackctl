@@ -83,7 +83,53 @@ func LoadState() (*State, error) {
 	if s.Ports == nil {
 		s.Ports = map[int]string{}
 	}
+	upgradeStateFromV2(s, data)
 	return s, nil
+}
+
+// legacyState is the v2.0 shape of the one field pair that was renamed.
+// Keeping it out of ContainerState means the live struct has no field that is
+// always zero, and deleting this block later is a single cut.
+type legacyState struct {
+	Containers map[string]struct {
+		TunnelEnabled   bool   `yaml:"tunnel_enabled"`
+		TunnelSubdomain string `yaml:"tunnel_subdomain"`
+	} `yaml:"containers"`
+}
+
+// upgradeStateFromV2 carries the old publication flags over.
+//
+// v3.0 renamed tunnel_enabled/tunnel_subdomain to public_enabled/public_host
+// because the flag never meant "a tunnel exists". Without this step every app
+// that was public reads back as private: nothing gets republished on start,
+// the apps drop off the internet, and the first Save writes the new names —
+// erasing the evidence that they were ever published.
+func upgradeStateFromV2(s *State, raw []byte) {
+	// Only an older file is read through the old names. Doing it whenever the
+	// new field happens to be false would let a leftover key override a
+	// deliberate unpublish — the old value would win over the current one,
+	// which is the wrong way round.
+	if s.Version == StateVersion {
+		return
+	}
+
+	var legacy legacyState
+	if err := yaml.Unmarshal(raw, &legacy); err != nil {
+		return
+	}
+	for id, old := range legacy.Containers {
+		cs, ok := s.Containers[id]
+		if !ok || cs == nil {
+			continue
+		}
+		if old.TunnelEnabled {
+			cs.PublicEnabled = true
+		}
+		if cs.PublicHost == "" && old.TunnelSubdomain != "" {
+			cs.PublicHost = old.TunnelSubdomain
+		}
+	}
+	s.Version = StateVersion
 }
 
 // Save writes state.yaml atomically with 0640 permissions.
