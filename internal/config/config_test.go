@@ -29,8 +29,10 @@ func TestDefaultConfig(t *testing.T) {
 	if c.Catalog.URL == "" {
 		t.Error("Catalog.URL empty in default")
 	}
-	if c.Public.Transport != TransportDirect {
-		t.Errorf("Public.Transport = %q, want %q", c.Public.Transport, TransportDirect)
+	// Nur im Schulnetz ist der Standard: nichts verlaesst das Schulnetz
+	// ohne ausdrueckliche Entscheidung.
+	if c.Public.Transport != TransportLocal {
+		t.Errorf("Public.Transport = %q, want %q", c.Public.Transport, TransportLocal)
 	}
 }
 
@@ -118,7 +120,12 @@ func TestValidate(t *testing.T) {
 			t.Errorf("transport %q should fail", tr)
 		}
 	}
-	c.Public.Transport = TransportDirect
+	for _, tr := range []string{TransportLocal, TransportDirect} {
+		c.Public.Transport = tr
+		if err := c.Validate(); err != nil {
+			t.Errorf("transport %q should validate: %v", tr, err)
+		}
+	}
 
 	c.Public.BaseDomain = "https://ls.gym-phoenix.de"
 	if err := c.Validate(); err == nil {

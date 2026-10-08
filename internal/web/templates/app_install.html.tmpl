@@ -9,9 +9,9 @@
 <article class="card mb-2">
   <p class="sub mb-2">{{.Description}} · Version {{.Version}} · Kategorie: {{.Category}}</p>
 
-  {{if .HasOIDC}}
+  {{if and .HasOIDC (not .AutoAddress)}}
   <div role="alert" class="mb-2" style="font-size:0.85rem;">
-    Diese App nutzt OIDC-Login. Nach der Installation muss der oeffentliche Zugang aktiviert werden.
+    Diese App nutzt den Schul-Login. Nach der Installation muss ihre Adresse eingeschaltet werden — im direkten Betrieb ist sie damit aus dem Internet erreichbar.
   </div>
   {{end}}
 

@@ -1,16 +1,16 @@
 // Copyright (C) 2026 learningstack contributors. Licensed under AGPL-3.0-or-later. See LICENSE.
 
-// Package caddy generates and applies the Caddyfile for an install that
-// publishes itself, and is the counterpart to internal/dex: stackctl owns the
-// file completely and rewrites it in full on every change.
+// Package caddy generates and applies the Caddyfile, and is the counterpart
+// to internal/dex: stackctl owns the file completely and rewrites it in full
+// on every change.
 //
 // Caddy earns its place here for one reason above the others — it obtains and
-// renews the TLS certificate for every published hostname on its own, over
-// HTTP-01. With the school's wildcard DNS already pointing at this server,
-// that needs no DNS API credentials, no acme.sh, no cron job and no reload
-// hook. The second reason is the ports: without a proxy every app would have
-// to be reached on its own high port, unencrypted, and each one would have to
-// be open to the internet.
+// renews the TLS certificates on its own. In the school network that is one
+// wildcard certificate over DNS-01 (the certificate authority never reaches a
+// private address); on a server directly on the internet it is one
+// certificate per hostname over HTTP-01. Either way there is no acme.sh, no
+// cron job and no reload hook. The second reason is the ports: without a
+// proxy every app would have to be reached on its own high port, unencrypted.
 package caddy
 
 import (
@@ -33,6 +33,10 @@ const ContainerName = "ls-caddy"
 // ConfigPathInContainer is where the bind mount makes the Caddyfile visible.
 // It must match the command: in the catalog definition.
 const ConfigPathInContainer = "/etc/caddy/Caddyfile"
+
+// DNSTokenEnv is the environment variable the proxy reads the deSEC token
+// from. The catalog definition passes it through from .env.
+const DNSTokenEnv = "DESEC_TOKEN"
 
 // Route is one published hostname and the container behind it.
 type Route struct {
@@ -61,10 +65,10 @@ func GenerateConfig(cfg *config.Config, routes []Route) []byte {
 
 	// Global options block. Caddy only accepts one, and it must come first.
 	var global []string
-	if email := cfg.Public.Direct.ACMEEmail; email != "" {
+	if email := cfg.Public.ACMEEmail; email != "" {
 		global = append(global, "\temail "+email)
 	}
-	if ca := cfg.Public.Direct.ACMECA; ca != "" {
+	if ca := cfg.Public.ACMECA; ca != "" {
 		global = append(global, "\tacme_ca "+ca)
 	}
 	if len(global) > 0 {
@@ -73,20 +77,77 @@ func GenerateConfig(cfg *config.Config, routes []Route) []byte {
 		b.WriteString("\n}\n")
 	}
 
-	sorted := append([]Route(nil), routes...)
+	var sorted []Route
+	for _, r := range routes {
+		if r.Host != "" && r.Upstream != "" {
+			sorted = append(sorted, r)
+		}
+	}
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Host < sorted[j].Host })
 
-	for _, r := range sorted {
-		if r.Host == "" || r.Upstream == "" {
-			continue
-		}
-		b.WriteString("\n")
-		fmt.Fprintf(&b, "%s {\n", r.Host)
-		fmt.Fprintf(&b, "\treverse_proxy %s\n", r.Upstream)
-		b.WriteString("}\n")
+	if cfg.Public.Transport == config.TransportLocal {
+		writeWildcardSite(&b, cfg, sorted)
+	} else {
+		writeSites(&b, sorted)
 	}
 
 	return []byte(b.String())
+}
+
+// writeSites gives every host its own site block. Caddy then obtains one
+// certificate per host over HTTP-01, which needs port 80 reachable from the
+// internet.
+func writeSites(b *strings.Builder, routes []Route) {
+	for _, r := range routes {
+		b.WriteString("\n")
+		fmt.Fprintf(b, "%s {\n", r.Host)
+		fmt.Fprintf(b, "\treverse_proxy %s\n", r.Upstream)
+		b.WriteString("}\n")
+	}
+}
+
+// writeWildcardSite serves every host from one wildcard site with a single
+// certificate obtained over DNS-01. One certificate means one challenge name,
+// so the school delegates exactly one record — and a newly installed app
+// needs no new certificate at all.
+//
+// The site is written even without routes: the certificate is the slow part,
+// and having it before the first app is installed is the point.
+func writeWildcardSite(b *strings.Builder, cfg *config.Config, routes []Route) {
+	base := cfg.Public.BaseDomain
+	if base == "" {
+		return
+	}
+
+	b.WriteString("\n")
+	fmt.Fprintf(b, "*.%s {\n", base)
+	b.WriteString("\ttls {\n")
+	b.WriteString("\t\tdns desec {\n")
+	fmt.Fprintf(b, "\t\t\ttoken {env.%s}\n", DNSTokenEnv)
+	b.WriteString("\t\t}\n")
+	if target := cfg.Public.Local.ChallengeDomain; target != "" {
+		fmt.Fprintf(b, "\t\tdns_challenge_override_domain %s\n", target)
+	}
+	b.WriteString("\t}\n")
+
+	for _, r := range routes {
+		// The matcher is named after the first label, which is unique below
+		// the base domain: an app id, "auth" or "admin".
+		name := strings.SplitN(r.Host, ".", 2)[0]
+		b.WriteString("\n")
+		fmt.Fprintf(b, "\t@%s host %s\n", name, r.Host)
+		fmt.Fprintf(b, "\thandle @%s {\n", name)
+		fmt.Fprintf(b, "\t\treverse_proxy %s\n", r.Upstream)
+		b.WriteString("\t}\n")
+	}
+
+	// Every name under the base resolves here, published or not. A plain
+	// answer beats Caddy's empty 200 for a typo or an app that was removed.
+	b.WriteString("\n")
+	b.WriteString("\thandle {\n")
+	b.WriteString("\t\trespond \"Unbekannte Adresse\" 404\n")
+	b.WriteString("\t}\n")
+	b.WriteString("}\n")
 }
 
 // Apply writes the Caddyfile and makes the running proxy pick it up.

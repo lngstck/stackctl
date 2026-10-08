@@ -44,3 +44,27 @@ func TestValidateBaseDomain(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateChallengeDomain(t *testing.T) {
+	for _, d := range []string{
+		"_acme-challenge.gym-phoenix.dedyn.io",
+		"gym-phoenix.dedyn.io",
+	} {
+		if err := ValidateChallengeDomain(d); err != nil {
+			t.Errorf("ValidateChallengeDomain(%q) = %v, want nil", d, err)
+		}
+	}
+	for _, d := range []string{
+		"",
+		"https://_acme-challenge.x.dedyn.io",
+		"_acme-challenge.x.dedyn.io.",
+		"_ACME-challenge.x.dedyn.io",
+		"*.x.dedyn.io",
+		"dedyn",
+		"a..b.io",
+	} {
+		if err := ValidateChallengeDomain(d); err == nil {
+			t.Errorf("ValidateChallengeDomain(%q) = nil, want error", d)
+		}
+	}
+}

@@ -24,10 +24,19 @@ import (
 // There is no upgrade path from earlier versions — no install predates v4.
 const ConfigVersion = 4
 
-// Transport kinds for Public.Transport.
+// Transport kinds for Public.Transport. In both, a local reverse proxy holds
+// 80/443, terminates TLS and routes by hostname; they differ in who can reach
+// it and therefore in how the certificate is obtained.
 const (
-	// TransportDirect reaches this install on the server itself, which holds
-	// public 80/443 and terminates TLS locally.
+	// TransportLocal serves the school network only, the default. The
+	// hostnames resolve to the server's private address, so no certificate
+	// authority can ever reach it: one wildcard certificate comes over
+	// DNS-01 instead (see PublicLocal). Access from outside is the school's
+	// own business — a VPN or tunnel of its choosing — and nothing here
+	// stands in its way.
+	TransportLocal = "local"
+	// TransportDirect serves the internet from the server itself, which
+	// holds public 80/443 and gets one certificate per hostname over HTTP-01.
 	TransportDirect = "direct"
 )
 
@@ -92,20 +101,12 @@ type Admin struct {
 // character for character between browser, containers and every redirect URI,
 // and one source cannot disagree with itself.
 type Public struct {
-	// Transport is how traffic arrives. TransportDirect is the only one.
+	// Transport is how traffic arrives: TransportLocal or TransportDirect.
 	Transport string `yaml:"transport"`
 	// BaseDomain is the parent of every hostname, chosen by the school at
 	// setup. Apps answer at {app_id}.{base_domain}, the local Dex at
 	// auth.{base_domain}, e.g. "ls.gym-phoenix.de".
 	BaseDomain string `yaml:"base_domain"`
-	// Direct configures the local reverse proxy and is only meaningful for
-	// TransportDirect.
-	Direct PublicDirect `yaml:"direct,omitempty"`
-}
-
-// PublicDirect configures the local reverse proxy that terminates TLS when
-// this server publishes itself.
-type PublicDirect struct {
 	// ACMEEmail is the contact address Let's Encrypt uses for expiry
 	// warnings. Optional — certificates are issued without one, but then
 	// nobody gets told when renewal has been failing.
@@ -114,6 +115,29 @@ type PublicDirect struct {
 	// Encrypt staging endpoint: real certificates are rate-limited to five
 	// duplicates per week, which a few rounds of debugging burn through.
 	ACMECA string `yaml:"acme_ca,omitempty"`
+	// Local configures the certificate for TransportLocal.
+	Local PublicLocal `yaml:"local,omitempty"`
+}
+
+// PublicLocal holds what DNS-01 needs. The school's DNS provider rarely has
+// an API, so the challenge is delegated: _acme-challenge.{base_domain} is a
+// CNAME into a zone at deSEC, which has one, and the token below may write
+// there.
+type PublicLocal struct {
+	// DNSToken is the deSEC API token. It is a secret: the proxy gets it
+	// through .env (DESEC_TOKEN), never through the Caddyfile, which is
+	// world-readable.
+	DNSToken string `yaml:"dns_token,omitempty"`
+	// ChallengeDomain is the CNAME target of _acme-challenge.{base_domain},
+	// e.g. "_acme-challenge.gym-phoenix.dedyn.io". Empty means no
+	// delegation: the base domain's own zone lives at deSEC.
+	ChallengeDomain string `yaml:"challenge_domain,omitempty"`
+}
+
+// ChallengeName is the record the certificate authority looks up for the
+// wildcard certificate, and the one the school delegates with a CNAME.
+func ChallengeName(baseDomain string) string {
+	return "_acme-challenge." + baseDomain
 }
 
 // Default returns a Config pre-populated with the values used for a fresh
@@ -127,7 +151,7 @@ func Default() *Config {
 			URL: "https://raw.githubusercontent.com/lngstck/catalog/main",
 		},
 		Public: Public{
-			Transport: TransportDirect,
+			Transport: TransportLocal,
 		},
 	}
 }
@@ -197,7 +221,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("unknown setup_state %q", c.SetupState)
 	}
 	switch c.Public.Transport {
-	case TransportDirect:
+	case TransportLocal, TransportDirect:
 	case "":
 		return errors.New("public.transport must be set")
 	default:

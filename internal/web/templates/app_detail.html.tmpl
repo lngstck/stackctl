@@ -34,7 +34,7 @@
           </tr>
           {{if .PublicEnabled}}
           <tr>
-            <td class="sub">Oeffentlich</td>
+            <td class="sub">Adresse</td>
             <td>
               <a href="https://{{.PublicHost}}" target="_blank" rel="noopener">{{.PublicHost}}</a>
               {{template "copy-btn" (printf "https://%s" .PublicHost)}}
@@ -70,7 +70,7 @@
       </table>
       {{if not .PublicEnabled}}
       <div role="alert" data-variant="warning" class="mt-2" style="font-size:0.85rem;">
-        Diese App nutzt OIDC, ist aber nicht oeffentlich erreichbar. Der Login funktioniert erst mit aktivem Zugang.
+        Diese App nutzt den Schul-Login, hat aber keine Adresse. Der Login funktioniert erst, wenn die Adresse eingeschaltet ist.
       </div>
       {{end}}
     </article>
@@ -113,7 +113,7 @@
   <div>
     {{if .HasOIDC}}
     <article class="card mb-2">
-      <h4 class="mb-1">Öffentlicher Zugang</h4>
+      <h4 class="mb-1">Adresse</h4>
       {{if .PublicEnabled}}
       <div style="display:flex;align-items:center;gap:0.75rem;">
         <span class="status-dot running"></span>
@@ -122,7 +122,7 @@
       </div>
       <form method="post" action="/apps/{{.ID}}/public/disable" class="mt-2">
         {{csrfField $.CSRFToken}}
-        <button class="ghost small" data-variant="danger">Zugang deaktivieren</button>
+        <button class="ghost small" data-variant="danger">Adresse abschalten</button>
       </form>
       {{else}}
       <div style="display:flex;align-items:center;gap:0.75rem;">
@@ -131,7 +131,7 @@
       </div>
       <form method="post" action="/apps/{{.ID}}/public/enable" class="mt-2">
         {{csrfField $.CSRFToken}}
-        <button class="ghost small">Zugang aktivieren</button>
+        <button class="ghost small">Adresse einschalten</button>
       </form>
       {{end}}
     </article>

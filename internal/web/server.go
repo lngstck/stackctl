@@ -133,7 +133,7 @@ func (s *Server) routes() {
 	// Setup (needs_setup state).
 	s.mux.HandleFunc("GET /setup", s.handleSetup)
 	s.mux.HandleFunc("POST /setup", s.handleSetupPost)
-	s.mux.HandleFunc("GET /setup/preflight", s.handleSetupPreflight)
+	s.mux.HandleFunc("POST /setup/preflight", s.handleSetupPreflight)
 
 	// Login/Logout (ready state).
 	s.mux.HandleFunc("GET /login", s.handleLogin)

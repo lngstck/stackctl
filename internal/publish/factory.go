@@ -18,8 +18,8 @@ import (
 // setting.
 func For(cfg *config.Config) Publisher {
 	switch cfg.Public.Transport {
-	case config.TransportDirect:
-		return NewDirect(cfg)
+	case config.TransportLocal, config.TransportDirect:
+		return NewProxy(cfg)
 	default:
 		log.Printf("publish: unknown transport %q — apps stay unpublished", cfg.Public.Transport)
 		return unsupported{kind: cfg.Public.Transport}
@@ -35,6 +35,7 @@ type unsupported struct{ kind string }
 var errUnsupported = errors.New("diese Betriebsart wird von dieser stackctl-Version nicht unterstuetzt")
 
 func (u unsupported) Kind() string               { return u.kind }
+func (u unsupported) Refresh() error             { return errUnsupported }
 func (u unsupported) EnsureAuth() error          { return errUnsupported }
 func (u unsupported) AuthStatus() string         { return StatusError }
 func (u unsupported) StartAuth() error           { return errUnsupported }

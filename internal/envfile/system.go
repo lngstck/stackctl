@@ -14,6 +14,7 @@ var SystemEnvKeys = []string{
 	"SERVER_DOMAIN",
 	"PUBLIC_BASE_DOMAIN",
 	"DEX_AUTH_URL",
+	"DESEC_TOKEN",
 	"ADMIN_PASSWORD",
 }
 
@@ -44,6 +45,15 @@ func ApplySystemEnv(f *File, cfg *config.Config, adminPassword string) {
 	// a Dex that mints tokens under a different issuer would fail validation
 	// on every login.
 	f.Set(GlobalSection, "DEX_AUTH_URL", public.AuthURL(cfg))
+
+	// The proxy reads its deSEC token from here (see caddy.DNSTokenEnv)
+	// rather than from the world-readable Caddyfile. Written empty outside
+	// the school-network mode, so a stale token does not outlive a change.
+	token := ""
+	if cfg.Public.Transport == config.TransportLocal {
+		token = cfg.Public.Local.DNSToken
+	}
+	f.Set(GlobalSection, "DESEC_TOKEN", token)
 
 	if adminPassword != "" {
 		f.Set(GlobalSection, "ADMIN_PASSWORD", adminPassword)

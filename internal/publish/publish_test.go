@@ -9,7 +9,7 @@ import (
 // The concrete publishers must satisfy the interface — the compiler is the
 // test here, and it is the assertion that matters for the callers.
 var (
-	_ Publisher = (*Direct)(nil)
+	_ Publisher = (*Proxy)(nil)
 	_ Publisher = unsupported{}
 )
 
@@ -94,8 +94,12 @@ func TestForPicksPublisherByTransport(t *testing.T) {
 		School: config.School{Slug: "phoenix"},
 		Public: config.Public{Transport: config.TransportDirect, BaseDomain: "ls.gym-phoenix.de"},
 	})
-	if direct.Kind() != KindDirect {
-		t.Errorf("Kind = %q, want %q", direct.Kind(), KindDirect)
+	if direct.Kind() != config.TransportDirect {
+		t.Errorf("Kind = %q, want %q", direct.Kind(), config.TransportDirect)
+	}
+	local := For(&config.Config{Public: config.Public{Transport: config.TransportLocal, BaseDomain: "ls.gym-phoenix.de"}})
+	if _, ok := local.(*Proxy); !ok || local.Kind() != config.TransportLocal {
+		t.Errorf("local transport → %T (%q), want *Proxy", local, local.Kind())
 	}
 
 	// The relay is gone. A config that still names it gets a publisher that

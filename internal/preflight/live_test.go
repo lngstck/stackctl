@@ -148,6 +148,27 @@ func TestLiveWithoutAddressSkips(t *testing.T) {
 	}
 }
 
+// Im Schulnetz haengt die Erneuerung an deSEC, nicht an Port 80. Ein Hinweis
+// auf das falsche Bauteil schickt die Admin an die falsche Stelle.
+func TestLiveLocalCertificateHintNamesDNS(t *testing.T) {
+	p := liveProber(fakeResolver{}, nil, certExpiringIn(5*24*time.Hour), nil)
+
+	checks := p.Live(context.Background(), LiveInput{
+		Mode: ModeLocal, BaseDomain: "ls.gym-phoenix.de", AuthHost: "auth.ls.gym-phoenix.de",
+	})
+
+	got, ok := findCheck(checks, "certificate")
+	if !ok {
+		t.Fatal("Zertifikats-Karte fehlt")
+	}
+	if strings.Contains(got.Detail, "Port 80") || !strings.Contains(got.Detail, "deSEC") {
+		t.Errorf("Hinweis passt nicht zum Schulnetz-Betrieb: %q", got.Detail)
+	}
+	if _, ok := findCheck(checks, "dns_challenge"); !ok {
+		t.Error("CNAME-Pruefung fehlt im laufenden Betrieb")
+	}
+}
+
 func findCheck(checks []Check, id string) (Check, bool) {
 	for _, c := range checks {
 		if c.ID == id {

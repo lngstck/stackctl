@@ -181,8 +181,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 				data.Issues = append(data.Issues, dashIssue{
 					Level:       "warning",
 					Icon:        "●",
-					Title:       "Externer Zugang für " + name + " inaktiv",
-					Detail:      "Der öffentliche Zugang ist aktiviert, läuft aber gerade nicht.",
+					Title:       "Adresse von " + name + " nicht erreichbar",
+					Detail:      "Die Adresse ist eingeschaltet, wird aber gerade nicht ausgeliefert. Läuft der Reverse-Proxy?",
 					Action:      "/public",
 					ActionLabel: "Zugang prüfen",
 				})

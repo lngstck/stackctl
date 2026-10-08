@@ -25,6 +25,9 @@ const CertWarnDays = 14
 type LiveInput struct {
 	Mode       string
 	BaseDomain string
+	// ChallengeDomain is the delegation target of the ACME challenge in
+	// ModeLocal (see config.PublicLocal).
+	ChallengeDomain string
 	// AuthHost is the hostname of the login. It is the one address every
 	// install has, whatever else is published, which makes it the natural
 	// probe target.
@@ -40,12 +43,17 @@ type LiveInput struct {
 func (p *Prober) Live(ctx context.Context, in LiveInput) []Check {
 	var checks []Check
 
-	wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain)
+	wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode)
 	checks = append(checks, wildcard)
-	checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
+	if in.Mode == ModeLocal {
+		checks = append(checks, p.checkPointsHereLocal(resolved, in.BaseDomain))
+		checks = append(checks, p.checkChallenge(ctx, in.BaseDomain, in.ChallengeDomain))
+	} else {
+		checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
+	}
 
 	checks = append(checks, p.checkEndpoint(ctx, in.AuthHost))
-	checks = append(checks, p.checkCertificate(ctx, in.AuthHost))
+	checks = append(checks, p.checkCertificate(ctx, in.AuthHost, in.Mode))
 	return checks
 }
 
@@ -102,7 +110,7 @@ func (p *Prober) httpStatus(ctx context.Context, host string) (int, error) {
 // checkCertificate reports what a browser would see. Reading Caddy's storage
 // directly would be quicker but would only prove what Caddy believes it has —
 // not what it actually serves.
-func (p *Prober) checkCertificate(ctx context.Context, host string) Check {
+func (p *Prober) checkCertificate(ctx context.Context, host, mode string) Check {
 	const (
 		id    = "certificate"
 		title = "Zertifikat"
@@ -129,8 +137,14 @@ func (p *Prober) checkCertificate(ctx context.Context, host string) Check {
 		return Check{ID: id, Title: title, Status: StatusFail,
 			Detail: fmt.Sprintf("Abgelaufen am %s. Browser verweigern die Verbindung.", until)}
 	case days <= CertWarnDays:
+		// What renewal depends on differs by mode, and pointing at the wrong
+		// part sends the admin to check something that is fine.
+		cause := "ob Port 80 von außen erreichbar ist"
+		if mode == ModeLocal {
+			cause = "ob der deSEC-Token noch gültig ist und der CNAME für _acme-challenge noch stimmt"
+		}
 		return Check{ID: id, Title: title, Status: StatusWarn,
-			Detail: fmt.Sprintf("Läuft am %s ab (%d Tage). Die automatische Erneuerung sollte laengst gelaufen sein — bitte pruefen, ob Port 80 von aussen erreichbar ist.", until, days),
+			Detail: fmt.Sprintf("Läuft am %s ab (%d Tage). Die automatische Erneuerung sollte längst gelaufen sein — bitte prüfen, %s.", until, days, cause),
 		}
 	default:
 		return Check{ID: id, Title: title, Status: StatusOK,

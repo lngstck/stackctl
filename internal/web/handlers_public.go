@@ -114,10 +114,11 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 // inline would make the page slow exactly when something is wrong — the one
 // time an admin needs it to come up.
 func (s *Server) handlePublicHealth(w http.ResponseWriter, r *http.Request) {
-	checks := preflight.NewProber().Live(r.Context(), preflight.LiveInput{
-		Mode:       preflight.Mode(s.cfg),
-		BaseDomain: public.BaseDomain(s.cfg),
-		AuthHost:   public.AuthHost(s.cfg),
+	checks := newProber().Live(r.Context(), preflight.LiveInput{
+		Mode:            preflight.Mode(s.cfg),
+		BaseDomain:      public.BaseDomain(s.cfg),
+		ChallengeDomain: s.cfg.Public.Local.ChallengeDomain,
+		AuthHost:        public.AuthHost(s.cfg),
 	})
 
 	w.Header().Set("Content-Type", "application/json")

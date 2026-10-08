@@ -102,6 +102,9 @@ type appInstallData struct {
 	Prompts     []catalog.Prompt
 	Secrets     []catalog.SecretSpec
 	UsesAdminPw bool
+	// AutoAddress is true when the app gets its address during install
+	// (see autoPublish), so the page need not ask for a second step.
+	AutoAddress bool
 	Error       string
 	Values      map[string]string
 }
@@ -363,6 +366,7 @@ func (s *Server) handleAppInstallForm(w http.ResponseWriter, r *http.Request) {
 		Prompts:     def.Prompts,
 		Secrets:     def.Secrets,
 		UsesAdminPw: usesAdminPassword(def),
+		AutoAddress: s.cfg.Public.Transport == config.TransportLocal,
 		Values:      make(map[string]string),
 	}
 
@@ -403,6 +407,7 @@ func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
 				Prompts:     def.Prompts,
 				Secrets:     def.Secrets,
 				UsesAdminPw: usesAdminPassword(def),
+				AutoAddress: s.cfg.Public.Transport == config.TransportLocal,
 				Error:       fmt.Sprintf("%s ist erforderlich.", p.Question),
 				Values:      promptValues,
 			}
@@ -482,6 +487,11 @@ func (s *Server) runAppJob(
 	if opErr != nil {
 		log.Printf("web: job %s (%s): %v", job.ID, job.Kind, opErr)
 	}
+	if opErr == nil && result != nil && result.Success && job.Kind == "install" {
+		if msg := s.autoPublish(working, job.AppID); msg != "" {
+			result.Messages = append(result.Messages, msg)
+		}
+	}
 
 	// Persist env (incl. system keys), the mutated state clone, and — if the
 	// op touched OIDC — the dex config. On failure the clone is unchanged for
@@ -511,6 +521,37 @@ func (s *Server) runAppJob(
 		errMsg = result.Error
 	}
 	job.finish(success, errMsg)
+}
+
+// autoPublish gives a freshly installed app its address when that address
+// stays inside the school network. There it is no exposure — and an app that
+// logs in through Dex cannot work without it, so asking for a second click
+// would only be a trap. On a server directly on the internet publishing
+// remains a deliberate decision.
+//
+// It records the result on working, the job's state clone, and returns a
+// line for the job's messages when publishing failed. The app is installed
+// either way; the address can be switched on later on its page.
+func (s *Server) autoPublish(working *config.State, appID string) string {
+	if s.publisher == nil || s.cfg.Public.Transport != config.TransportLocal || isMandatoryApp(appID) {
+		return ""
+	}
+	cs := working.Containers[appID]
+	if cs == nil || cs.PublicEnabled {
+		return ""
+	}
+	app := s.publishApp(appID, cs)
+	if app.ContainerPort == 0 {
+		return "" // nothing to route to, e.g. a background service
+	}
+	host, err := s.publisher.Enable(app)
+	if err != nil {
+		log.Printf("web: auto-publish %s: %v", appID, err)
+		return "⚠ Die Adresse der App konnte nicht eingerichtet werden. Auf der App-Seite lässt sie sich erneut einschalten."
+	}
+	cs.PublicEnabled = true
+	cs.PublicHost = host
+	return ""
 }
 
 func (s *Server) handleAppAutoUpdateToggle(w http.ResponseWriter, r *http.Request) {

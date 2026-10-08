@@ -3,10 +3,12 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/paths"
 )
 
 func TestLinkifyAdminNotes(t *testing.T) {
@@ -94,5 +96,74 @@ func TestAppsPageWithoutCatalogKeepsInstalledAppsAndMessage(t *testing.T) {
 	}
 	if strings.Contains(body, "Alle Apps sind bereits installiert") {
 		t.Error("ohne Katalog behauptet die Seite, alles sei installiert")
+	}
+}
+
+func writeDefinition(t *testing.T, id, yaml string) {
+	t.Helper()
+	if err := os.MkdirAll(paths.CatalogContainersDir(), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.AppDefinitionFile(id), []byte(yaml), 0o640); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Im Schulnetz bekommt eine neue App ihre Adresse sofort: das ist kein
+// Internetzugang, und ohne Adresse funktioniert kein Login.
+func TestAutoPublishInSchoolNetwork(t *testing.T) {
+	fake := &fakePublisher{host: "pylearn.ls.gym-phoenix.de"}
+	s, _ := testServerWithPublisher(t, fake)
+	writeDefinition(t, "pylearn", "id: pylearn\nname: PyLearn\nports:\n  - host: 8330\n    container: 8000\n")
+
+	working := s.snapState()
+	if msg := s.autoPublish(working, "pylearn"); msg != "" {
+		t.Fatalf("unerwartete Meldung: %q", msg)
+	}
+	cs := working.Containers["pylearn"]
+	if !cs.PublicEnabled || cs.PublicHost != fake.host {
+		t.Errorf("state = %+v, want veroeffentlicht unter %s", cs, fake.host)
+	}
+	if len(fake.enabled) != 1 || fake.enabled[0].ContainerPort != 8000 {
+		t.Errorf("Enable-Aufrufe = %+v, want einen mit Container-Port 8000", fake.enabled)
+	}
+}
+
+// Im direkten Betrieb hiesse "automatisch" ins Internet stellen — das bleibt
+// eine bewusste Entscheidung. Pflicht-Dienste bekommen nie eine eigene Adresse.
+func TestAutoPublishLeavesOtherCasesAlone(t *testing.T) {
+	fake := &fakePublisher{host: "x"}
+	s, st := testServerWithPublisher(t, fake)
+	writeDefinition(t, "pylearn", "id: pylearn\nname: PyLearn\nports:\n  - host: 8330\n    container: 8000\n")
+	st.Containers["postgres"] = &config.ContainerState{ID: "postgres", Ports: []int{5432}}
+	writeDefinition(t, "postgres", "id: postgres\nname: PostgreSQL\nports:\n  - host: 5432\n    container: 5432\n")
+
+	working := s.snapState()
+	s.autoPublish(working, "postgres")
+
+	s.cfg.Public.Transport = config.TransportDirect
+	s.autoPublish(working, "pylearn")
+
+	if len(fake.enabled) != 0 {
+		t.Errorf("Enable aufgerufen: %+v", fake.enabled)
+	}
+	if working.Containers["pylearn"].PublicEnabled || working.Containers["postgres"].PublicEnabled {
+		t.Error("state wurde veraendert")
+	}
+}
+
+// Scheitert die Route, bleibt die App installiert und der Job sagt, wo es
+// weitergeht — ohne den Zustand zu beschoenigen.
+func TestAutoPublishFailureIsReportedNotRecorded(t *testing.T) {
+	s, _ := testServerWithPublisher(t, &fakePublisher{enableErr: errFake})
+	writeDefinition(t, "pylearn", "id: pylearn\nname: PyLearn\nports:\n  - host: 8330\n    container: 8000\n")
+
+	working := s.snapState()
+	msg := s.autoPublish(working, "pylearn")
+	if msg == "" {
+		t.Error("Fehlschlag ohne Meldung")
+	}
+	if cs := working.Containers["pylearn"]; cs.PublicEnabled || cs.PublicHost != "" {
+		t.Errorf("state = %+v, want unveraendert", cs)
 	}
 }
