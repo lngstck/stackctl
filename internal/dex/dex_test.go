@@ -19,12 +19,8 @@ func testConfig() *config.Config {
 			ServerDomain: "192.168.1.10",
 		},
 		Public: config.Public{
-			Transport:  config.TransportRelay,
-			BaseDomain: "phoenix.learningstack.online",
-		},
-		Dex: config.Dex{
-			ClientID:     "phoenix",
-			ClientSecret: "deadbeef1234567890abcdef1234567890abcdef",
+			Transport:  config.TransportDirect,
+			BaseDomain: "ls.gym-phoenix.de",
 		},
 	}
 }
@@ -36,7 +32,7 @@ func TestGenerateConfigBasic(t *testing.T) {
 			ID:           "langflow",
 			Secret:       "abc123",
 			Name:         "Langflow",
-			RedirectURIs: []string{"https://langflow.phoenix.learningstack.online/oauth/callback"},
+			RedirectURIs: []string{"https://langflow.ls.gym-phoenix.de/oauth/callback"},
 		},
 	}
 
@@ -58,7 +54,7 @@ func TestGenerateConfigBasic(t *testing.T) {
 	}
 
 	// Issuer.
-	if doc["issuer"] != "https://auth.phoenix.learningstack.online" {
+	if doc["issuer"] != "https://auth.ls.gym-phoenix.de" {
 		t.Errorf("issuer = %v", doc["issuer"])
 	}
 
@@ -68,31 +64,17 @@ func TestGenerateConfigBasic(t *testing.T) {
 		t.Errorf("storage type = %v", storage["type"])
 	}
 
-	// Connector: central-dex upstream.
-	connectors := doc["connectors"].([]any)
-	if len(connectors) != 1 {
-		t.Fatalf("connectors count = %d", len(connectors))
+	// Kein Anmeldedienst angebunden: Dex startet ohne jeden Connector nicht,
+	// die leere Passwort-Datenbank zaehlt als einer. Ein Upstream-Connector
+	// darf es nicht geben — schon gar nicht einer auf einen Dritten.
+	if doc["enablePasswordDB"] != true {
+		t.Errorf("enablePasswordDB = %v, want true — sonst startet Dex nicht", doc["enablePasswordDB"])
 	}
-	conn := connectors[0].(map[string]any)
-	if conn["id"] != "central-dex" {
-		t.Errorf("connector id = %v", conn["id"])
+	if _, ok := doc["connectors"]; ok {
+		t.Errorf("connectors = %v, want none", doc["connectors"])
 	}
-	connCfg := conn["config"].(map[string]any)
-	if connCfg["issuer"] != CentralDexIssuer {
-		t.Errorf("connector issuer = %v", connCfg["issuer"])
-	}
-	if connCfg["clientID"] != "phoenix" {
-		t.Errorf("clientID = %v", connCfg["clientID"])
-	}
-	if connCfg["redirectURI"] != "https://auth.phoenix.learningstack.online/callback" {
-		t.Errorf("redirectURI = %v", connCfg["redirectURI"])
-	}
-
-	// Kein claimMapping: Claims laufen vom zentralen Dex (der seinerseits
-	// moin.schule mappt) unveraendert durch. Eigene Mappings hier wuerden
-	// email (= moin.schule sub, stabiler Identifier) zerstoeren.
-	if _, ok := connCfg["claimMapping"]; ok {
-		t.Error("claimMapping should not be set — central Dex already maps upstream claims")
+	if _, ok := doc["staticPasswords"]; ok {
+		t.Error("die Platzhalter-Datenbank muss leer bleiben")
 	}
 
 	// oauth2 settings.
@@ -160,7 +142,7 @@ func TestBuildRedirectURI(t *testing.T) {
 
 	// Public URL.
 	got := BuildRedirectURI(cfg, "langflow", "/oauth/callback", 8320, true)
-	want := "https://langflow.phoenix.learningstack.online/oauth/callback"
+	want := "https://langflow.ls.gym-phoenix.de/oauth/callback"
 	if got != want {
 		t.Errorf("BuildRedirectURI public = %q, want %q", got, want)
 	}

@@ -65,24 +65,16 @@ var infraDisplayNames = map[string]string{
 
 // mandatoryAppIDs liefert die Pflicht-Dienste in sinnvoller
 // Installations-Reihenfolge (Apps hängen von postgres ab, Logins von dex).
-//
-// Welche Dienste Pflicht sind, hängt an der Betriebsart: im direkten Betrieb
-// hält der Reverse-Proxy Port 80/443 und terminiert TLS — ohne ihn ist keine
-// einzige Adresse erreichbar, auch der Login nicht. Über einen Relay-Tunnel
-// erledigt das die Gegenstelle, und Caddy waere dort nur ein Container, der
-// zwei Ports belegt.
-func mandatoryAppIDs(cfg *config.Config) []string {
-	ids := []string{"postgres", "dex"}
-	if cfg != nil && cfg.Public.Transport == config.TransportDirect {
-		ids = append(ids, "caddy")
-	}
-	return ids
+// Der Reverse-Proxy hält Port 80/443 und terminiert TLS — ohne ihn ist keine
+// einzige Adresse erreichbar, auch der Login nicht.
+func mandatoryAppIDs() []string {
+	return []string{"postgres", "dex", "caddy"}
 }
 
-// isMandatoryApp meldet, ob die App in dieser Betriebsart ein Pflicht-Dienst
-// ist. Einzige Quelle der Wahrheit dafür ist mandatoryAppIDs.
-func isMandatoryApp(cfg *config.Config, id string) bool {
-	for _, m := range mandatoryAppIDs(cfg) {
+// isMandatoryApp meldet, ob die App ein Pflicht-Dienst ist. Einzige Quelle
+// der Wahrheit dafür ist mandatoryAppIDs.
+func isMandatoryApp(id string) bool {
+	for _, m := range mandatoryAppIDs() {
 		if m == id {
 			return true
 		}
@@ -95,17 +87,17 @@ func isMandatoryApp(cfg *config.Config, id string) bool {
 // "postgres" noch "dex".
 var missingInfraDetails = map[string]string{
 	"postgres": "Pflicht-Dienst — fast alle Apps brauchen die Datenbank. Bitte zuerst installieren.",
-	"dex":      "Pflicht-Dienst — ohne ihn funktioniert kein Login über moin.schule.",
-	"caddy":    "Pflicht-Dienst im direkten Betrieb — er nimmt Port 80/443 entgegen und verteilt sie an die Apps. Ohne ihn ist keine öffentliche Adresse erreichbar.",
+	"dex":      "Pflicht-Dienst — ohne ihn funktioniert in keiner App die Anmeldung mit dem Schulkonto.",
+	"caddy":    "Pflicht-Dienst — er nimmt Port 80/443 entgegen, holt die Zertifikate und verteilt die Anfragen an die Apps. Ohne ihn ist keine Adresse erreichbar.",
 }
 
 // missingInfraIssues liefert Handlungsbedarf-Karten für Pflicht-Dienste, die
 // noch gar nicht installiert sind. Ohne diesen Hinweis landet ein frisch
 // freigeschalteter Admin auf einem leeren Dashboard und erfährt erst beim
 // Installieren einer App von den Abhängigkeiten.
-func missingInfraIssues(cfg *config.Config, st *config.State) []dashIssue {
+func missingInfraIssues(st *config.State) []dashIssue {
 	var issues []dashIssue
-	for _, id := range mandatoryAppIDs(cfg) {
+	for _, id := range mandatoryAppIDs() {
 		if _, installed := st.Containers[id]; installed {
 			continue
 		}
@@ -130,31 +122,24 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// 0) Fehlende Pflicht-Dienste — auf einem frisch freigeschalteten System
 	//    das Erste, was der Admin tun muss. Steht deshalb ganz oben.
-	data.Issues = append(data.Issues, missingInfraIssues(s.cfg, st)...)
+	data.Issues = append(data.Issues, missingInfraIssues(st)...)
 
-	// 1) Öffentlicher Zugang zum Login — die Lebensader für OIDC. Liegt er,
-	//    kann sich niemand mehr über moin.schule anmelden → höchste Priorität.
+	// 1) Die Adresse des Logins — die Lebensader für OIDC. Liegt sie, kann
+	//    sich niemand mehr mit dem Schulkonto anmelden → höchste Priorität.
 	if s.publisher != nil {
 		if status := s.publisher.AuthStatus(); status != publish.StatusRunning {
-			// Im direkten Betrieb gibt es keinen Tunnel, der liegen könnte —
-			// dort fehlt eine Route im Reverse-Proxy. Ein Hinweis auf das
-			// falsche Bauteil schickt den Admin an die falsche Stelle.
-			detail := "Der Tunnel für den Login ist nicht aktiv — Logins über moin.schule funktionieren nicht."
-			if s.cfg.Public.Transport == config.TransportDirect {
-				detail = "Der Login wird gerade nicht ausgeliefert — Logins über moin.schule funktionieren nicht. Läuft der Reverse-Proxy?"
-			}
 			data.Issues = append(data.Issues, dashIssue{
 				Level:       "danger",
 				Icon:        "⚠",
 				Title:       "Anmeldung nicht erreichbar",
-				Detail:      detail,
+				Detail:      "Der Login wird gerade nicht ausgeliefert — Anmeldungen mit dem Schulkonto funktionieren nicht. Läuft der Reverse-Proxy?",
 				Action:      "/public",
 				ActionLabel: "Zugang prüfen",
 			})
 		}
 	}
 
-	// 2) Pro installierter App: Health (läuft?), Tunnel-Status, Update.
+	// 2) Pro installierter App: Health (läuft?), Adresse, Update.
 	//    Sortiert, damit die Karten nicht bei jedem Laden die Plätze tauschen.
 	for _, id := range st.InstalledIDs() {
 		cs := st.Containers[id]
@@ -190,8 +175,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Tunnel aktiviert, läuft aber nicht (nur echte Apps, keine Infra).
-		if cs.PublicEnabled && !isMandatoryApp(s.cfg, id) && s.publisher != nil {
+		// Adresse eingeschaltet, Route läuft aber nicht (nur echte Apps).
+		if cs.PublicEnabled && !isMandatoryApp(id) && s.publisher != nil {
 			if status := s.publisher.Status(id); status != publish.StatusRunning {
 				data.Issues = append(data.Issues, dashIssue{
 					Level:       "warning",

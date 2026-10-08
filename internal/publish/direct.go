@@ -140,9 +140,8 @@ func (d *Direct) Enable(app App) (string, error) {
 	port := app.ContainerPort
 	if port == 0 {
 		// Without the in-container port there is nothing to proxy to. The
-		// relay could fall back to the published host port; a proxy on the
-		// container network cannot, and guessing would produce a route that
-		// silently 502s.
+		// proxy sits on the container network, not on the host, and
+		// guessing would produce a route that silently 502s.
 		return "", fmt.Errorf("publish %s: unknown container port — is the catalog definition cached?", app.ID)
 	}
 
@@ -178,8 +177,7 @@ func (d *Direct) Restore(apps []App) {
 
 func (d *Direct) Status(appID string) string { return d.statusFor(appID) }
 
-// StartMonitor is a no-op for now. Unlike a tunnel there is no process to
-// supervise: the proxy is a container with restart: unless-stopped, and it
+// StartMonitor is a no-op for now. There is no process to supervise: the proxy is a container with restart: unless-stopped, and it
 // renews certificates itself. The checks worth adding here — certificate
 // expiry, DNS drift, an end-to-end probe — belong with the health cards in
 // the public-access UI and land with them.

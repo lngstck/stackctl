@@ -33,8 +33,6 @@ func TestConfigPathsRespectOverride(t *testing.T) {
 		"ConfigFile":           filepath.Join(dir, "config", "config.yaml"),
 		"StateFile":            filepath.Join(dir, "config", "state.yaml"),
 		"DexConfigFile":        filepath.Join(lsDir, "dex", "config", "config.yaml"),
-		"TunnelKeyFile":        filepath.Join(dir, "config", "tunnel_key"),
-		"TunnelPubKeyFile":     filepath.Join(dir, "config", "tunnel_key.pub"),
 		"CatalogCacheDir":      filepath.Join(dir, "config", "catalog"),
 		"CatalogIndexFile":     filepath.Join(dir, "config", "catalog", "catalog.yaml"),
 		"CatalogContainersDir": filepath.Join(dir, "config", "catalog", "containers"),
@@ -54,10 +52,6 @@ func TestConfigPathsRespectOverride(t *testing.T) {
 			got = StateFile()
 		case "DexConfigFile":
 			got = DexConfigFile()
-		case "TunnelKeyFile":
-			got = TunnelKeyFile()
-		case "TunnelPubKeyFile":
-			got = TunnelPubKeyFile()
 		case "CatalogCacheDir":
 			got = CatalogCacheDir()
 		case "CatalogIndexFile":
@@ -85,14 +79,6 @@ func TestAppDataDirRespectsLearningstackDir(t *testing.T) {
 	want := filepath.Join(dir, "langflow")
 	if got := AppDataDir("langflow"); got != want {
 		t.Errorf("AppDataDir = %q, want %q", got, want)
-	}
-}
-
-func TestRegistrationPackageFile(t *testing.T) {
-	t.Setenv(EnvStackctlDir, "/opt/stackctl")
-	want := "/opt/stackctl/config/registration-phoenix.age"
-	if got := RegistrationPackageFile("phoenix"); got != want {
-		t.Errorf("RegistrationPackageFile = %q, want %q", got, want)
 	}
 }
 

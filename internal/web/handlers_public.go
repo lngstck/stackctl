@@ -19,19 +19,11 @@ import (
 // publicData is the template context for public.html.tmpl.
 type publicData struct {
 	PageData
-	// Mode and its label describe how this install is reached. The page has
-	// to say it out loud: half of what follows — an SSH key, a connection
-	// test, the very word "tunnel" — applies to one transport and not the
-	// other.
+	// Mode and its label describe how this install is reached.
 	Mode       string
 	ModeLabel  string
-	IsRelay    bool
 	BaseDomain string
 
-	SSHPubKey  string
-	KeyExists  bool
-	SSHHost    string
-	SSHPort    int
 	AuthStatus string // "running" | "stopped" | "error"
 	AuthHost   string
 	// AdminHost/AdminStatus describe stackctl's own UI. It is published only
@@ -43,10 +35,9 @@ type publicData struct {
 	// adds a way in, it does not move one.
 	AdminLocalAddr string
 	Apps           []publicAppEntry
-	TestResult     string // "" | "ok" | error message
-	TestDone       bool
-	// CanTest is true when the current publisher can check its own transport.
-	CanTest bool
+	// Notice is the outcome of a start/stop action, carried over the
+	// redirect.
+	Notice string
 }
 
 // publicAppEntry is one row in the app publication table.
@@ -66,7 +57,6 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		PageData:   s.pageData("public"),
 		Mode:       mode,
 		ModeLabel:  preflight.ModeLabel(mode),
-		IsRelay:    s.cfg.Public.Transport != config.TransportDirect,
 		BaseDomain: public.BaseDomain(s.cfg),
 		AuthHost:   public.AuthHost(s.cfg),
 		AuthStatus: publish.StatusStopped,
@@ -79,24 +69,13 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 	if s.publisher != nil {
 		data.AuthStatus = s.publisher.AuthStatus()
 		data.AdminStatus = s.publisher.AdminStatus()
-		_, data.CanTest = s.publisher.(publish.ConnectivityTester)
-
-		// The SSH identity block only exists for transports that dial a
-		// remote endpoint. A server that publishes itself has no relay key.
-		if id, ok := s.publisher.(publish.RelayIdentity); ok {
-			data.SSHHost, data.SSHPort = id.Endpoint()
-			if pub, err := id.PublicKey(); err == nil {
-				data.SSHPubKey = pub
-				data.KeyExists = true
-			}
-		}
 	}
 
 	// App publication, sorted so the rows keep their place between loads.
 	st := s.snapState()
 	for _, id := range st.InstalledIDs() {
 		cs := st.Containers[id]
-		if isMandatoryApp(s.cfg, id) {
+		if isMandatoryApp(id) {
 			continue // infrastructure, not shown in the app list
 		}
 		port := 0
@@ -123,11 +102,7 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		data.Apps = append(data.Apps, entry)
 	}
 
-	// Flash message from test.
-	if r.URL.Query().Get("test") != "" {
-		data.TestDone = true
-		data.TestResult = r.URL.Query().Get("test")
-	}
+	data.Notice = r.URL.Query().Get("notice")
 
 	s.render(w, "public.html.tmpl", data)
 }
@@ -140,10 +115,9 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 // time an admin needs it to come up.
 func (s *Server) handlePublicHealth(w http.ResponseWriter, r *http.Request) {
 	checks := preflight.NewProber().Live(r.Context(), preflight.LiveInput{
-		Mode:         preflight.Mode(s.cfg),
-		BaseDomain:   public.BaseDomain(s.cfg),
-		RelaySSHHost: s.cfg.Public.Relay.SSHHost,
-		AuthHost:     public.AuthHost(s.cfg),
+		Mode:       preflight.Mode(s.cfg),
+		BaseDomain: public.BaseDomain(s.cfg),
+		AuthHost:   public.AuthHost(s.cfg),
 	})
 
 	w.Header().Set("Content-Type", "application/json")
@@ -155,16 +129,15 @@ func (s *Server) handlePublicHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAuthPublishStart (re)publishes Dex. Previously the Dex tunnel had no
-// manual control — once the monitor gave up on it, the only recovery was
-// restarting the whole stackctl service.
+// handleAuthPublishStart (re)publishes Dex. Without a manual control the only
+// recovery from a broken login route would be restarting stackctl.
 func (s *Server) handleAuthPublishStart(w http.ResponseWriter, r *http.Request) {
 	if s.publisher == nil {
-		http.Redirect(w, r, "/public?test=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice=Kein+Publisher+verfuegbar", http.StatusSeeOther)
 		return
 	}
 	if err := s.publisher.StartAuth(); err != nil {
-		http.Redirect(w, r, "/public?test="+fmt.Sprintf("Start des Login-Zugangs fehlgeschlagen: %v", err), http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice="+url.QueryEscape(fmt.Sprintf("Start des Login-Zugangs fehlgeschlagen: %v", err)), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/public", http.StatusSeeOther)
@@ -174,11 +147,11 @@ func (s *Server) handleAuthPublishStart(w http.ResponseWriter, r *http.Request) 
 // until stackctl restarts (EnsureAuth runs at startup).
 func (s *Server) handleAuthPublishStop(w http.ResponseWriter, r *http.Request) {
 	if s.publisher == nil {
-		http.Redirect(w, r, "/public?test=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice=Kein+Publisher+verfuegbar", http.StatusSeeOther)
 		return
 	}
 	if err := s.publisher.StopAuth(); err != nil {
-		http.Redirect(w, r, "/public?test="+fmt.Sprintf("Stop des Login-Zugangs fehlgeschlagen: %v", err), http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice="+url.QueryEscape(fmt.Sprintf("Stop des Login-Zugangs fehlgeschlagen: %v", err)), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/public", http.StatusSeeOther)
@@ -213,12 +186,12 @@ func (s *Server) adminLocalAddr() string {
 // point until the route has proven itself.
 func (s *Server) handleAdminPublishStart(w http.ResponseWriter, r *http.Request) {
 	if s.publisher == nil {
-		http.Redirect(w, r, "/public?test=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice=Kein+Publisher+verfuegbar", http.StatusSeeOther)
 		return
 	}
 	if err := s.publisher.StartAdmin(s.listenPort); err != nil {
 		log.Printf("web: publish admin UI: %v", err)
-		http.Redirect(w, r, "/public?test="+url.QueryEscape(
+		http.Redirect(w, r, "/public?notice="+url.QueryEscape(
 			fmt.Sprintf("Oeffentlicher Zugang zur Verwaltung fehlgeschlagen: %v", err)), http.StatusSeeOther)
 		return
 	}
@@ -235,12 +208,12 @@ func (s *Server) handleAdminPublishStart(w http.ResponseWriter, r *http.Request)
 // port was never closed, so this cannot strand the admin.
 func (s *Server) handleAdminPublishStop(w http.ResponseWriter, r *http.Request) {
 	if s.publisher == nil {
-		http.Redirect(w, r, "/public?test=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice=Kein+Publisher+verfuegbar", http.StatusSeeOther)
 		return
 	}
 	if err := s.publisher.StopAdmin(); err != nil {
 		log.Printf("web: unpublish admin UI: %v", err)
-		http.Redirect(w, r, "/public?test="+url.QueryEscape(
+		http.Redirect(w, r, "/public?notice="+url.QueryEscape(
 			fmt.Sprintf("Zuruecknehmen fehlgeschlagen: %v", err)), http.StatusSeeOther)
 		return
 	}
@@ -251,19 +224,6 @@ func (s *Server) handleAdminPublishStop(w http.ResponseWriter, r *http.Request) 
 		log.Printf("web: save state after unpublishing admin UI: %v", err)
 	}
 	http.Redirect(w, r, "/public", http.StatusSeeOther)
-}
-
-func (s *Server) handlePublicTest(w http.ResponseWriter, r *http.Request) {
-	tester, ok := s.publisher.(publish.ConnectivityTester)
-	if !ok {
-		http.Redirect(w, r, "/public?test=Fuer+diese+Betriebsart+gibt+es+keinen+Verbindungstest", http.StatusSeeOther)
-		return
-	}
-	if err := tester.TestTransport(); err != nil {
-		http.Redirect(w, r, "/public?test="+fmt.Sprintf("Fehler: %v", err), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, "/public?test=ok", http.StatusSeeOther)
 }
 
 // handleAppPublishEnable publishes an app and records the result.
@@ -301,7 +261,7 @@ func (s *Server) handleAppPublishEnable(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/apps/"+appID, http.StatusSeeOther)
 }
 
-// handleAppPublishDisable withdraws an app from the internet.
+// handleAppPublishDisable withdraws an app's route.
 func (s *Server) handleAppPublishDisable(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	if s.publisher == nil {
@@ -331,9 +291,8 @@ func (s *Server) handleAppPublishDisable(w http.ResponseWriter, r *http.Request)
 }
 
 // publishApp builds the publish.App for an installed container. The container
-// port comes from the catalog definition — a relay ignores it, a local proxy
-// routes to it over the docker network. A missing definition is not fatal:
-// the app is still publishable, the proxy just has less to work with.
+// port comes from the catalog definition; the proxy routes to it over the
+// docker network.
 func (s *Server) publishApp(appID string, cs *config.ContainerState) publish.App {
 	app := publish.App{ID: appID}
 	if len(cs.Ports) > 0 {

@@ -13,7 +13,7 @@
    Basis (Form, 0.6rem) kommt aus components.css. Hier nur das
    Mapping der stackctl-Statuswörter auf die Status-Tokens. Ein
    kleiner Rechtsabstand, weil die Dots im Markup teils ohne
-   Flex-Gap direkt vor Text stehen (z.B. Tunnel-Tabelle). */
+   Flex-Gap direkt vor Text stehen (z.B. Tabelle auf „Zugang“). */
 .status-dot { margin-inline-end: 0.4rem; }
 .status-dot.running  { background: var(--success); }
 .status-dot.stopped  { background: var(--danger); }
@@ -53,8 +53,8 @@
   border-top: 1px solid var(--border);
 }
 
-/* ── Tunnel-URL-Badge ───────────────────────────────────────── */
-.tunnel-url {
+/* ── Adress-Badge ─────────────────────────────────────────── */
+.host-badge {
   font-size: 0.75rem;
   font-family: var(--font-mono);
   background: var(--faint);
@@ -111,18 +111,6 @@
 .mt-3 { margin-top: 1.5rem; }
 .gap-1 { gap: 0.5rem; }
 .gap-2 { gap: 1rem; }
-
-/* ── Key-Anzeige (Tunnel-Einstellungen, Registrierung) ──────── */
-.key-display {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  background: var(--faint);
-  color: var(--foreground);
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-medium);
-  word-break: break-all;
-  user-select: all;
-}
 
 /* ── Dashboard ──────────────────────────────────────────────── */
 .dash-section { margin-block: 1.25rem; }

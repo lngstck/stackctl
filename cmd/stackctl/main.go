@@ -92,7 +92,7 @@ func cmdWeb(args []string, stdout, stderr io.Writer) int {
 		state = config.NewState()
 	}
 
-	// Publisher — how this install is reachable from the internet. Which
+	// Publisher — how this install's addresses are served. Which
 	// implementation that is follows from config.public.transport; nothing
 	// above this line branches on it.
 	publisher := publish.For(cfg)

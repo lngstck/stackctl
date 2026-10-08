@@ -17,8 +17,8 @@ const BaseDomainMaxLen = 200
 // mistakes people actually make: pasting a full URL, pasting the wildcard
 // record they just created at their DNS provider, or adding a trailing path
 // or port. A wrong base domain is expensive — it lands in the Dex issuer, in
-// every OIDC redirect URI, and in the registration package the operator acts
-// on — so it is worth rejecting early and precisely.
+// every OIDC redirect URI and in the redirect URI the school registers with
+// its login provider — so it is worth rejecting early and precisely.
 func ValidateBaseDomain(domain string) error {
 	if domain == "" {
 		return errors.New("must not be empty")

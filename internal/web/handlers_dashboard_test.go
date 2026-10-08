@@ -19,30 +19,18 @@ func stateWith(ids ...string) *config.State {
 	return st
 }
 
-// relayCfg / directCfg unterscheiden nur die Betriebsart — daran haengt,
-// welche Dienste Pflicht sind.
-func relayCfg() *config.Config {
-	return &config.Config{Public: config.Public{Transport: config.TransportRelay}}
-}
-
-func directCfg() *config.Config {
-	return &config.Config{Public: config.Public{Transport: config.TransportDirect}}
-}
-
-// Frisch freigeschaltetes System: beide Pflicht-Dienste fehlen → zwei
-// danger-Karten, postgres zuerst (Installations-Reihenfolge), mit Direktlink
-// aufs Install-Formular.
+// Frisches System: alle Pflicht-Dienste fehlen → je eine danger-Karte in
+// Installations-Reihenfolge, mit Direktlink aufs Install-Formular.
 func TestMissingInfraIssues(t *testing.T) {
-	cfg := relayCfg()
-	issues := missingInfraIssues(cfg, stateWith())
-	if len(issues) != 2 {
-		t.Fatalf("issues auf leerem State: want 2, got %d", len(issues))
+	issues := missingInfraIssues(stateWith())
+	want := []string{"/apps/postgres/install", "/apps/dex/install", "/apps/caddy/install"}
+	if len(issues) != len(want) {
+		t.Fatalf("issues auf leerem State: want %d, got %d", len(want), len(issues))
 	}
-	if issues[0].Action != "/apps/postgres/install" {
-		t.Errorf("erste Karte muss postgres sein, Action = %q", issues[0].Action)
-	}
-	if issues[1].Action != "/apps/dex/install" {
-		t.Errorf("zweite Karte muss dex sein, Action = %q", issues[1].Action)
+	for i, action := range want {
+		if issues[i].Action != action {
+			t.Errorf("Karte %d: Action = %q, want %q", i, issues[i].Action, action)
+		}
 	}
 	for _, is := range issues {
 		if is.Level != "danger" {
@@ -53,39 +41,24 @@ func TestMissingInfraIssues(t *testing.T) {
 		}
 	}
 
-	if got := missingInfraIssues(cfg, stateWith("postgres")); len(got) != 1 || got[0].Action != "/apps/dex/install" {
-		t.Errorf("nur postgres installiert: want genau die dex-Karte, got %+v", got)
+	if got := missingInfraIssues(stateWith("postgres", "dex")); len(got) != 1 || got[0].Action != "/apps/caddy/install" {
+		t.Errorf("ohne Proxy: want genau die caddy-Karte, got %+v", got)
 	}
-	if got := missingInfraIssues(cfg, stateWith("postgres", "dex")); len(got) != 0 {
-		t.Errorf("beide installiert: want keine Karten, got %+v", got)
+	if got := missingInfraIssues(stateWith("postgres", "dex", "caddy")); len(got) != 0 {
+		t.Errorf("alle installiert: want keine Karten, got %+v", got)
 	}
 }
 
-// Im direkten Betrieb ist der Reverse-Proxy der oeffentliche Zugang: fehlt er,
-// ist keine Adresse erreichbar — auch der Login nicht. Ueber einen Relay-
-// Tunnel erledigt das die Gegenstelle, dort waere die Karte ein Fehlalarm.
-func TestMandatoryServicesDependOnTransport(t *testing.T) {
-	if got := missingInfraIssues(directCfg(), stateWith("postgres", "dex")); len(got) != 1 ||
-		got[0].Action != "/apps/caddy/install" {
-		t.Errorf("direkter Betrieb ohne Proxy: want caddy-Karte, got %+v", got)
-	}
-	if got := missingInfraIssues(relayCfg(), stateWith("postgres", "dex")); len(got) != 0 {
-		t.Errorf("Relay-Betrieb: Caddy ist kein Pflicht-Dienst, got %+v", got)
-	}
-
-	if !isMandatoryApp(directCfg(), "caddy") {
-		t.Error("caddy muss im direkten Betrieb Pflicht sein")
-	}
-	if isMandatoryApp(relayCfg(), "caddy") {
-		t.Error("caddy darf im Relay-Betrieb nicht als Pflicht markiert sein")
-	}
-	// Datenbank und Login sind in jeder Betriebsart Pflicht.
-	for _, cfg := range []*config.Config{relayCfg(), directCfg()} {
-		for _, id := range []string{"postgres", "dex"} {
-			if !isMandatoryApp(cfg, id) {
-				t.Errorf("%s muss immer Pflicht sein (transport=%s)", id, cfg.Public.Transport)
-			}
+// Der Reverse-Proxy ist der einzige Weg zu Login und Apps — ohne ihn ist
+// keine Adresse erreichbar. Er ist deshalb Pflicht wie Datenbank und Dex.
+func TestMandatoryServices(t *testing.T) {
+	for _, id := range []string{"postgres", "dex", "caddy"} {
+		if !isMandatoryApp(id) {
+			t.Errorf("%s muss Pflicht sein", id)
 		}
+	}
+	if isMandatoryApp("pylearn") {
+		t.Error("eine normale App ist kein Pflicht-Dienst")
 	}
 }
 
@@ -128,7 +101,7 @@ func TestRenderDashboardWithMissingInfra(t *testing.T) {
 
 	data := dashboardData{
 		PageData: PageData{NavActive: "dashboard", SchoolName: "Musterschule", SchoolSlug: "musterschule", CSRFToken: "tok"},
-		Issues:   missingInfraIssues(relayCfg(), stateWith()),
+		Issues:   missingInfraIssues(stateWith()),
 		Sys:      sysView{},
 	}
 

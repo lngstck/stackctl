@@ -254,11 +254,11 @@ func TestBuildServiceBlockBindLocalhost(t *testing.T) {
 		}
 	}
 
-	// A relay install keeps the LAN reachable — that is a feature there.
+	// Without the option the catalog's default stands.
 	svc = BuildServiceBlock(def, Options{})
 	ports, _ = svc["ports"].([]string)
 	if ports[0] != "0.0.0.0:8330:8000" {
-		t.Errorf("relay ports[0] = %q, want 0.0.0.0:8330:8000", ports[0])
+		t.Errorf("default ports[0] = %q, want 0.0.0.0:8330:8000", ports[0])
 	}
 }
 

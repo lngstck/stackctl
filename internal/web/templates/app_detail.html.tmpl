@@ -32,12 +32,12 @@
               {{template "copy-btn" (printf "http://%s:%d" .ServerDomain .Port)}}
             </td>
           </tr>
-          {{if .TunnelEnabled}}
+          {{if .PublicEnabled}}
           <tr>
             <td class="sub">Oeffentlich</td>
             <td>
-              <a href="https://{{.TunnelSubdomain}}" target="_blank" rel="noopener">{{.TunnelSubdomain}}</a>
-              {{template "copy-btn" (printf "https://%s" .TunnelSubdomain)}}
+              <a href="https://{{.PublicHost}}" target="_blank" rel="noopener">{{.PublicHost}}</a>
+              {{template "copy-btn" (printf "https://%s" .PublicHost)}}
             </td>
           </tr>
           {{end}}
@@ -68,7 +68,7 @@
           </tr>
         </tbody>
       </table>
-      {{if not .TunnelEnabled}}
+      {{if not .PublicEnabled}}
       <div role="alert" data-variant="warning" class="mt-2" style="font-size:0.85rem;">
         Diese App nutzt OIDC, ist aber nicht oeffentlich erreichbar. Der Login funktioniert erst mit aktivem Zugang.
       </div>
@@ -114,11 +114,11 @@
     {{if .HasOIDC}}
     <article class="card mb-2">
       <h4 class="mb-1">Öffentlicher Zugang</h4>
-      {{if .TunnelEnabled}}
+      {{if .PublicEnabled}}
       <div style="display:flex;align-items:center;gap:0.75rem;">
         <span class="status-dot running"></span>
         <span>Aktiv</span>
-        <span class="tunnel-url" style="margin-left:auto;">{{.TunnelSubdomain}}</span>
+        <span class="host-badge" style="margin-left:auto;">{{.PublicHost}}</span>
       </div>
       <form method="post" action="/apps/{{.ID}}/public/disable" class="mt-2">
         {{csrfField $.CSRFToken}}

@@ -25,9 +25,6 @@ type Options struct {
 	// reaches containers over the docker network by name, not through a
 	// published port.
 	//
-	// A relay install leaves the default alone — there the ports are how the
-	// school reaches its own apps from the LAN.
-	//
 	// Containers marked PublicEntrypoint are exempt: the proxy itself has to
 	// stay reachable, or confining everything would take the install offline
 	// rather than protect it.

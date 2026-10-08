@@ -1,13 +1,8 @@
 // Copyright (C) 2026 learningstack contributors. Licensed under AGPL-3.0-or-later. See LICENSE.
 
 // Package preflight checks whether the prerequisites for a chosen operating
-// mode are actually in place.
-//
-// The three modes put the work in different hands. On the operator relay the
-// school does nothing: DNS and TLS belong to the operator. With the school's
-// own domain the admin has to create records at their DNS provider, and in
-// direct operation the server additionally has to own ports 80 and 443 and be
-// reachable from the internet. Those preconditions used to be prose in a
+// mode are actually in place: the DNS records at the school's provider, the
+// ports the reverse proxy needs. Those preconditions used to be prose in a
 // runbook; this package turns them into answers the wizard can show while the
 // admin is still typing.
 //
@@ -32,13 +27,9 @@ import (
 	"github.com/lngstck/stackctl/internal/config"
 )
 
-// Operating modes as the wizard presents them. They are a UI grouping of the
-// two config axes, not a third axis: relay-operator and relay-own produce the
-// same transport and differ only in who owns the base domain.
+// Operating modes as the wizard presents them.
 const (
-	ModeRelayOperator = "relay_operator"
-	ModeRelayOwn      = "relay_own"
-	ModeDirect        = "direct"
+	ModeDirect = "direct"
 )
 
 // Check statuses. Warn means "could not confirm", which is a different thing
@@ -68,9 +59,6 @@ type Check struct {
 type Input struct {
 	Mode       string
 	BaseDomain string
-	// RelaySSHHost is the sish endpoint, used to compare the school's DNS
-	// records against the relay it is supposed to point at.
-	RelaySSHHost string
 }
 
 // Resolver is the slice of net.Resolver these checks use. It is an interface
@@ -113,14 +101,7 @@ func NewProber() *Prober {
 // Run executes the checks that apply to the chosen mode.
 func (p *Prober) Run(ctx context.Context, in Input) []Check {
 	switch in.Mode {
-	case ModeRelayOperator:
-		return []Check{{
-			ID:     "operator",
-			Title:  "DNS und Zertifikate",
-			Status: StatusOK,
-			Detail: "Übernimmt der Betreiber. Für diese Betriebsart müssen Sie nichts vorbereiten.",
-		}}
-	case ModeRelayOwn, ModeDirect:
+	case ModeDirect:
 	default:
 		return []Check{{
 			ID:     "mode",
@@ -148,24 +129,18 @@ func (p *Prober) Run(ctx context.Context, in Input) []Check {
 		Detail: fmt.Sprintf("Apps werden unter app.%s erreichbar sein, der Login unter auth.%s.", in.BaseDomain, in.BaseDomain),
 	}}
 
-	wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode)
+	wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain)
 	checks = append(checks, wildcard)
-
-	if in.Mode == ModeDirect {
-		checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
-		checks = append(checks, p.checkPort(80, "HTTP (Port 80)", "Ohne Port 80 kann Let's Encrypt kein Zertifikat ausstellen und auch keins erneuern."))
-		checks = append(checks, p.checkPort(443, "HTTPS (Port 443)", "Über diesen Port läuft der gesamte Zugriff auf die Apps."))
-	} else {
-		checks = append(checks, p.checkPointsAtRelay(ctx, resolved, in))
-	}
-
+	checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
+	checks = append(checks, p.checkPort(80, "HTTP (Port 80)", "Ohne Port 80 kann Let's Encrypt kein Zertifikat ausstellen und auch keins erneuern."))
+	checks = append(checks, p.checkPort(443, "HTTPS (Port 443)", "Über diesen Port läuft der gesamte Zugriff auf die Apps."))
 	return checks
 }
 
 // checkWildcard proves the wildcard record by resolving a name nobody could
 // have created by hand. Resolving "auth.domain" alone would pass on a single
 // record and then break for the first app that gets published.
-func (p *Prober) checkWildcard(ctx context.Context, base, mode string) (Check, []net.IP) {
+func (p *Prober) checkWildcard(ctx context.Context, base string) (Check, []net.IP) {
 	probe := p.randomLabel() + "." + base
 
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
@@ -173,20 +148,13 @@ func (p *Prober) checkWildcard(ctx context.Context, base, mode string) (Check, [
 
 	addrs, err := p.Resolver.LookupIPAddr(ctx, probe)
 	if err != nil || len(addrs) == 0 {
-		// Where the record has to point differs by mode, and naming the
-		// wrong target is worse than naming none: an admin who follows it
-		// builds a setup that resolves and still never works.
-		target := "auf diesen Server"
-		if mode == ModeRelayOwn {
-			target = "auf den Relay des Betreibers (nicht auf diesen Server)"
-		}
 		return Check{
 			ID:     "dns_wildcard",
 			Title:  "Wildcard-DNS",
 			Status: StatusFail,
 			Detail: fmt.Sprintf(
-				"*.%s löst nicht auf. Im DNS der Schuldomain muss ein Wildcard-Eintrag %s zeigen — sonst ist keine einzige App erreichbar. Frisch angelegte Einträge brauchen je nach Anbieter einige Minuten.",
-				base, target),
+				"*.%s löst nicht auf. Im DNS der Schuldomain muss ein Wildcard-Eintrag auf diesen Server zeigen — sonst ist keine einzige App erreichbar. Frisch angelegte Einträge brauchen je nach Anbieter einige Minuten.",
+				base),
 		}, nil
 	}
 
@@ -233,45 +201,6 @@ func (p *Prober) checkPointsHere(resolved []net.IP, base string) Check {
 			base, joinIPs(resolved))}
 }
 
-// checkPointsAtRelay verifies that the school's own domain points at the
-// relay rather than at the school's server. This is the mistake that mode
-// costs people an afternoon: the records look plausible, but traffic arrives
-// at a machine that has no tunnel.
-func (p *Prober) checkPointsAtRelay(ctx context.Context, resolved []net.IP, in Input) Check {
-	const title = "Zeigt auf den Relay"
-	if len(resolved) == 0 {
-		return Check{ID: "dns_target", Title: title, Status: StatusSkip,
-			Detail: "Wird geprüft, sobald der Wildcard-Eintrag auflöst."}
-	}
-	if in.RelaySSHHost == "" {
-		return Check{ID: "dns_target", Title: title, Status: StatusSkip,
-			Detail: "Kein Relay-Endpunkt konfiguriert."}
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
-	defer cancel()
-
-	relayAddrs, err := p.Resolver.LookupIPAddr(ctx, in.RelaySSHHost)
-	if err != nil || len(relayAddrs) == 0 {
-		return Check{ID: "dns_target", Title: title, Status: StatusWarn,
-			Detail: fmt.Sprintf("Die Adresse des Relays (%s) konnte nicht aufgelöst werden — der Abgleich ist damit offen.", in.RelaySSHHost)}
-	}
-
-	for _, r := range resolved {
-		for _, a := range relayAddrs {
-			if r.Equal(a.IP) {
-				return Check{ID: "dns_target", Title: title, Status: StatusOK,
-					Detail: fmt.Sprintf("*.%s zeigt auf den Relay (%s).", in.BaseDomain, r)}
-			}
-		}
-	}
-
-	return Check{ID: "dns_target", Title: title, Status: StatusFail,
-		Detail: fmt.Sprintf(
-			"*.%s zeigt auf %s, der Relay %s liegt aber auf %s. In dieser Betriebsart muss der Wildcard-Eintrag auf den Relay zeigen, nicht auf diesen Server.",
-			in.BaseDomain, joinIPs(resolved), in.RelaySSHHost, joinIPAddrs(relayAddrs))}
-}
-
 // checkPort reports whether a privileged port is available for the reverse
 // proxy. "Occupied" here usually means another web server is already running,
 // which is worth finding out before the install rather than after.
@@ -292,9 +221,8 @@ func (p *Prober) checkPort(port int, title, why string) Check {
 }
 
 // Mode derives the wizard's mode from a stored config. The mode is not a
-// config field on purpose: it is fully determined by the transport and by
-// whether the base domain is the one the operator hands out, and a stored
-// copy could only ever disagree with those two.
+// config field on purpose: it is determined by the transport, and a stored
+// copy could only ever disagree with it.
 func Mode(cfg *config.Config) string {
 	if cfg == nil {
 		return ""
@@ -302,19 +230,12 @@ func Mode(cfg *config.Config) string {
 	if cfg.Public.Transport == config.TransportDirect {
 		return ModeDirect
 	}
-	if cfg.School.Slug != "" && cfg.Public.BaseDomain == config.RelayBaseDomain(cfg.School.Slug) {
-		return ModeRelayOperator
-	}
-	return ModeRelayOwn
+	return ""
 }
 
 // ModeLabel returns the German name of a mode for display.
 func ModeLabel(mode string) string {
 	switch mode {
-	case ModeRelayOperator:
-		return "Adresse des Betreibers"
-	case ModeRelayOwn:
-		return "Eigene Domain über den Relay"
 	case ModeDirect:
 		return "Direkter Betrieb"
 	}

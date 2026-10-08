@@ -32,9 +32,8 @@ const pgReadyTimeout = 90 * time.Second
 //
 // Restore does NOT restart stackctl itself; on success the web worker calls
 // update.RestartService() so the process reloads config.yaml/state.yaml/.env
-// fresh from disk. That sidesteps any in-memory state reload (and the tunnel
-// manager's shared state pointer). stackctl runs on the host, not as a
-// container, so stopping the stack does not kill it.
+// fresh from disk. That sidesteps any in-memory state reload. stackctl runs on
+// the host, not as a container, so stopping the stack does not kill it.
 //
 // File placement runs through ephemeral root containers (ownership-preserving
 // tar extract): app data dirs are owned by container UIDs the non-root

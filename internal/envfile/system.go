@@ -35,9 +35,8 @@ func ApplySystemEnv(f *File, cfg *config.Config, adminPassword string) {
 	}
 	f.Set(GlobalSection, "SERVER_DOMAIN", domain)
 
-	// PUBLIC_BASE_DOMAIN lets a container definition build its own public
-	// URLs without knowing the operator's root domain, which is what the
-	// pre-v3 catalog entries hardcoded.
+	// PUBLIC_BASE_DOMAIN lets a container definition build its own URLs
+	// from the school's domain instead of hardcoding one.
 	f.Set(GlobalSection, "PUBLIC_BASE_DOMAIN", public.BaseDomain(cfg))
 
 	// Same source as the issuer in the generated Dex config and as the

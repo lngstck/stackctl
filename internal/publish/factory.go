@@ -20,10 +20,6 @@ func For(cfg *config.Config) Publisher {
 	switch cfg.Public.Transport {
 	case config.TransportDirect:
 		return NewDirect(cfg)
-	case config.TransportRelay, "":
-		// An install whose transport was never written down is a relay —
-		// that is the historical default, not an error.
-		return NewRelay(cfg)
 	default:
 		log.Printf("publish: unknown transport %q — apps stay unpublished", cfg.Public.Transport)
 		return unsupported{kind: cfg.Public.Transport}

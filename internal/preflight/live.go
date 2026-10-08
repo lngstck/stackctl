@@ -23,9 +23,8 @@ const CertWarnDays = 14
 
 // LiveInput describes a running install.
 type LiveInput struct {
-	Mode         string
-	BaseDomain   string
-	RelaySSHHost string
+	Mode       string
+	BaseDomain string
 	// AuthHost is the hostname of the login. It is the one address every
 	// install has, whatever else is published, which makes it the natural
 	// probe target.
@@ -35,26 +34,15 @@ type LiveInput struct {
 // Live runs the checks that matter while the system is in operation.
 //
 // The setup wizard answers "can this work?" once. These answer "does it still
-// work?" — the two questions differ, because DNS gets edited, certificates
-// expire, and a relay endpoint moves. What they share is the DNS check, so
-// that one is literally the same code.
+// work?" — the two questions differ, because DNS gets edited and
+// certificates expire. What they share is the DNS check, so that one is
+// literally the same code.
 func (p *Prober) Live(ctx context.Context, in LiveInput) []Check {
 	var checks []Check
 
-	// The operator's own relay carries operator-managed DNS, so there is
-	// nothing here the school could have broken — but the address still has
-	// to answer, which the endpoint check below covers.
-	if in.Mode != ModeRelayOperator {
-		wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode)
-		checks = append(checks, wildcard)
-		if in.Mode == ModeDirect {
-			checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
-		} else {
-			checks = append(checks, p.checkPointsAtRelay(ctx, resolved, Input{
-				Mode: in.Mode, BaseDomain: in.BaseDomain, RelaySSHHost: in.RelaySSHHost,
-			}))
-		}
-	}
+	wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain)
+	checks = append(checks, wildcard)
+	checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
 
 	checks = append(checks, p.checkEndpoint(ctx, in.AuthHost))
 	checks = append(checks, p.checkCertificate(ctx, in.AuthHost))
@@ -113,8 +101,7 @@ func (p *Prober) httpStatus(ctx context.Context, host string) (int, error) {
 
 // checkCertificate reports what a browser would see. Reading Caddy's storage
 // directly would be quicker but would only prove what Caddy believes it has —
-// not what it actually serves, and not anything at all for a relay install
-// where the certificate belongs to the operator.
+// not what it actually serves.
 func (p *Prober) checkCertificate(ctx context.Context, host string) Check {
 	const (
 		id    = "certificate"

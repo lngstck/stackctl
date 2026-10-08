@@ -26,30 +26,6 @@ func liveProber(res fakeResolver, local []string, cert *x509.Certificate, certEr
 	return p
 }
 
-// Auf dem Betreiber-Relay gehoeren DNS und Zertifikat dem Betreiber. Die
-// Schule kann dort nichts kaputtmachen — aber die Adresse muss antworten.
-func TestLiveOperatorRelayChecksOnlyReachability(t *testing.T) {
-	p := liveProber(fakeResolver{}, nil, certExpiringIn(60*24*time.Hour), nil)
-
-	checks := p.Live(context.Background(), LiveInput{
-		Mode:       ModeRelayOperator,
-		BaseDomain: "phoenix.learningstack.online",
-		AuthHost:   "auth.phoenix.learningstack.online",
-	})
-
-	for _, c := range checks {
-		if c.ID == "dns_wildcard" || c.ID == "dns_target" {
-			t.Errorf("Betreiber-Relay braucht keine DNS-Karte: %+v", c)
-		}
-	}
-	if _, ok := findCheck(checks, "endpoint"); !ok {
-		t.Error("Erreichbarkeit fehlt")
-	}
-	if _, ok := findCheck(checks, "certificate"); !ok {
-		t.Error("Zertifikats-Karte fehlt")
-	}
-}
-
 // Nach dem Setup kann sich DNS aendern — genau dafuer laeuft die Pruefung
 // weiter. Ein Eintrag, der auf einen fremden Rechner umgebogen wurde, ist im
 // direkten Betrieb der Unterschied zwischen "laeuft" und "weg".
@@ -112,8 +88,8 @@ func TestLiveCertificateStates(t *testing.T) {
 			p := liveProber(fakeResolver{}, nil, tt.cert, tt.certErr)
 
 			checks := p.Live(context.Background(), LiveInput{
-				Mode: ModeRelayOperator, BaseDomain: "phoenix.learningstack.online",
-				AuthHost: "auth.phoenix.learningstack.online",
+				Mode: ModeDirect, BaseDomain: "ls.gym-phoenix.de",
+				AuthHost: "auth.ls.gym-phoenix.de",
 			})
 
 			got, ok := findCheck(checks, "certificate")
@@ -139,7 +115,7 @@ func TestLiveUnreachableEndpointFails(t *testing.T) {
 	}
 
 	checks := p.Live(context.Background(), LiveInput{
-		Mode: ModeRelayOperator, AuthHost: "auth.phoenix.learningstack.online",
+		Mode: ModeDirect, AuthHost: "auth.ls.gym-phoenix.de",
 	})
 
 	got, ok := findCheck(checks, "endpoint")
@@ -149,7 +125,7 @@ func TestLiveUnreachableEndpointFails(t *testing.T) {
 	if got.Status != StatusFail {
 		t.Errorf("endpoint = %q, want fail", got.Status)
 	}
-	if !strings.Contains(got.Detail, "auth.phoenix.learningstack.online") {
+	if !strings.Contains(got.Detail, "auth.ls.gym-phoenix.de") {
 		t.Errorf("Detail muss den Host nennen: %q", got.Detail)
 	}
 }
@@ -159,7 +135,7 @@ func TestLiveUnreachableEndpointFails(t *testing.T) {
 func TestLiveWithoutAddressSkips(t *testing.T) {
 	p := liveProber(fakeResolver{}, nil, nil, errors.New("kein Host"))
 
-	checks := p.Live(context.Background(), LiveInput{Mode: ModeRelayOperator})
+	checks := p.Live(context.Background(), LiveInput{Mode: ModeDirect})
 
 	for _, id := range []string{"endpoint", "certificate"} {
 		got, ok := findCheck(checks, id)

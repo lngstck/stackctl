@@ -212,7 +212,7 @@ Description=stackctl nightly app auto-update (timer)
 
 [Timer]
 # 03:00 nominal mit bis zu einer Stunde Jitter, damit nicht alle Schulen
-# zur selben Sekunde catalog.learningstack.online + registry hammern.
+# zur selben Sekunde den Katalog (GitHub) und ghcr.io abfragen.
 OnCalendar=*-*-* 03:00:00
 RandomizedDelaySec=3600
 Persistent=true

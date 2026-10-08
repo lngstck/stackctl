@@ -71,8 +71,8 @@ type appDetailData struct {
 	Status             string
 	Port               int
 	ServerDomain       string
-	TunnelEnabled      bool
-	TunnelSubdomain    string
+	PublicEnabled      bool
+	PublicHost         string
 	ContainerName      string
 	InstalledAt        string
 	HasOIDC            bool
@@ -227,7 +227,7 @@ func (s *Server) appEntry(app catalog.AppSummary, cs *config.ContainerState) app
 		Category:    app.Category,
 		Description: app.Description,
 		IsInstalled: cs != nil,
-		IsMandatory: isMandatoryApp(s.cfg, app.ID),
+		IsMandatory: isMandatoryApp(app.ID),
 	}
 	if cs == nil {
 		return entry
@@ -291,11 +291,11 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		Status:             status,
 		Port:               port,
 		ServerDomain:       s.cfg.School.ServerDomain,
-		TunnelEnabled:      cs.PublicEnabled,
-		TunnelSubdomain:    cs.PublicHost,
+		PublicEnabled:      cs.PublicEnabled,
+		PublicHost:         cs.PublicHost,
 		ContainerName:      "ls-" + appID,
 		InstalledAt:        cs.InstalledAt,
-		IsMandatory:        isMandatoryApp(s.cfg, appID),
+		IsMandatory:        isMandatoryApp(appID),
 		AutoUpdateDisabled: cs.AutoUpdateDisabled,
 	}
 

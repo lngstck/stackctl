@@ -85,6 +85,7 @@ func TestCollectComposeDefs(t *testing.T) {
 func TestReconstructDexClients(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.School.Slug = "demo"
+	cfg.Public.BaseDomain = "ls.demo-schule.de"
 
 	owui := &catalog.Definition{}
 	owui.ID = "open-webui"
@@ -130,7 +131,7 @@ func TestReconstructDexClients(t *testing.T) {
 	if byID["pylearn"] != "pl-secret" {
 		t.Errorf("pylearn secret = %q", byID["pylearn"])
 	}
-	if redirects["open-webui"] != "https://open-webui.demo.learningstack.online/oauth/oidc/callback" {
+	if redirects["open-webui"] != "https://open-webui.ls.demo-schule.de/oauth/oidc/callback" {
 		t.Errorf("open-webui redirect = %q", redirects["open-webui"])
 	}
 	if _, ok := byID["grafana"]; ok {
@@ -199,15 +200,6 @@ func TestExpandMessagePublicAddressPlaceholders(t *testing.T) {
 		in   string
 		want string
 	}{
-		{
-			name: "relay des betreibers",
-			cfg: &config.Config{
-				School: config.School{Slug: "phoenix"},
-				Public: config.Public{Transport: config.TransportRelay, BaseDomain: "phoenix.learningstack.online"},
-			},
-			in:   "*.{public_base_domain} → {public_app_url}",
-			want: "*.phoenix.learningstack.online → https://sponsorenlauf.phoenix.learningstack.online",
-		},
 		{
 			name: "eigene domain, direkter betrieb",
 			cfg: &config.Config{
@@ -313,7 +305,7 @@ func TestCheckRedirectURIsCatchesHardcodedAddress(t *testing.T) {
 	env.Set(envfile.GlobalSection, "SCHOOL_SLUG", "phoenix")
 	def := oidcDef()
 	def.Environment = []compose.EnvVar{
-		{Key: "OIDC_REDIRECT_URI", Value: "https://pylearn.${SCHOOL_SLUG}.learningstack.online/auth/callback"},
+		{Key: "OIDC_REDIRECT_URI", Value: "https://pylearn.${SCHOOL_SLUG}.example.org/auth/callback"},
 	}
 
 	err := checkRedirectURIs(def, env, "https://pylearn.ls.gym-phoenix.de/auth/callback")
@@ -323,7 +315,7 @@ func TestCheckRedirectURIsCatchesHardcodedAddress(t *testing.T) {
 	// Die Meldung muss beide Adressen und den Ausweg nennen — sonst sucht
 	// jemand im falschen File.
 	for _, want := range []string{
-		"pylearn.phoenix.learningstack.online",
+		"pylearn.phoenix.example.org",
 		"pylearn.ls.gym-phoenix.de",
 		"PYLEARN_OIDC_REDIRECT_URI",
 	} {

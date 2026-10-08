@@ -1,6 +1,6 @@
 // Package catalog handles downloading, caching, and loading the app catalog
 // and individual container definitions from the catalog server (typically
-// raw.githubusercontent.com/lngstck/catalog or catalog.learningstack.online).
+// raw.githubusercontent.com/lngstck/catalog).
 //
 // The catalog index (catalog.yaml) is a lightweight list of available apps.
 // Each app has a full definition YAML cached under config/catalog/containers/.

@@ -32,7 +32,7 @@
         <label data-field class="mb-1">
           Schul-Slug
           <input type="text" value="{{.SchoolSlug}}" disabled>
-          <span class="hint">Der Slug ist nach der Registrierung nicht mehr aenderbar. Er identifiziert die Schule beim zentralen Login und in der Datenbank.</span>
+          <span class="hint">Der Slug ist nach der Einrichtung nicht mehr aenderbar. Apps nutzen ihn als interne Kennung der Schule.</span>
         </label>
 
         <label data-field class="mb-1">
@@ -47,9 +47,9 @@
         </label>
 
         <label data-field class="mb-2">
-          Oeffentliche Adresse
+          Domain
           <input type="text" value="{{.PublicBaseDomain}}" disabled>
-          <span class="hint">Unter dieser Domain sind die Apps aus dem Internet erreichbar: <code>app.<strong>{{.PublicBaseDomain}}</strong></code>. Eine Aenderung betrifft alle App-URLs und den Login und laeuft daher ueber den Betreiber.</span>
+          <span class="hint">Unter dieser Domain sind die Apps erreichbar: <code>app.<strong>{{.PublicBaseDomain}}</strong></code>. Sie steckt in allen App-Adressen und im Login und laesst sich deshalb nach der Einrichtung nicht aendern.</span>
         </label>
 
         <h3 class="mb-2">Admin-Passwort aendern <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>
@@ -72,8 +72,8 @@
           <span class="hint">stackctl prueft jede Nacht den Katalog und installiert nicht-kritische Updates automatisch. Apps mit Breaking-Marker und manuell deaktivierte Apps bleiben unangetastet.</span>
         </label>
 
-        <h3 class="mb-2">Dex-Upstream</h3>
-        <p class="sub mb-2">Aktuell fest auf <strong>moin.schule</strong> via zentralem Dex konfiguriert. Dex-URL: <code>{{.DexAuthURL}}</code></p>
+        <h3 class="mb-2">Anmeldung</h3>
+        <p class="sub mb-2">Lokaler Dex unter <code>{{.DexAuthURL}}</code>. Noch kein Anmeldedienst der Schule angebunden.</p>
 
         <button type="submit" class="mt-1">Speichern</button>
       </form>
