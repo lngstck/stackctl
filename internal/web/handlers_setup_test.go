@@ -101,6 +101,7 @@ func TestSetupGoesStraightToReady(t *testing.T) {
 	}
 
 	form := url.Values{
+		"setup_code":       {testSetupCode},
 		"school_name":      {"Gymnasium Phoenix"},
 		"school_slug":      {"phoenix"},
 		"server_domain":    {"192.168.1.10"},
@@ -155,6 +156,7 @@ func postSetup(t *testing.T, s *Server, form url.Values) *httptest.ResponseRecor
 
 func localSetupForm() url.Values {
 	return url.Values{
+		"setup_code":       {testSetupCode},
 		"school_name":      {"Gymnasium Phoenix"},
 		"school_slug":      {"phoenix"},
 		"server_domain":    {"192.168.1.10"},
@@ -265,10 +267,10 @@ func (noDNS) LookupIPAddr(context.Context, string) ([]net.IPAddr, error) {
 
 func TestSetupPreflightReturnsChecks(t *testing.T) {
 	offlineProber(t)
-	s := &Server{cfg: &config.Config{SetupState: config.SetupStateNeedsSetup}}
+	s := &Server{cfg: &config.Config{SetupState: config.SetupStateNeedsSetup}, setupCode: testSetupCode}
 
 	rec := httptest.NewRecorder()
-	s.handleSetupPreflight(rec, httptest.NewRequest("GET", "/setup/preflight?mode=direct&base_domain=ls.gym-phoenix.de", nil))
+	s.handleSetupPreflight(rec, httptest.NewRequest("GET", "/setup/preflight?setup_code="+testSetupCode+"&mode=direct&base_domain=ls.gym-phoenix.de", nil))
 
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -288,10 +290,10 @@ func TestSetupPreflightReturnsChecks(t *testing.T) {
 // Eine ungueltige Domain darf nicht ins Netz gehen, sondern muss sofort als
 // Fehler zurueckkommen.
 func TestSetupPreflightRejectsInvalidDomain(t *testing.T) {
-	s := &Server{cfg: &config.Config{SetupState: config.SetupStateNeedsSetup}}
+	s := &Server{cfg: &config.Config{SetupState: config.SetupStateNeedsSetup}, setupCode: testSetupCode}
 
 	rec := httptest.NewRecorder()
-	s.handleSetupPreflight(rec, httptest.NewRequest("GET", "/setup/preflight?mode=direct&base_domain=*.x.de", nil))
+	s.handleSetupPreflight(rec, httptest.NewRequest("GET", "/setup/preflight?setup_code="+testSetupCode+"&mode=direct&base_domain=*.x.de", nil))
 
 	var got struct {
 		Summary string `json:"summary"`

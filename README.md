@@ -19,9 +19,15 @@ stackctl ist das einzige Tool, das ein Schul-Admin auf einem frischen Linux-Serv
 curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo bash
 ```
 
-Danach `http://<server-ip>:8090` im Browser öffnen und dem Setup-Wizard folgen.
+Am Ende zeigt das Skript einen Link zur Einrichtung, z. B. `http://192.168.1.10:8090/setup?code=K7M4-Q2XP`. Er enthält den Einrichtungscode: Ohne ihn lässt sich die Einrichtung nicht abschließen, damit nicht irgendwer im Netz zuerst das Admin-Passwort setzt. Den Code neu anzeigen: `sudo stackctl setup-code`.
 
-Voraussetzungen: Ubuntu 22.04+ oder Debian 12+, Docker 24+, ein eingehender Port 8090 im lokalen Netz.
+Eine bestimmte Version installieren, etwa einen Vorab-Stand:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo STACKCTL_VERSION=v0.12.0-rc1 bash
+```
+
+Voraussetzungen: Ubuntu 22.04+ oder Debian 12+, Docker 24+ mit Compose-Plugin (`docker-ce` + `docker-compose-plugin`, nicht das Paket `docker.io`), ein eingehender Port 8090 im lokalen Netz.
 
 Der Assistent fragt nach der Domain der Schule und nach der Betriebsart. Für den Standard „nur im Schulnetz“ braucht es zwei DNS-Einträge und ein kostenloses Konto bei deSEC für das Zertifikat — die [Betriebsarten](docs/betriebsarten.md) beschreiben, was wann nötig ist. Die Wahl fällt einmalig bei der Einrichtung.
 

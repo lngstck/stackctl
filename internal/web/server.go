@@ -60,6 +60,9 @@ type Server struct {
 	devMode    bool
 	devDir     string // path to internal/web/ for dev-mode FS reload
 	mux        *http.ServeMux
+	// setupCode guards setup until it is done (see setupcode.go). Empty
+	// once setup is complete — and then nothing matches it.
+	setupCode string
 }
 
 // Option configures the server.
@@ -105,6 +108,18 @@ func New(cfg *config.Config, state *config.State, opts ...Option) (*Server, erro
 
 	if err := s.loadTemplates(); err != nil {
 		return nil, fmt.Errorf("web: load templates: %w", err)
+	}
+
+	if cfg.SetupState == config.SetupStateNeedsSetup {
+		// A failure here keeps setup closed instead of stopping the service:
+		// the setup page says why, which a crash loop would not.
+		code, err := ensureSetupCode()
+		if err != nil {
+			log.Printf("web: setup code: %v", err)
+		} else {
+			s.setupCode = code
+			log.Printf("Einrichtungscode: %s (neu anzeigen: sudo stackctl setup-code)", code)
+		}
 	}
 
 	s.routes()

@@ -75,3 +75,31 @@ func TestFetchExpectedSum(t *testing.T) {
 		t.Fatal("expected error for missing filename, got nil")
 	}
 }
+
+// Self-update only ever moves forward. A pre-release is older than its
+// release but newer than the release before — so an install running
+// v0.12.0-rc1 must not be offered v0.11.0.
+func TestNewer(t *testing.T) {
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{"v0.12.0", "0.11.0", true},
+		{"v0.11.0", "0.11.0", false},
+		{"v0.11.0", "0.12.0-rc1", false},
+		{"v0.12.0", "0.12.0-rc1", true},
+		{"v0.12.0-rc2", "0.12.0-rc1", true},
+		{"v0.12.0-rc.10", "0.12.0-rc.9", true},
+		{"v0.12.0-rc1", "0.12.0", false},
+		{"v1.0.0", "0.99.99", true},
+		{"v0.10.1", "0.9.0", true},
+		{"v0.11.0", "dev", false},
+		{"garbage", "0.11.0", false},
+		{"v0.11.0", "0.11.0-11-g33dea43", false},
+		{"v0.11.0", "0.11.0-11-g33dea43-dirty", false},
+	} {
+		if got := newer(tc.a, tc.b); got != tc.want {
+			t.Errorf("newer(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}

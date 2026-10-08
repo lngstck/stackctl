@@ -22,7 +22,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -95,15 +97,102 @@ func Check() (*CheckResult, error) {
 		return nil, err
 	}
 
-	latest := strings.TrimPrefix(rel.Tag, "v")
-	currentClean := strings.TrimPrefix(current, "v")
-
 	return &CheckResult{
-		CurrentVersion:  current,
-		LatestVersion:   rel.Tag,
-		UpdateAvailable: latest != currentClean && current != "dev",
+		CurrentVersion: current,
+		LatestVersion:  rel.Tag,
+		// Only ever forward: an install running a pre-release is newer
+		// than the latest release, and "different" would offer it a
+		// downgrade.
+		UpdateAvailable: current != "dev" && newer(rel.Tag, current),
 		Release:         rel,
 	}, nil
+}
+
+// newer reports whether version a is newer than b. Both look like
+// "v1.2.3" with an optional pre-release suffix ("-rc1"), which sorts before
+// its release, as in semver. A version that does not parse is never newer:
+// offering nothing beats offering a downgrade.
+func newer(a, b string) bool {
+	va, okA := parseVersion(a)
+	vb, okB := parseVersion(b)
+	if !okA || !okB {
+		return false
+	}
+	for i := range va.core {
+		if va.core[i] != vb.core[i] {
+			return va.core[i] > vb.core[i]
+		}
+	}
+	return comparePre(va.pre, vb.pre) > 0
+}
+
+var describeSuffix = regexp.MustCompile(`^\d+-g[0-9a-f]+(-dirty)?$`)
+
+type version struct {
+	core [3]int
+	pre  string
+}
+
+func parseVersion(s string) (version, bool) {
+	var v version
+	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
+	core, pre, _ := strings.Cut(s, "-")
+	// A build between tags ("git describe": v0.11.0-11-g33dea43) is not a
+	// pre-release of the tag before it. It has no place in the order, so
+	// it is neither offered nor offers anything.
+	if describeSuffix.MatchString(pre) {
+		return v, false
+	}
+	v.pre = pre
+	parts := strings.Split(core, ".")
+	if len(parts) != 3 {
+		return v, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return v, false
+		}
+		v.core[i] = n
+	}
+	return v, true
+}
+
+// comparePre orders pre-release suffixes: none sorts after any, otherwise
+// dot-separated identifiers compare numerically where both are numbers and
+// as text where not.
+func comparePre(a, b string) int {
+	switch {
+	case a == b:
+		return 0
+	case a == "":
+		return 1
+	case b == "":
+		return -1
+	}
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		na, errA := strconv.Atoi(as[i])
+		nb, errB := strconv.Atoi(bs[i])
+		switch {
+		case errA == nil && errB == nil:
+			if na != nb {
+				if na > nb {
+					return 1
+				}
+				return -1
+			}
+		case errA == nil:
+			return -1 // numeric identifiers sort first
+		case errB == nil:
+			return 1
+		default:
+			if c := strings.Compare(as[i], bs[i]); c != 0 {
+				return c
+			}
+		}
+	}
+	return len(as) - len(bs)
 }
 
 // Apply downloads and installs the latest release. It returns the new version

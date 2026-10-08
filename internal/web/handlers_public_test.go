@@ -92,6 +92,7 @@ func testServerWithPublisher(t *testing.T, p publish.Publisher) (*Server, *confi
 		state:     st,
 		publisher: p,
 		sessions:  &sessionStore{},
+		setupCode: testSetupCode,
 	}, st
 }
 

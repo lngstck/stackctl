@@ -54,6 +54,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdWeb(rest, stdout, stderr)
 	case "hashpw":
 		return cmdHashpw(rest, stdout, stderr)
+	case "setup-code":
+		return cmdSetupCode(stdout, stderr)
 	case "autoupdate":
 		return cmdAutoupdate(rest, stdout, stderr)
 	case "llm":
@@ -167,6 +169,30 @@ func cmdHashpw(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// cmdSetupCode prints the setup code for an admin who lost the install
+// output. The web service creates the code on its first start; the file is
+// readable by root and the service user only, hence sudo.
+func cmdSetupCode(stdout, stderr io.Writer) int {
+	if cfg, err := config.Load(); err == nil && cfg.IsReady() {
+		fmt.Fprintln(stdout, "Die Einrichtung ist abgeschlossen — es gibt keinen Einrichtungscode mehr.")
+		return 0
+	}
+	data, err := os.ReadFile(paths.SetupCodeFile())
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		fmt.Fprintln(stderr, "Noch kein Einrichtungscode. Laeuft stackctl? systemctl status stackctl")
+		return 1
+	case errors.Is(err, os.ErrPermission):
+		fmt.Fprintln(stderr, "Keine Berechtigung. Bitte mit sudo ausfuehren: sudo stackctl setup-code")
+		return 1
+	case err != nil:
+		fmt.Fprintf(stderr, "stackctl setup-code: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, strings.TrimSpace(string(data)))
+	return 0
+}
+
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "stackctl – learningstack admin tool")
 	fmt.Fprintln(w)
@@ -177,6 +203,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  version        Print version and exit")
 	fmt.Fprintln(w, "  web            Start the admin web UI")
 	fmt.Fprintln(w, "  hashpw         Print a bcrypt hash for admin.password_hash")
+	fmt.Fprintln(w, "  setup-code     Print the one-time code that unlocks setup")
 	fmt.Fprintln(w, "  autoupdate     Sync catalog and install non-breaking app updates")
 	fmt.Fprintln(w, "  llm            Manage the local LLM gateway (providers, personas, keys)")
 	fmt.Fprintln(w, "  help           Show this help")

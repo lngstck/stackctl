@@ -48,6 +48,10 @@ func ConfigDir() string  { return filepath.Join(StackctlDir(), "config") }
 func ConfigFile() string { return filepath.Join(ConfigDir(), "config.yaml") }
 func StateFile() string  { return filepath.Join(ConfigDir(), "state.yaml") }
 
+// SetupCodeFile holds the one-time code that guards setup. It exists only
+// until setup is done; install.sh reads it to print the setup link.
+func SetupCodeFile() string { return filepath.Join(ConfigDir(), "setup-code") }
+
 // DexConfigFile is the host path stackctl writes the Dex config to. It
 // lives under the dex container's data dir so the same directory that is
 // bind-mounted into /etc/dex contains the file. The container reads it as
