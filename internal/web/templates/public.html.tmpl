@@ -15,11 +15,24 @@
     {{if .BaseDomain}}<code>*.{{.BaseDomain}}</code>{{end}}
   </div>
   <p class="sub mb-0" style="font-size:0.85rem;margin-top:0.4rem;">
-    Dieser Server nimmt den Verkehr selbst entgegen und holt seine
-    Zertifikate über Let's Encrypt. Voraussetzung bleibt dauerhaft: der
-    Wildcard-Eintrag zeigt hierher und Port 80 und 443 sind aus dem
-    Internet erreichbar.
+    {{if eq .Mode "local"}}
+      Login und Apps sind nur im Schulnetz erreichbar. Der Wildcard-Eintrag
+      zeigt auf die Adresse dieses Servers im Schulnetz, das Zertifikat kommt
+      über deSEC (DNS-01).
+    {{else}}
+      Dieser Server nimmt den Verkehr selbst entgegen und holt seine
+      Zertifikate über Let's Encrypt. Voraussetzung bleibt dauerhaft: der
+      Wildcard-Eintrag zeigt hierher und Port 80 und 443 sind aus dem
+      Internet erreichbar.
+    {{end}}
   </p>
+  {{if eq .Mode "local"}}
+  <p class="sub mb-0" style="font-size:0.85rem;margin-top:0.4rem;">
+    Zugang von außen richtet stackctl nicht ein. Wer ihn braucht, löst das
+    selbst (VPN oder eigener Tunnel) — und muss dann auch
+    <code>{{.AuthHost}}</code> mit nach außen geben, sonst scheitert der Login.
+  </p>
+  {{end}}
 </article>
 
 {{/* Zustand — was der Assistent einmal geprüft hat, hier laufend */}}
@@ -66,7 +79,7 @@
           <form method="POST" action="/public/auth/start" style="display:inline;"
                 title="Route neu einrichten">
             {{csrfField $.CSRFToken}}
-            <button type="submit" class="small">Neu verbinden</button>
+            <button type="submit" class="small">Neu einrichten</button>
           </form>
           <form method="POST" action="/public/auth/stop" style="display:inline;"
                 onsubmit="return confirm('Anmeldung abschalten? Der Schul-Login funktioniert dann für ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
@@ -102,7 +115,7 @@
       <td style="text-align:right;">
         {{if eq .AdminStatus "stopped"}}
           <form method="POST" action="/public/admin/start" style="display:inline;"
-                onsubmit="return confirm('Diese Oberfläche aus dem Internet erreichbar machen?\n\nSie kann Apps installieren, Passwörter und Schlüssel anzeigen und Backups zurückspielen — geschützt nur durch das Admin-Passwort, ohne zweiten Faktor.\n\nDer Zugang im Schulnetz ({{.AdminLocalAddr}}) bleibt daneben bestehen.');">
+                onsubmit="return confirm('Diese Oberfläche zusätzlich unter {{.AdminHost}} erreichbar machen{{if ne .Mode "local"}} — aus dem Internet{{end}}?\n\nSie kann Apps installieren, Passwörter und Schlüssel anzeigen und Backups zurückspielen — geschützt nur durch das Admin-Passwort, ohne zweiten Faktor.\n\nDer Zugang über {{.AdminLocalAddr}} bleibt daneben bestehen.');">
             {{csrfField $.CSRFToken}}
             <button type="submit" class="small ghost">Einschalten</button>
           </form>
@@ -118,8 +131,9 @@
 </table>
 
 <p class="sub mb-3" style="font-size:0.82rem;">
-  Die Verwaltung bleibt im Schulnetz erreichbar, auch eingeschaltet. Das
-  Einschalten stellt sie <em>zusätzlich</em> ins Internet — ein falsch
+  Die Verwaltung bleibt unter <code>{{.AdminLocalAddr}}</code> erreichbar,
+  auch eingeschaltet. Das Einschalten gibt ihr <em>zusätzlich</em> die Adresse
+  oben{{if ne .Mode "local"}}, aus dem Internet{{end}} — ein falsch
   gesetzter DNS-Eintrag kann also niemanden aussperren.
 </p>
 
@@ -132,7 +146,7 @@
     <tr>
       <th>App</th>
       <th>Port</th>
-      <th>Oeffentliche URL</th>
+      <th>Adresse</th>
       <th>Status</th>
       <th></th>
     </tr>
@@ -143,7 +157,7 @@
       <td>
         {{.Name}}
         {{if and .HasOIDC (not .Published)}}
-          <span title="OIDC-App ohne oeffentlichen Zugang — Login funktioniert nicht" style="color:var(--danger);">&#9888;</span>
+          <span title="App mit Schul-Login, aber ohne Adresse — der Login funktioniert nicht" style="color:var(--danger);">&#9888;</span>
         {{end}}
       </td>
       <td>{{.Port}}</td>
@@ -168,7 +182,7 @@
       <td style="text-align:right;">
         {{if .Published}}
           <form method="POST" action="/apps/{{.ID}}/public/disable" style="display:inline;"
-                onsubmit="return confirm('Oeffentlichen Zugang beenden?{{if .HasOIDC}} OIDC-Login funktioniert dann nicht mehr.{{end}}');">
+                onsubmit="return confirm('Adresse abschalten?{{if .HasOIDC}} Der Schul-Login dieser App funktioniert dann nicht mehr.{{end}}');">
             {{csrfField $.CSRFToken}}
             <button type="submit" class="small ghost">Deaktivieren</button>
           </form>

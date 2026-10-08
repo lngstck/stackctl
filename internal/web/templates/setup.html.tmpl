@@ -47,49 +47,89 @@
 
       <h3 class="mb-1">Betriebsart</h3>
       <p class="sub mb-2" style="font-size:0.85rem;">
-        Wie sollen die Apps erreichbar sein? Das laesst sich spaeter nur mit
-        Aufwand aendern — die Adresse steckt in jedem Login.
+        Wo sollen Login und Apps erreichbar sein? Das laesst sich spaeter nur
+        mit Aufwand aendern — die Adresse steckt in jedem Login.
       </p>
 
       <div class="mode-choice mb-2">
         <label class="mode-card">
           <div class="mode-card__top">
-            <input type="radio" name="public_mode" value="direct" checked>
-            <span class="mode-card__title">Direkter Betrieb</span>
-            <span class="mode-card__tag">DNS + Ports 80/443</span>
+            <input type="radio" name="public_mode" value="local" {{if ne .Mode "direct"}}checked{{end}}>
+            <span class="mode-card__title">Nur im Schulnetz</span>
+            <span class="mode-card__tag">empfohlen</span>
           </div>
           <div class="mode-card__body">
-            Der Server haengt selbst am Internet und holt seine Zertifikate
-            ueber Let's Encrypt. Dafuer muss der Wildcard-Eintrag hierher
-            zeigen und Port 80 und 443 muessen von aussen erreichbar sein.
+            Login und Apps sind im Schulnetz erreichbar, mit echtem Zertifikat.
+            Von aussen kommt niemand heran, keine Schuelerdaten verlassen das
+            Schulnetz. Vorzubereiten: zwei DNS-Eintraege und ein kostenloses
+            Konto bei deSEC fuer das Zertifikat.
           </div>
         </label>
       </div>
 
-      <div id="domain-fields">
+      <details class="mb-2" {{if eq .Mode "direct"}}open{{end}}>
+        <summary class="sub" style="font-size:0.85rem;cursor:pointer;">Erweitert: Server direkt am Internet</summary>
+        <div class="mode-choice mt-1">
+          <label class="mode-card">
+            <div class="mode-card__top">
+              <input type="radio" name="public_mode" value="direct" {{if eq .Mode "direct"}}checked{{end}}>
+              <span class="mode-card__title">Direkter Betrieb</span>
+              <span class="mode-card__tag">Ports 80/443 offen</span>
+            </div>
+            <div class="mode-card__body">
+              Der Server haengt selbst am Internet und holt seine Zertifikate
+              ueber Let's Encrypt. Dafuer muss der Wildcard-Eintrag auf seine
+              oeffentliche Adresse zeigen und Port 80 und 443 muessen von
+              aussen erreichbar sein. Login und Apps sind dann aus dem
+              Internet erreichbar.
+            </div>
+          </label>
+        </div>
+      </details>
+
+      <label data-field class="mb-1">
+        Domain der Schule
+        <input type="text" name="base_domain" value="{{.BaseDomain}}" placeholder="z.B. apps.gymnasium-musterstadt.de" id="base-domain">
+        <span class="hint">
+          Ohne <code>*.</code> und ohne <code>https://</code>. Darunter liegen
+          Login und Apps: <code id="domain-preview">auth.deine-domain.de, pylearn.deine-domain.de</code>
+        </span>
+      </label>
+
+      <div id="local-fields">
         <label data-field class="mb-1">
-          Domain der Schule
-          <input type="text" name="base_domain" value="{{.BaseDomain}}" placeholder="z.B. ls.gymnasium-musterstadt.de" id="base-domain">
+          deSEC-Token
+          <input type="password" name="dns_token" value="{{.DNSToken}}" autocomplete="off" id="dns-token">
           <span class="hint">
-            Ohne <code>*.</code> und ohne <code>https://</code>. Die Apps liegen
-            darunter: <code id="domain-preview">pylearn.ihre-domain.de</code>
+            Fuer das Zertifikat. Bei <a href="https://desec.io" target="_blank" rel="noopener">desec.io</a>
+            ein kostenloses Konto anlegen, dort eine Domain wie
+            <code>meine-schule.dedyn.io</code> registrieren und einen Token erzeugen.
           </span>
         </label>
 
-        <div id="acme-field">
-          <label data-field class="mb-1">
-            E-Mail fuer Zertifikats-Warnungen
-            <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="wie Kontakt-E-Mail" id="acme-email">
-            <span class="hint">Let's Encrypt meldet hierhin, wenn eine Erneuerung laengere Zeit scheitert. Leer = Kontakt-E-Mail von oben.</span>
-          </label>
-        </div>
+        <label data-field class="mb-1">
+          Ziel bei deSEC
+          <input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="z.B. _acme-challenge.meine-schule.dedyn.io" id="challenge-domain">
+          <span class="hint">Leer lassen, wenn deSEC die Domain der Schule selbst verwaltet.</span>
+        </label>
 
-        <div class="mb-2" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-          <button type="button" class="ghost small" id="check-btn">Voraussetzungen pruefen</button>
-          <span class="sub" style="font-size:0.8rem;" id="check-hint"></span>
-        </div>
-        <div id="check-result" class="mb-2"></div>
+        <p class="sub mb-1" style="font-size:0.85rem;">Beim DNS-Anbieter der Schuldomain anlegen:</p>
+        <pre class="mb-2" id="dns-records" style="background:var(--faint);padding:0.75rem 1rem;border-radius:0.5rem;font-size:0.8rem;overflow-x:auto;"></pre>
       </div>
+
+      <div id="direct-fields">
+        <label data-field class="mb-1">
+          E-Mail fuer Zertifikats-Warnungen
+          <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="wie Kontakt-E-Mail" id="acme-email">
+          <span class="hint">Let's Encrypt meldet hierhin, wenn eine Erneuerung laengere Zeit scheitert. Leer = Kontakt-E-Mail von oben.</span>
+        </label>
+      </div>
+
+      <div class="mb-2" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <button type="button" class="ghost small" id="check-btn">Voraussetzungen pruefen</button>
+        <span class="sub" style="font-size:0.8rem;" id="check-hint"></span>
+      </div>
+      <div id="check-result" class="mb-2"></div>
 
       <h3 class="mb-2">Admin-Zugang</h3>
 
@@ -166,10 +206,16 @@
     return slug.replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
   }
 
-  // --- Operating mode ---
+  // --- Operating mode: show only the fields that mode needs ---
   const modeInputs = document.querySelectorAll('input[name="public_mode"]');
   const baseDomain = document.getElementById('base-domain');
+  const serverIP = document.getElementById('server-ip');
+  const dnsToken = document.getElementById('dns-token');
+  const challengeDomain = document.getElementById('challenge-domain');
   const domainPreview = document.getElementById('domain-preview');
+  const dnsRecords = document.getElementById('dns-records');
+  const localFields = document.getElementById('local-fields');
+  const directFields = document.getElementById('direct-fields');
   const checkResult = document.getElementById('check-result');
   const checkHint = document.getElementById('check-hint');
 
@@ -178,10 +224,32 @@
     return '';
   }
 
-  baseDomain.addEventListener('input', function() {
-    const v = baseDomain.value.trim().toLowerCase();
-    domainPreview.textContent = 'pylearn.' + (v || 'ihre-domain.de');
-  });
+  function syncMode() {
+    const mode = currentMode();
+    localFields.hidden = (mode !== 'local');
+    directFields.hidden = (mode !== 'direct');
+    // Results belong to the mode they were produced for.
+    checkResult.innerHTML = '';
+    checkHint.textContent = '';
+  }
+
+  // The records the admin has to create, filled in as they type. Without
+  // a delegation target only the wildcard is needed.
+  function syncPreview() {
+    const domain = baseDomain.value.trim().toLowerCase() || 'deine-domain.de';
+    domainPreview.textContent = 'auth.' + domain + ', pylearn.' + domain;
+    let records = '*.' + domain + '   A       ' + (serverIP.value.trim() || '<Server-IP>');
+    const target = challengeDomain.value.trim().toLowerCase();
+    if (target) {
+      records += '\n_acme-challenge.' + domain + '   CNAME   ' + target + '.';
+    }
+    dnsRecords.textContent = records;
+  }
+
+  modeInputs.forEach(el => el.addEventListener('change', syncMode));
+  [baseDomain, serverIP, challengeDomain].forEach(el => el.addEventListener('input', syncPreview));
+  syncMode();
+  syncPreview();
 
   // --- Prerequisite check ---
   const checkBtn = document.getElementById('check-btn');
@@ -195,8 +263,14 @@
     checkHint.textContent = 'Prüfe …';
     checkResult.innerHTML = '';
 
-    const params = new URLSearchParams({ mode: currentMode(), base_domain: domain });
-    fetch('/setup/preflight?' + params.toString())
+    // POST, not GET: the token must not end up in a URL or a server log.
+    const params = new URLSearchParams({
+      mode: currentMode(),
+      base_domain: domain,
+      dns_token: dnsToken.value.trim(),
+      challenge_domain: challengeDomain.value.trim().toLowerCase(),
+    });
+    fetch('/setup/preflight', { method: 'POST', body: params })
       .then(resp => resp.json())
       .then(data => {
         const list = document.createElement('ul');

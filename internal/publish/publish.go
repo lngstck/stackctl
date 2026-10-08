@@ -29,11 +29,6 @@ const (
 	StatusError = "error"
 )
 
-// Transport kinds reported by Kind, mirroring config.Transport*.
-const (
-	KindDirect = "direct"
-)
-
 // App is one publishable unit, as far as publishing is concerned.
 type App struct {
 	// ID is the app id and also its subdomain label.
@@ -51,9 +46,13 @@ type App struct {
 // Implementations must be safe for concurrent use: the web UI calls Status
 // while background work changes things underneath.
 type Publisher interface {
-	// Kind reports the transport, for UI wording only. Behaviour must never
-	// branch on it outside this package.
+	// Kind reports the transport (config.Transport*), for UI wording only.
+	// Behaviour must never branch on it outside this package.
 	Kind() string
+
+	// Refresh rewrites the proxy configuration from the current settings,
+	// keeping every route — for a changed certificate setup.
+	Refresh() error
 
 	// EnsureAuth publishes the local Dex if it is not published already.
 	// This is not optional in any mode — without it there is no login.

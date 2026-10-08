@@ -3,9 +3,14 @@ package web
 import (
 	"log"
 	"net/http"
+	"strings"
 
+	"github.com/lngstck/stackctl/internal/compose"
+	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/docker"
 	"github.com/lngstck/stackctl/internal/envfile"
 	"github.com/lngstck/stackctl/internal/paths"
+	"github.com/lngstck/stackctl/internal/preflight"
 	"github.com/lngstck/stackctl/internal/public"
 	"github.com/lngstck/stackctl/internal/secrets"
 	"github.com/lngstck/stackctl/internal/update"
@@ -25,9 +30,14 @@ type settingsData struct {
 	// install — no longer derivable from the slug, so the UI reads it.
 	PublicBaseDomain string
 	DexAuthURL       string
-	AutoUpdate       bool
-	Error            string
-	Message          string
+	// IsLocal shows the certificate section: only the school-network mode
+	// has DNS-01 settings to change.
+	IsLocal         bool
+	ChallengeDomain string
+	HasDNSToken     bool
+	AutoUpdate      bool
+	Error           string
+	Message         string
 
 	// System-Tab (ehemals /system).
 	CurrentVersion  string
@@ -62,6 +72,9 @@ func (s *Server) settingsData(msg, errMsg string) settingsData {
 		ContactEmail:     s.cfg.School.ContactEmail,
 		PublicBaseDomain: public.BaseDomain(s.cfg),
 		DexAuthURL:       public.AuthURL(s.cfg),
+		IsLocal:          s.cfg.Public.Transport == config.TransportLocal,
+		ChallengeDomain:  s.cfg.Public.Local.ChallengeDomain,
+		HasDNSToken:      s.cfg.Public.Local.DNSToken != "",
 		AutoUpdate:       s.cfg.AutoUpdate.Enabled,
 		Message:          msg,
 		Error:            errMsg,
@@ -151,6 +164,25 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 		newPassword = password
 	}
 
+	// Certificate settings of the school-network mode. An empty token field
+	// keeps the stored token: it is never sent back to the browser.
+	certChanged := false
+	if s.cfg.Public.Transport == config.TransportLocal {
+		local := s.cfg.Public.Local
+		if token := strings.TrimSpace(r.FormValue("dns_token")); token != "" {
+			local.DNSToken = token
+		}
+		local.ChallengeDomain = normalizeDomain(r.FormValue("challenge_domain"))
+		if local.ChallengeDomain != "" {
+			if err := config.ValidateChallengeDomain(local.ChallengeDomain); err != nil {
+				s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Ziel bei deSEC ungueltig: "+preflight.TranslateDomainError(err)), r))
+				return
+			}
+		}
+		certChanged = local != s.cfg.Public.Local
+		s.cfg.Public.Local = local
+	}
+
 	s.cfg.School.Name = schoolName
 	s.cfg.School.ServerDomain = serverDomain
 	s.cfg.School.ContactEmail = contactEmail
@@ -172,6 +204,10 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: save env from settings: %v", err)
 	}
 
+	if certChanged {
+		s.applyCertificateSettings()
+	}
+
 	// If the password changed, invalidate existing sessions so the new hash
 	// has to be used. (Other admins logged in elsewhere get booted; this is
 	// the right behavior for a single-admin tool.)
@@ -180,4 +216,24 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("Einstellungen gespeichert.", ""), r))
+}
+
+// applyCertificateSettings hands changed DNS-01 settings to the proxy: the
+// Caddyfile carries the delegation target, the container environment the
+// token — and a container only reads its environment when it is created.
+// Failures are logged rather than shown: the settings are saved either way,
+// and the certificate card on the access page reports what the proxy makes
+// of them.
+func (s *Server) applyCertificateSettings() {
+	if s.publisher != nil {
+		if err := s.publisher.Refresh(); err != nil {
+			log.Printf("web: refresh proxy config: %v", err)
+		}
+	}
+	if !s.snapState().IsInstalled("caddy") {
+		return
+	}
+	if code, out := docker.ComposeUp(paths.ComposeFile(), compose.ServiceName("caddy")); code != 0 {
+		log.Printf("web: recreate caddy after certificate change: %s", out)
+	}
 }

@@ -27,9 +27,15 @@ type fakePublisher struct {
 	adminStopped int
 	adminErr     error
 	adminStatus  string
+
+	refreshed int // Refresh calls
 }
 
-func (f *fakePublisher) Kind() string       { return publish.KindDirect }
+func (f *fakePublisher) Kind() string { return config.TransportLocal }
+func (f *fakePublisher) Refresh() error {
+	f.refreshed++
+	return nil
+}
 func (f *fakePublisher) EnsureAuth() error  { return nil }
 func (f *fakePublisher) AuthStatus() string { return publish.StatusRunning }
 func (f *fakePublisher) StartAuth() error   { return nil }
@@ -79,7 +85,7 @@ func testServerWithPublisher(t *testing.T, p publish.Publisher) (*Server, *confi
 		cfg: &config.Config{
 			School: config.School{Slug: "phoenix"},
 			Public: config.Public{
-				Transport:  config.TransportDirect,
+				Transport:  config.TransportLocal,
 				BaseDomain: "ls.gym-phoenix.de",
 			},
 		},

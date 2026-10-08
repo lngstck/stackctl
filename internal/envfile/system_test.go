@@ -117,3 +117,27 @@ func TestApplySystemEnvCustomBaseDomain(t *testing.T) {
 		t.Errorf("DEX_AUTH_URL = %q", v)
 	}
 }
+
+// Der deSEC-Token gehoert in die .env, die der Proxy liest — und nur im
+// Schulnetz-Betrieb. Sonst bleibt der Schluessel leer statt alt.
+func TestApplySystemEnvDNSToken(t *testing.T) {
+	cfg := &config.Config{
+		School: config.School{Name: "Phoenix", Slug: "phoenix"},
+		Public: config.Public{
+			Transport:  config.TransportLocal,
+			BaseDomain: "ls.gym-phoenix.de",
+			Local:      config.PublicLocal{DNSToken: "geheim"},
+		},
+	}
+	f := New()
+	ApplySystemEnv(f, cfg, "")
+	if v, _ := f.Get("DESEC_TOKEN"); v != "geheim" {
+		t.Errorf("DESEC_TOKEN = %q, want geheim", v)
+	}
+
+	cfg.Public.Transport = config.TransportDirect
+	ApplySystemEnv(f, cfg, "")
+	if v, ok := f.Get("DESEC_TOKEN"); !ok || v != "" {
+		t.Errorf("direkter Betrieb: DESEC_TOKEN = %q (%v), want leer", v, ok)
+	}
+}

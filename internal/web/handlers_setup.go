@@ -15,6 +15,10 @@ import (
 	"github.com/lngstck/stackctl/internal/secrets"
 )
 
+// newProber builds the prerequisite checker. It is a variable so tests can
+// answer DNS, port and deSEC questions without touching the network.
+var newProber = preflight.NewProber
+
 // setupData is the template context for setup.html.tmpl.
 type setupData struct {
 	SchoolName   string
@@ -24,7 +28,11 @@ type setupData struct {
 	Mode         string
 	BaseDomain   string
 	ACMEEmail    string
-	Error        string
+	// DNSToken and ChallengeDomain configure the certificate in the
+	// school-network mode.
+	DNSToken        string
+	ChallengeDomain string
+	Error           string
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +43,9 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 
 	data := setupData{
 		ServerDomain: detectLANIP(),
-		Mode:         preflight.ModeDirect,
+		// Only inside the school network is the default: nothing leaves it
+		// without an explicit decision.
+		Mode: preflight.ModeLocal,
 	}
 	s.render(w, "setup.html.tmpl", data)
 }
@@ -43,9 +53,11 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 // handleSetupPreflight answers the wizard's live prerequisite checks.
 //
 // It is reachable without a login, like the setup form itself, and closes
-// together with it: once setup is done the endpoint refuses. All it does is
-// resolve names and try to bind two local ports, so the exposure during that
-// window is a DNS lookup for a domain the caller already typed.
+// together with it: once setup is done the endpoint refuses. It resolves
+// names, tries to bind two local ports and asks deSEC about the token the
+// caller typed — the exposure during that window is limited to what the
+// caller already knows. It takes a POST so the token stays out of URLs and
+// logs.
 func (s *Server) handleSetupPreflight(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.SetupState != config.SetupStateNeedsSetup {
 		http.Error(w, "Setup ist bereits abgeschlossen", http.StatusForbidden)
@@ -53,11 +65,13 @@ func (s *Server) handleSetupPreflight(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := preflight.Input{
-		Mode:       r.URL.Query().Get("mode"),
-		BaseDomain: strings.TrimSpace(r.URL.Query().Get("base_domain")),
+		Mode:            r.FormValue("mode"),
+		BaseDomain:      strings.TrimSpace(r.FormValue("base_domain")),
+		DNSToken:        strings.TrimSpace(r.FormValue("dns_token")),
+		ChallengeDomain: normalizeDomain(r.FormValue("challenge_domain")),
 	}
 
-	checks := preflight.NewProber().Run(r.Context(), in)
+	checks := newProber().Run(r.Context(), in)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{
@@ -88,15 +102,19 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	mode := r.FormValue("public_mode")
 	baseDomain := strings.TrimSpace(strings.ToLower(r.FormValue("base_domain")))
 	acmeEmail := strings.TrimSpace(r.FormValue("acme_email"))
+	dnsToken := strings.TrimSpace(r.FormValue("dns_token"))
+	challengeDomain := normalizeDomain(r.FormValue("challenge_domain"))
 
 	data := setupData{
-		SchoolName:   schoolName,
-		SchoolSlug:   schoolSlug,
-		ServerDomain: serverDomain,
-		ContactEmail: contactEmail,
-		Mode:         mode,
-		BaseDomain:   baseDomain,
-		ACMEEmail:    acmeEmail,
+		SchoolName:      schoolName,
+		SchoolSlug:      schoolSlug,
+		ServerDomain:    serverDomain,
+		ContactEmail:    contactEmail,
+		Mode:            mode,
+		BaseDomain:      baseDomain,
+		ACMEEmail:       acmeEmail,
+		DNSToken:        dnsToken,
+		ChallengeDomain: challengeDomain,
 	}
 
 	// Validation.
@@ -139,6 +157,13 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "setup.html.tmpl", data)
 		return
 	}
+	if transport == config.TransportLocal {
+		if err := validateLocalCertificate(dnsToken, challengeDomain); err != nil {
+			data.Error = err.Error()
+			s.render(w, "setup.html.tmpl", data)
+			return
+		}
+	}
 
 	// Hash password.
 	hash, err := secrets.HashPassword(password)
@@ -157,14 +182,15 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Admin.PasswordHash = hash
 	s.cfg.Public.Transport = transport
 	s.cfg.Public.BaseDomain = baseDomain
-	if transport == config.TransportDirect {
-		// Without a contact address Let's Encrypt issues certificates but
-		// nobody is told when renewal starts failing — and the failure only
-		// becomes visible when the certificate expires.
-		if acmeEmail == "" {
-			acmeEmail = contactEmail
-		}
-		s.cfg.Public.Direct.ACMEEmail = acmeEmail
+	// Without a contact address Let's Encrypt issues certificates but nobody
+	// is told when renewal starts failing — and the failure only becomes
+	// visible when the certificate expires.
+	if acmeEmail == "" || transport == config.TransportLocal {
+		acmeEmail = contactEmail
+	}
+	s.cfg.Public.ACMEEmail = acmeEmail
+	if transport == config.TransportLocal {
+		s.cfg.Public.Local = config.PublicLocal{DNSToken: dnsToken, ChallengeDomain: challengeDomain}
 	}
 	s.cfg.SetupState = config.SetupStateReady
 
@@ -194,20 +220,42 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-// resolvePublicMode maps a wizard card onto transport and base domain.
+// resolvePublicMode maps a wizard card onto transport and base domain. Every
+// mode needs the school's domain: login and apps live under it.
 func resolvePublicMode(mode, baseDomain string) (transport, resolved string, err error) {
 	switch mode {
-	case preflight.ModeDirect:
+	case preflight.ModeLocal, preflight.ModeDirect:
 		if baseDomain == "" {
 			return "", "", errors.New("Bitte die Domain der Schule angeben.")
 		}
 		if err := config.ValidateBaseDomain(baseDomain); err != nil {
 			return "", "", fmt.Errorf("Domain ungültig: %s", preflight.TranslateDomainError(err))
 		}
-		return config.TransportDirect, baseDomain, nil
+		return mode, baseDomain, nil
 	case "":
 		return "", "", errors.New("Bitte eine Betriebsart auswählen.")
 	default:
 		return "", "", fmt.Errorf("Unbekannte Betriebsart %q.", mode)
 	}
+}
+
+// validateLocalCertificate checks what DNS-01 needs. Without a token the
+// server never gets a certificate, and nothing works — that is worth a stop
+// here, unlike DNS records, which may well be created after setup.
+func validateLocalCertificate(token, challengeDomain string) error {
+	if token == "" {
+		return errors.New("Für den Betrieb im Schulnetz wird ein deSEC-Token gebraucht — ohne ihn gibt es kein Zertifikat.")
+	}
+	if challengeDomain != "" {
+		if err := config.ValidateChallengeDomain(challengeDomain); err != nil {
+			return fmt.Errorf("Ziel bei deSEC ungültig: %s", preflight.TranslateDomainError(err))
+		}
+	}
+	return nil
+}
+
+// normalizeDomain trims what people paste along with a domain name: blanks,
+// upper case and the trailing dot of a fully qualified name.
+func normalizeDomain(s string) string {
+	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(s)), ".")
 }

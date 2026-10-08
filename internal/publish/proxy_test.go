@@ -30,8 +30,8 @@ func caddyfile(t *testing.T) string {
 	return string(data)
 }
 
-func TestDirectPublishesAppAndAuth(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyPublishesAppAndAuth(t *testing.T) {
+	d := NewProxy(directCfg(t))
 
 	if err := d.EnsureAuth(); err != nil {
 		t.Fatalf("EnsureAuth: %v", err)
@@ -60,8 +60,8 @@ func TestDirectPublishesAppAndAuth(t *testing.T) {
 // Disabling one app must leave the others alone. The whole file is rewritten
 // every time, so this is the property that guards against a regeneration bug
 // taking unrelated sites offline.
-func TestDirectDisableKeepsOtherRoutes(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyDisableKeepsOtherRoutes(t *testing.T) {
+	d := NewProxy(directCfg(t))
 	mustEnable(t, d, "pylearn", 8000)
 	mustEnable(t, d, "sponsorenlauf", 8000)
 	if err := d.EnsureAuth(); err != nil {
@@ -91,8 +91,8 @@ func TestDirectDisableKeepsOtherRoutes(t *testing.T) {
 
 // Without the in-container port there is nothing to proxy to. Guessing would
 // produce a route that silently 502s, which is worse than a refusal.
-func TestDirectRefusesAppWithoutContainerPort(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyRefusesAppWithoutContainerPort(t *testing.T) {
+	d := NewProxy(directCfg(t))
 
 	if _, err := d.Enable(App{ID: "pylearn", LocalPort: 8330}); err == nil {
 		t.Fatal("Enable without a container port should fail")
@@ -107,9 +107,9 @@ func TestDirectRefusesAppWithoutContainerPort(t *testing.T) {
 
 // An install without an address cannot publish anything — the setup wizard
 // has not written one yet.
-func TestDirectRefusesWithoutBaseDomain(t *testing.T) {
+func TestProxyRefusesWithoutBaseDomain(t *testing.T) {
 	t.Setenv(paths.EnvLearningstackDir, t.TempDir())
-	d := NewDirect(&config.Config{Public: config.Public{Transport: config.TransportDirect}})
+	d := NewProxy(&config.Config{Public: config.Public{Transport: config.TransportDirect}})
 
 	if err := d.EnsureAuth(); err == nil {
 		t.Error("EnsureAuth without an address should fail")
@@ -121,8 +121,8 @@ func TestDirectRefusesWithoutBaseDomain(t *testing.T) {
 
 // Restore is the startup path: whatever state.yaml said was public comes back
 // in one Caddyfile.
-func TestDirectRestore(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyRestore(t *testing.T) {
+	d := NewProxy(directCfg(t))
 
 	d.Restore([]App{
 		{ID: "pylearn", LocalPort: 8330, ContainerPort: 8000},
@@ -146,8 +146,8 @@ func TestDirectRestore(t *testing.T) {
 
 // The proxy is what makes a route real. A published app with no proxy running
 // is an error, not "stopped" — the admin asked for it and it is not there.
-func TestDirectStatusReflectsProxy(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyStatusReflectsProxy(t *testing.T) {
+	d := NewProxy(directCfg(t))
 
 	if got := d.Status("pylearn"); got != StatusStopped {
 		t.Errorf("unpublished app status = %q, want %q", got, StatusStopped)
@@ -159,7 +159,7 @@ func TestDirectStatusReflectsProxy(t *testing.T) {
 	}
 }
 
-func mustEnable(t *testing.T, d *Direct, id string, containerPort int) {
+func mustEnable(t *testing.T, d *Proxy, id string, containerPort int) {
 	t.Helper()
 	if _, err := d.Enable(App{ID: id, LocalPort: 8000, ContainerPort: containerPort}); err != nil {
 		t.Fatalf("Enable %s: %v", id, err)
@@ -168,8 +168,8 @@ func mustEnable(t *testing.T, d *Direct, id string, containerPort int) {
 
 // The UI is the one upstream that is not a container: stackctl runs under
 // systemd, so the proxy has to reach it through the host, not by service name.
-func TestDirectPublishesAdminUIViaHostAddress(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyPublishesAdminUIViaHostAddress(t *testing.T) {
+	d := NewProxy(directCfg(t))
 	d.hostAddress = func() (string, error) { return "172.18.0.1", nil }
 
 	if err := d.StartAdmin(8090); err != nil {
@@ -188,8 +188,8 @@ func TestDirectPublishesAdminUIViaHostAddress(t *testing.T) {
 	}
 }
 
-func TestDirectStopAdminRemovesRoute(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyStopAdminRemovesRoute(t *testing.T) {
+	d := NewProxy(directCfg(t))
 	d.hostAddress = func() (string, error) { return "172.18.0.1", nil }
 
 	if err := d.StartAdmin(8090); err != nil {
@@ -209,8 +209,8 @@ func TestDirectStopAdminRemovesRoute(t *testing.T) {
 
 // Publishing the UI must not disturb what is already published. The whole
 // Caddyfile is rewritten on every change, so this is worth pinning.
-func TestDirectAdminRouteLeavesOthersAlone(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyAdminRouteLeavesOthersAlone(t *testing.T) {
+	d := NewProxy(directCfg(t))
 	d.hostAddress = func() (string, error) { return "172.18.0.1", nil }
 
 	if err := d.EnsureAuth(); err != nil {
@@ -237,8 +237,8 @@ func TestDirectAdminRouteLeavesOthersAlone(t *testing.T) {
 
 // Without a reachable host address there is no route worth writing. Failing
 // here beats a route that resolves and answers nothing.
-func TestDirectAdminFailsWithoutHostAddress(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyAdminFailsWithoutHostAddress(t *testing.T) {
+	d := NewProxy(directCfg(t))
 	d.hostAddress = func() (string, error) { return "", errNoGateway }
 
 	if err := d.StartAdmin(8090); err == nil {
@@ -249,8 +249,8 @@ func TestDirectAdminFailsWithoutHostAddress(t *testing.T) {
 	}
 }
 
-func TestDirectAdminRejectsUnknownPort(t *testing.T) {
-	d := NewDirect(directCfg(t))
+func TestProxyAdminRejectsUnknownPort(t *testing.T) {
+	d := NewProxy(directCfg(t))
 	d.hostAddress = func() (string, error) { return "172.18.0.1", nil }
 
 	if err := d.StartAdmin(0); err == nil {

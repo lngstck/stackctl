@@ -81,3 +81,38 @@ func validateDomainLabel(label string) error {
 	}
 	return nil
 }
+
+// ValidateChallengeDomain checks the CNAME target of the ACME challenge, e.g.
+// "_acme-challenge.gym-phoenix.dedyn.io". Unlike a base domain it usually
+// starts with an underscore label, so underscores are allowed; everything
+// else follows the same rules as ValidateBaseDomain.
+func ValidateChallengeDomain(name string) error {
+	if name == "" {
+		return errors.New("must not be empty")
+	}
+	if len(name) > 253 {
+		return fmt.Errorf("length %d exceeds 253", len(name))
+	}
+	if strings.Contains(name, "://") {
+		return errors.New("must be a bare domain, without https://")
+	}
+	if strings.ContainsAny(name, "/?#*: ") {
+		return errors.New("must be a bare domain name")
+	}
+	if name != strings.ToLower(name) {
+		return errors.New("must be lowercase")
+	}
+	if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
+		return errors.New("must not start or end with a dot")
+	}
+	labels := strings.Split(name, ".")
+	if len(labels) < 2 {
+		return errors.New("must contain at least one dot, e.g. example.org")
+	}
+	for _, label := range labels {
+		if err := validateDomainLabel(strings.ReplaceAll(label, "_", "a")); err != nil {
+			return err
+		}
+	}
+	return nil
+}

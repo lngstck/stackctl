@@ -52,6 +52,23 @@
           <span class="hint">Unter dieser Domain sind die Apps erreichbar: <code>app.<strong>{{.PublicBaseDomain}}</strong></code>. Sie steckt in allen App-Adressen und im Login und laesst sich deshalb nach der Einrichtung nicht aendern.</span>
         </label>
 
+        {{if .IsLocal}}
+        <h3 class="mb-2">Zertifikat</h3>
+        <p class="sub mb-1" style="font-size:0.85rem;">Das Zertifikat kommt über deSEC (DNS-01). Änderungen gehen sofort an den Reverse-Proxy.</p>
+
+        <label data-field class="mb-1">
+          deSEC-Token
+          <input type="password" name="dns_token" autocomplete="off" placeholder="{{if .HasDNSToken}}gespeichert — leer lassen, um ihn zu behalten{{else}}fehlt{{end}}">
+          <span class="hint">Nur ausfüllen, um den Token zu ersetzen.</span>
+        </label>
+
+        <label data-field class="mb-2">
+          Ziel bei deSEC
+          <input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="z.B. _acme-challenge.meine-schule.dedyn.io">
+          <span class="hint">CNAME-Ziel von <code>_acme-challenge.{{.PublicBaseDomain}}</code>. Leer, wenn deSEC die Domain der Schule selbst verwaltet.</span>
+        </label>
+        {{end}}
+
         <h3 class="mb-2">Admin-Passwort aendern <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>
 
         <label data-field class="mb-1">
