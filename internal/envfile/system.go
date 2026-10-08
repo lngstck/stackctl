@@ -1,6 +1,7 @@
 package envfile
 
 import (
+	"github.com/lngstck/stackctl/internal/claims"
 	"github.com/lngstck/stackctl/internal/config"
 	"github.com/lngstck/stackctl/internal/public"
 )
@@ -16,6 +17,8 @@ var SystemEnvKeys = []string{
 	"DEX_AUTH_URL",
 	"DESEC_TOKEN",
 	"ADMIN_PASSWORD",
+	claims.TeacherGroupsEnv,
+	claims.StudentGroupsEnv,
 }
 
 // ApplySystemEnv overwrites the system-owned keys in the global section
@@ -54,6 +57,11 @@ func ApplySystemEnv(f *File, cfg *config.Config, adminPassword string) {
 		token = cfg.Public.Local.DNSToken
 	}
 	f.Set(GlobalSection, "DESEC_TOKEN", token)
+
+	// What the groups claim says for each role. Apps compare against these
+	// instead of a provider's own values (see internal/claims).
+	f.Set(GlobalSection, claims.TeacherGroupsEnv, claims.TeacherGroups())
+	f.Set(GlobalSection, claims.StudentGroupsEnv, claims.StudentGroups())
 
 	if adminPassword != "" {
 		f.Set(GlobalSection, "ADMIN_PASSWORD", adminPassword)

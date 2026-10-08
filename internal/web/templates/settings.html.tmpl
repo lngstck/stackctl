@@ -89,10 +89,83 @@
           <span class="hint">stackctl prueft jede Nacht den Katalog und installiert nicht-kritische Updates automatisch. Apps mit Breaking-Marker und manuell deaktivierte Apps bleiben unangetastet.</span>
         </label>
 
-        <h3 class="mb-2">Anmeldung</h3>
-        <p class="sub mb-2">Lokaler Dex unter <code>{{.DexAuthURL}}</code>. Noch kein Anmeldedienst der Schule angebunden.</p>
-
         <button type="submit" class="mt-1">Speichern</button>
+      </form>
+    </article>
+
+    {{/* Eigene Karte, kein Teil des Formulars oben: jedes Konto hat seine
+         eigenen Knöpfe, und Formulare lassen sich nicht verschachteln. */}}
+    <article class="card mt-2" id="konten">
+      <h3 class="mb-1">Anmeldung für Lehrkräfte und Schüler:innen</h3>
+      <p class="sub mb-2" style="font-size:0.85rem;">
+        Noch ist kein Anmeldedienst der Schule angebunden. Bis dahin melden
+        sich Lehrkräfte und Schüler:innen mit Testkonten an — zum Ausprobieren,
+        nicht für den Unterricht. Die Anmeldeseite liegt unter
+        <code>{{.DexAuthURL}}</code>.
+      </p>
+
+      {{if .AccountsNotice}}
+      <div role="alert" data-variant="{{if .AccountsNoticeErr}}danger{{else}}success{{end}}" class="mb-2">{{.AccountsNotice}}</div>
+      {{end}}
+
+      {{if .Accounts}}
+      <table style="width:100%;" class="mb-2">
+        <thead>
+          <tr><th>Name</th><th>Rolle</th><th>Anmelden mit</th><th></th></tr>
+        </thead>
+        <tbody>
+          {{range .Accounts}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td>{{.RoleLabel}}</td>
+            <td><code>{{.Login}}</code> {{template "copy-btn" .Login}}</td>
+            <td style="text-align:right;">
+              <form method="post" action="/settings/accounts/{{.ID}}/delete" style="display:inline;"
+                    onsubmit="return confirm('Konto {{.Name}} löschen? Die Person kann sich danach nicht mehr anmelden.');">
+                {{csrfField $.CSRFToken}}
+                <button type="submit" class="ghost small" style="color:var(--danger);">Löschen</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p class="mb-2">Noch keine Konten — bisher kann sich niemand in den Apps anmelden.</p>
+      {{end}}
+
+      <h4 class="mb-1">Konto anlegen</h4>
+      <form method="post" action="/settings/accounts">
+        {{csrfField $.CSRFToken}}
+        <label data-field class="mb-1">
+          Name
+          <input type="text" name="name" required maxlength="100" placeholder="z.B. Frau Müller oder Mia S.">
+          <span class="hint">So erscheint die Person in den Apps.</span>
+        </label>
+
+        <label data-field class="mb-1">
+          Anmeldename
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <input type="text" name="login_name" required maxlength="40" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="z.B. mueller" style="flex:1;">
+            <span class="sub">@{{.PublicBaseDomain}}</span>
+          </div>
+          <span class="hint">Damit meldet sich die Person an. Die Anmeldeseite fragt nach einer E-Mail-Adresse — gemeint ist genau diese.</span>
+        </label>
+
+        <label data-field class="mb-1">
+          Rolle
+          <select name="role" required>
+            {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+          </select>
+        </label>
+
+        <label data-field class="mb-2">
+          Passwort
+          <input type="password" name="password" required minlength="8" autocomplete="new-password">
+          <span class="hint">Mindestens 8 Zeichen. stackctl speichert nur den Hash — das Passwort selbst bitte notieren und weitergeben.</span>
+        </label>
+
+        <button type="submit">Konto anlegen</button>
       </form>
     </article>
   </div>

@@ -160,6 +160,10 @@ func (s *Server) routes() {
 	// Settings (ready + auth).
 	s.mux.HandleFunc("GET /settings", s.requireAuth(s.handleSettings))
 	s.mux.HandleFunc("POST /settings", s.authPostLocked(s.handleSettingsPost))
+	// Testkonten in Dex' eigener Passwort-Datenbank. Sie schreiben config.yaml
+	// und die Dex-Config, deshalb unter dem Op-Lock.
+	s.mux.HandleFunc("POST /settings/accounts", s.authPostLocked(s.handleAccountCreate))
+	s.mux.HandleFunc("POST /settings/accounts/{id}/delete", s.authPostLocked(s.handleAccountDelete))
 
 	// Backup & Restore (ready + auth). Create runs asynchronously and manages
 	// the op-lock itself (handed to the worker goroutine), so it uses authPost,

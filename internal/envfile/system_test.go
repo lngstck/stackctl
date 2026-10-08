@@ -29,6 +29,9 @@ func TestApplySystemEnv(t *testing.T) {
 		"PUBLIC_BASE_DOMAIN": "ls.gym-phoenix.de",
 		"DEX_AUTH_URL":       "https://auth.ls.gym-phoenix.de",
 		"ADMIN_PASSWORD":     "pw123456",
+		// Apps erfahren die Rollenwerte aus der Umgebung, nie aus dem Katalog.
+		"ROLE_TEACHER_GROUPS": "lehrkraft",
+		"ROLE_STUDENT_GROUPS": "schueler",
 	} {
 		if v, ok := f.Get(k); !ok || v != want {
 			t.Errorf("%s = %q,%v; want %q", k, v, ok, want)

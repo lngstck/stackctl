@@ -113,6 +113,22 @@ func missingInfraIssues(st *config.State) []dashIssue {
 	return issues
 }
 
+// accountIssues meldet, wenn Dex läuft, sich aber niemand anmelden kann:
+// Ohne angebundenen Anmeldedienst sind die Testkonten der einzige Weg hinein.
+func accountIssues(st *config.State, cfg *config.Config) []dashIssue {
+	if !st.IsInstalled("dex") || len(cfg.Auth.TestAccounts) > 0 {
+		return nil
+	}
+	return []dashIssue{{
+		Level:       "warning",
+		Icon:        "●",
+		Title:       "Noch kann sich niemand anmelden",
+		Detail:      "Es ist kein Anmeldedienst der Schule angebunden und es gibt noch keine Testkonten.",
+		Action:      "/settings#konten",
+		ActionLabel: "Konto anlegen",
+	}}
+}
+
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	st := s.snapState()
 	data := dashboardData{
@@ -123,6 +139,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	// 0) Fehlende Pflicht-Dienste — auf einem frisch freigeschalteten System
 	//    das Erste, was der Admin tun muss. Steht deshalb ganz oben.
 	data.Issues = append(data.Issues, missingInfraIssues(st)...)
+	data.Issues = append(data.Issues, accountIssues(st, s.cfg)...)
 
 	// 1) Die Adresse des Logins — die Lebensader für OIDC. Liegt sie, kann
 	//    sich niemand mehr mit dem Schulkonto anmelden → höchste Priorität.
