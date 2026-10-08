@@ -395,3 +395,28 @@ func TestBootstrapRepublishesAdminUI(t *testing.T) {
 		t.Errorf("StartAdmin called with %v, want [9091]", fake.adminPorts)
 	}
 }
+
+// Die App-Zeilen kommen aus einer Map; sortiert bleiben sie an ihrem Platz.
+func TestPublicPageListsAppsInStableOrder(t *testing.T) {
+	s, st := testServerWithPublisher(t, &fakePublisher{})
+	for _, id := range []string{"zeta", "alpha", "mitte", "beta"} {
+		st.Containers[id] = &config.ContainerState{ID: id, Name: id}
+	}
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loadTemplates: %v", err)
+	}
+
+	for i := 0; i < 5; i++ {
+		rec := httptest.NewRecorder()
+		s.handlePublic(rec, httptest.NewRequest(http.MethodGet, "/public", nil))
+		body := rec.Body.String()
+		last := -1
+		for _, id := range []string{"alpha", "beta", "mitte", "pylearn", "zeta"} {
+			pos := strings.Index(body, "/apps/"+id+"/public/enable")
+			if pos < last {
+				t.Fatalf("Zeile %q steht nicht in ID-Reihenfolge", id)
+			}
+			last = pos
+		}
+	}
+}

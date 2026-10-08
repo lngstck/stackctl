@@ -14,6 +14,9 @@
 {{if .Message}}
 <div role="alert" data-variant="{{if .IsError}}danger{{else}}success{{end}}" class="mb-2">{{.Message}}</div>
 {{end}}
+{{if .CatalogMissing}}
+<div role="alert" data-variant="warning" class="mb-2">Der Katalog ist noch nicht geladen. Installierte Apps stehen trotzdem unten; für neue Apps bitte „Katalog aktualisieren“.</div>
+{{end}}
 
 <ot-tabs>
   <div role="tablist">
@@ -50,7 +53,9 @@
 
   <!-- Verfuegbar -->
   <div role="tabpanel">
-    {{if not .Available}}
+    {{if .CatalogMissing}}
+    <p class="sub mt-2">Katalog noch nicht geladen.</p>
+    {{else if not .Available}}
     <p class="sub mt-2">Alle Apps sind bereits installiert.</p>
     {{else}}
     <div class="app-grid mt-2">
