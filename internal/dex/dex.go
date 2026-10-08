@@ -3,14 +3,9 @@
 // on every change (app install/remove, setup) and Dex is restarted via
 // docker restart ls-dex (< 1s, sessions survive because of SQLite persistence).
 //
-// Phase 1 architecture: the local school Dex connects upstream to the central
-// Dex at auth.learningstack.online, which in turn connects to moin.schule.
-// No static-password fallback, no Wobila, no upstream switching. That upstream
-// is fixed regardless of how the school itself is reached — only the local
-// Dex's own address moves with config.public (see internal/public).
-//
-// The config uses claimMapping (SINGULAR, not claimMappings!) — see Memory
-// project_central_dex_moinschule.md for the critical fallstrick.
+// The local Dex is the only party that talks to the school's login provider.
+// Every app is a static client of it, so installing an app never touches the
+// provider. Its own address follows config.public (see internal/public).
 package dex
 
 import (
@@ -27,10 +22,6 @@ import (
 
 // DexContainerName is the Docker container name for the local Dex instance.
 const DexContainerName = "ls-dex"
-
-// CentralDexIssuer is the OIDC issuer URL of the central Dex that all
-// school Dex instances connect to as upstream. Fixed in Phase 1.
-const CentralDexIssuer = "https://auth.learningstack.online"
 
 // Client represents an OIDC client registered in Dex's staticClients list.
 // Each installed app with an oidc: block gets one.
@@ -79,26 +70,12 @@ func GenerateConfig(cfg *config.Config, clients []Client) ([]byte, error) {
 		},
 	}
 
-	// Upstream connector: local Dex → central Dex (→ moin.schule).
-	connector := map[string]any{
-		"type": "oidc",
-		"id":   "central-dex",
-		"name": "learningstack",
-		"config": map[string]any{
-			"issuer":                    CentralDexIssuer,
-			"clientID":                  cfg.Dex.ClientID,
-			"clientSecret":              cfg.Dex.ClientSecret,
-			"redirectURI":               authURL + "/callback",
-			"scopes":                    []string{"openid", "profile", "email", "groups"},
-			"getUserInfo":               true,
-			"insecureSkipEmailVerified": true,
-			"insecureEnableGroups":      true,
-			// Kein claimMapping: der zentrale Dex liefert email/groups/
-			// preferred_username/name bereits korrekt gemappt. Eigene
-			// Mappings wuerden den moin.schule-sub (als email) zerstoeren.
-		},
-	}
-	doc["connectors"] = []any{connector}
+	// No login provider is connected yet. Dex refuses to start without any
+	// connector at all, and a stopped Dex would also take down every app
+	// that checks its issuer at boot. The built-in password database counts
+	// as one and stays empty — nobody can sign in through it, which is the
+	// honest state until the school's provider is configured.
+	doc["enablePasswordDB"] = true
 
 	// Static clients: one per OIDC app.
 	if len(clients) > 0 {

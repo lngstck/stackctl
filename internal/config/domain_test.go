@@ -4,7 +4,7 @@ import "testing"
 
 func TestValidateBaseDomain(t *testing.T) {
 	valid := []string{
-		"phoenix.learningstack.online",
+		"apps.gym-phoenix.de",
 		"gym-phoenix.de",
 		"ls.gym-phoenix.de",
 		"lernen.schule.stadt-wolfsburg.de",

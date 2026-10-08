@@ -1,20 +1,13 @@
 // Copyright (C) 2026 learningstack contributors. Licensed under AGPL-3.0-or-later. See LICENSE.
 
-// Package publish makes apps reachable from the internet.
-//
-// There is more than one way to do that. A school behind NAT is published
-// through an SSH reverse tunnel to a sish endpoint; a school on its own
-// server publishes itself, with a local reverse proxy terminating TLS. Both
-// produce the same public hostnames (see internal/public) — only the
-// machinery differs, and nothing above this package should have to know
-// which one is in use.
+// Package publish makes apps reachable under their hostnames (see
+// internal/public). A local reverse proxy terminates TLS and routes by
+// hostname; nothing above this package should have to know how.
 //
 // State ownership is deliberately outside: a Publisher starts and stops
 // things, and reports what it did. Recording that in state.yaml is the
-// caller's job, under the caller's lock. The previous design let the tunnel
-// manager hold the shared *config.State and save it from inside Enable and
-// Disable — outside the web server's stateMu, and racing the clone-and-commit
-// that background install jobs use.
+// caller's job, under the caller's lock — saving it from in here would race
+// the clone-and-commit that background install jobs use.
 package publish
 
 import (
@@ -38,7 +31,6 @@ const (
 
 // Transport kinds reported by Kind, mirroring config.Transport*.
 const (
-	KindRelay  = "relay"
 	KindDirect = "direct"
 )
 
@@ -49,16 +41,15 @@ type App struct {
 	// LocalPort is the port the app listens on from the server's point of
 	// view — the host side of the container's port mapping.
 	LocalPort int
-	// ContainerPort is the port inside the container. A relay forwards to
-	// LocalPort and ignores this; a local proxy reaches the container
-	// directly over the docker network and needs this one.
+	// ContainerPort is the port inside the container. The proxy reaches the
+	// container directly over the docker network and needs this one.
 	ContainerPort int
 }
 
 // Publisher is the transport-independent way to publish this install.
 //
 // Implementations must be safe for concurrent use: the web UI calls Status
-// while a monitor goroutine reconnects things underneath.
+// while background work changes things underneath.
 type Publisher interface {
 	// Kind reports the transport, for UI wording only. Behaviour must never
 	// branch on it outside this package.
@@ -76,7 +67,7 @@ type Publisher interface {
 	// StartAdmin publishes stackctl's own web UI at admin.{base_domain},
 	// listening on localPort. Unlike the login this is off unless the admin
 	// asks for it: it puts the control plane of the whole install — installs,
-	// secrets, restores — behind one password on the open internet.
+	// secrets, restores — behind one password at one more address.
 	//
 	// It does not change what stackctl listens on. The LAN port stays open,
 	// so a route that does not work costs nothing but a wrong bookmark.
@@ -99,30 +90,10 @@ type Publisher interface {
 	// Status reports one app's publication status.
 	Status(appID string) string
 
-	// StartMonitor launches background supervision (reconnects, health).
+	// StartMonitor launches background supervision, if the transport has any.
 	StartMonitor()
 	// Shutdown stops everything this publisher owns.
 	Shutdown()
-}
-
-// ConnectivityTester is implemented by publishers that can check their own
-// transport on demand — a relay can prove its SSH credentials in a second,
-// which is worth a button in the UI. Callers type-assert for it and hide the
-// button when the current publisher does not offer one.
-type ConnectivityTester interface {
-	// TestTransport returns nil if the transport is usable right now.
-	TestTransport() error
-}
-
-// RelayIdentity is implemented by publishers that authenticate to a remote
-// endpoint with a key the admin has to hand to whoever runs it. The UI shows
-// that block only when the current publisher offers one — a server that
-// publishes itself has no such identity.
-type RelayIdentity interface {
-	// PublicKey returns the SSH public key of this install.
-	PublicKey() (string, error)
-	// Endpoint returns the relay's host and port, for display.
-	Endpoint() (host string, port int)
 }
 
 // AppsFrom builds the publish list from the containers that state.yaml marks
@@ -137,10 +108,10 @@ type RelayIdentity interface {
 // for that, then background supervision.
 //
 // It exists so the two callers cannot drift. One runs at service start, the
-// other the moment registration completes — and an install-time step that
-// only one of them performs is a slow-acting bug: it works until the next
-// restart, or only after one. Failures are logged rather than fatal; a server
-// that cannot publish must still serve the UI that fixes it.
+// other the moment setup completes — and an install-time step that only one
+// of them performs is a slow-acting bug: it works until the next restart, or
+// only after one. Failures are logged rather than fatal; a server that cannot
+// publish must still serve the UI that fixes it.
 func Bootstrap(p Publisher, state *config.State, containerPort func(string) int, adminPort int) {
 	if p == nil {
 		return

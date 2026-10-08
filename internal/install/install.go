@@ -317,7 +317,7 @@ func Install(
 // definition: regenerates secrets that the new definition added, rewrites
 // configs, re-registers the OIDC client, regenerates docker-compose.yml,
 // pulls a fresh image, and recreates the container. Existing prompt values,
-// tunnel state, and InstalledAt timestamp are preserved.
+// publication state, and InstalledAt timestamp are preserved.
 //
 // The caller must have already (force-)refetched the catalog definition into
 // the local cache so `def` reflects the latest YAML.
@@ -759,7 +759,7 @@ func createDataDirs(def *catalog.Definition, env *envfile.File) error {
 //
 // Before this, messages went through expandEnvVars alone, which only knows
 // the $-form — so every brace placeholder was printed verbatim ("Oeffentlich:
-// https://pylearn.{SCHOOL_SLUG}.learningstack.online") in the one place an
+// https://pylearn.{SCHOOL_SLUG}.example.org") in the one place an
 // admin reads right after installing. The sibling replacer for admin_info
 // lives in internal/web (expandAdminPlaceholders); keep the two in sync.
 // Reihenfolge ist wichtig: erst die $-Form, dann die Klammern. "{SCHOOL_SLUG}"

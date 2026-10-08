@@ -80,11 +80,6 @@ func LLMConfigFile() string {
 	return filepath.Join(LLMConfigDir(), "config.yaml")
 }
 
-func TunnelKeyFile() string { return filepath.Join(ConfigDir(), "tunnel_key") }
-func TunnelPubKeyFile() string {
-	return filepath.Join(ConfigDir(), "tunnel_key.pub")
-}
-
 // CatalogCacheDir is where the catalog index and per-app definitions are
 // cached after a sync.
 func CatalogCacheDir() string { return filepath.Join(ConfigDir(), "catalog") }
@@ -100,11 +95,6 @@ func AppDefinitionFile(appID string) string {
 	return filepath.Join(CatalogContainersDir(), appID+".yaml")
 }
 
-// RegistrationPackageFile is the age-encrypted registration package path.
-func RegistrationPackageFile(slug string) string {
-	return filepath.Join(ConfigDir(), fmt.Sprintf("registration-%s.age", slug))
-}
-
 // -- compose tree -----------------------------------------------------------
 
 func ComposeDir() string  { return filepath.Join(StackctlDir(), "compose") }
@@ -116,7 +106,7 @@ func VersionFile() string { return filepath.Join(StackctlDir(), "stackctl.versio
 
 // BackupsDir holds the server-side backup archives plus their unencrypted
 // metadata sidecars. It is created with 0o700 (owner-only) because an archive
-// carries the admin hash, dex secret, tunnel key, every app DB password and
+// carries the admin hash, the OIDC secrets, every app DB password and
 // student PII — the restrictive directory mode is the protection boundary even
 // when a root-in-container tar leaves the archive file itself world-readable.
 func BackupsDir() string { return filepath.Join(StackctlDir(), "backups") }

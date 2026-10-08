@@ -9,10 +9,8 @@ import (
 // The concrete publishers must satisfy the interface — the compiler is the
 // test here, and it is the assertion that matters for the callers.
 var (
-	_ Publisher          = (*Relay)(nil)
-	_ ConnectivityTester = (*Relay)(nil)
-	_ RelayIdentity      = (*Relay)(nil)
-	_ Publisher          = unsupported{}
+	_ Publisher = (*Direct)(nil)
+	_ Publisher = unsupported{}
 )
 
 func TestAppsFromOnlyIncludesPublicApps(t *testing.T) {
@@ -91,20 +89,7 @@ func TestUnsupportedTransportFailsPerOperation(t *testing.T) {
 	}
 }
 
-func TestForReturnsRelayByDefault(t *testing.T) {
-	cfg := &config.Config{
-		School: config.School{Slug: "phoenix"},
-		Public: config.Public{Transport: config.TransportRelay, BaseDomain: "phoenix.learningstack.online"},
-	}
-
-	p := For(cfg)
-	if p.Kind() != KindRelay {
-		t.Errorf("Kind = %q, want %q", p.Kind(), KindRelay)
-	}
-	if _, ok := p.(ConnectivityTester); !ok {
-		t.Error("a relay must offer a transport test")
-	}
-
+func TestForPicksPublisherByTransport(t *testing.T) {
 	direct := For(&config.Config{
 		School: config.School{Slug: "phoenix"},
 		Public: config.Public{Transport: config.TransportDirect, BaseDomain: "ls.gym-phoenix.de"},
@@ -112,16 +97,11 @@ func TestForReturnsRelayByDefault(t *testing.T) {
 	if direct.Kind() != KindDirect {
 		t.Errorf("Kind = %q, want %q", direct.Kind(), KindDirect)
 	}
-	// A server that publishes itself dials no endpoint, so it has neither a
-	// relay identity to show nor a transport handshake to test.
-	if _, ok := direct.(RelayIdentity); ok {
-		t.Error("direct transport must not advertise a relay identity")
-	}
 
-	// An install whose transport was never written down is a relay too —
-	// that is the historical default, not an error.
-	empty := For(&config.Config{School: config.School{Slug: "phoenix"}})
-	if empty.Kind() != KindRelay {
-		t.Errorf("empty transport → %q, want %q", empty.Kind(), KindRelay)
+	// The relay is gone. A config that still names it gets a publisher that
+	// refuses, so the UI stays up and says why nothing is reachable.
+	relay := For(&config.Config{Public: config.Public{Transport: "relay", BaseDomain: "ls.gym-phoenix.de"}})
+	if _, err := relay.Enable(App{ID: "pylearn", ContainerPort: 8000}); err == nil {
+		t.Error("a relay config must not publish anything")
 	}
 }

@@ -30,7 +30,7 @@
           <input type="text" name="school_slug" value="{{.SchoolSlug}}" placeholder="aus Schulname ableiten" id="slug-input" style="flex:1;">
           <button type="button" class="ghost small" id="derive-slug-btn" title="Slug aus Schulname ableiten">Ableiten</button>
         </div>
-        <span class="hint">Kurzform der Schule (a-z, 0-9, Bindestrich, max. 30 Zeichen). Identifiziert die Schule beim zentralen Login.</span>
+        <span class="hint">Kurzform der Schule (a-z, 0-9, Bindestrich, max. 30 Zeichen). Apps nutzen sie als interne Kennung der Schule.</span>
       </label>
 
       <label data-field class="mb-1">
@@ -42,59 +42,31 @@
       <label data-field class="mb-2">
         Kontakt-E-Mail
         <input type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="admin@schule.de">
-        <span class="hint">Fuer Rueckfragen bei der Registrierung.</span>
+        <span class="hint">Standard-Adresse für Warnungen zu den Zertifikaten.</span>
       </label>
 
       <h3 class="mb-1">Betriebsart</h3>
       <p class="sub mb-2" style="font-size:0.85rem;">
-        Wie sollen die Apps aus dem Internet erreichbar sein? Das laesst sich
-        spaeter nur mit Aufwand aendern — die Adresse steckt in jedem Login.
+        Wie sollen die Apps erreichbar sein? Das laesst sich spaeter nur mit
+        Aufwand aendern — die Adresse steckt in jedem Login.
       </p>
 
       <div class="mode-choice mb-2">
         <label class="mode-card">
           <div class="mode-card__top">
-            <input type="radio" name="public_mode" value="relay_operator" {{if ne .Mode "relay_own"}}{{if ne .Mode "direct"}}checked{{end}}{{end}}>
-            <span class="mode-card__title">Adresse des Betreibers</span>
-            <span class="mode-card__tag">nichts vorzubereiten</span>
-          </div>
-          <div class="mode-card__body">
-            Der Betreiber stellt die Adresse und die Zertifikate. Der Server
-            baut dafuer eine ausgehende Verbindung auf und braucht selbst
-            keine oeffentliche IP und keine freigegebenen Ports.
-          </div>
-          <div class="mode-card__addr" id="preview-relay">app.<span data-slug-preview>slug</span>.{{.RootDomain}}</div>
-        </label>
-
-        <label class="mode-card">
-          <div class="mode-card__top">
-            <input type="radio" name="public_mode" value="relay_own" {{if eq .Mode "relay_own"}}checked{{end}}>
-            <span class="mode-card__title">Eigene Domain ueber den Betreiber</span>
-            <span class="mode-card__tag">DNS noetig</span>
-          </div>
-          <div class="mode-card__body">
-            Wie oben, aber unter der Domain der Schule. Der Wildcard-Eintrag
-            muss dafuer auf den Relay des Betreibers zeigen, nicht auf diesen
-            Server.
-          </div>
-        </label>
-
-        <label class="mode-card">
-          <div class="mode-card__top">
-            <input type="radio" name="public_mode" value="direct" {{if eq .Mode "direct"}}checked{{end}}>
+            <input type="radio" name="public_mode" value="direct" checked>
             <span class="mode-card__title">Direkter Betrieb</span>
             <span class="mode-card__tag">DNS + Ports 80/443</span>
           </div>
           <div class="mode-card__body">
             Der Server haengt selbst am Internet und holt seine Zertifikate
-            ueber Let's Encrypt. Ohne Umweg ueber den Betreiber — dafuer muss
-            der Wildcard-Eintrag hierher zeigen und Port 80 und 443 muessen
-            von aussen erreichbar sein.
+            ueber Let's Encrypt. Dafuer muss der Wildcard-Eintrag hierher
+            zeigen und Port 80 und 443 muessen von aussen erreichbar sein.
           </div>
         </label>
       </div>
 
-      <div id="domain-fields" hidden>
+      <div id="domain-fields">
         <label data-field class="mb-1">
           Domain der Schule
           <input type="text" name="base_domain" value="{{.BaseDomain}}" placeholder="z.B. ls.gymnasium-musterstadt.de" id="base-domain">
@@ -104,7 +76,7 @@
           </span>
         </label>
 
-        <div id="acme-field" hidden>
+        <div id="acme-field">
           <label data-field class="mb-1">
             E-Mail fuer Zertifikats-Warnungen
             <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="wie Kontakt-E-Mail" id="acme-email">
@@ -194,10 +166,8 @@
     return slug.replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
   }
 
-  // --- Operating mode: show only the fields that mode needs ---
+  // --- Operating mode ---
   const modeInputs = document.querySelectorAll('input[name="public_mode"]');
-  const domainFields = document.getElementById('domain-fields');
-  const acmeField = document.getElementById('acme-field');
   const baseDomain = document.getElementById('base-domain');
   const domainPreview = document.getElementById('domain-preview');
   const checkResult = document.getElementById('check-result');
@@ -205,31 +175,8 @@
 
   function currentMode() {
     for (const el of modeInputs) if (el.checked) return el.value;
-    return 'relay_operator';
+    return '';
   }
-
-  function syncMode() {
-    const mode = currentMode();
-    domainFields.hidden = (mode === 'relay_operator');
-    acmeField.hidden = (mode !== 'direct');
-    // Results belong to the mode they were produced for — a check that
-    // passed for the relay says nothing about direct operation.
-    checkResult.innerHTML = '';
-    checkHint.textContent = '';
-  }
-
-  modeInputs.forEach(el => el.addEventListener('change', syncMode));
-  syncMode();
-
-  // Slug preview inside the first card.
-  function syncSlugPreview() {
-    const v = slugInput.value.trim() || deriveSlug(nameInput.value.trim()) || 'slug';
-    document.querySelectorAll('[data-slug-preview]').forEach(el => { el.textContent = v; });
-  }
-  slugInput.addEventListener('input', syncSlugPreview);
-  nameInput.addEventListener('input', syncSlugPreview);
-  deriveBtn.addEventListener('click', syncSlugPreview);
-  syncSlugPreview();
 
   baseDomain.addEventListener('input', function() {
     const v = baseDomain.value.trim().toLowerCase();

@@ -1,6 +1,6 @@
 // Package config loads and saves the two authoritative YAML files for
-// stackctl: config.yaml (school settings, admin hash, dex binding) and
-// state.yaml (installed containers, port allocations, tunnel flags).
+// stackctl: config.yaml (school settings, admin hash, address model) and
+// state.yaml (installed containers, port allocations, publication flags).
 //
 // Both files are expected under $STACKCTL_DIR/config/ and are written with
 // mode 0640, owner learningstack:learningstack on a production install.
@@ -18,29 +18,14 @@ import (
 
 // ConfigVersion is the schema version of config.yaml emitted by this build.
 //
-// v3 replaced the implicit address model — every install lived under
-// "{slug}.learningstack.online" — with an explicit public: block, so a school
-// can also be reached under its own domain, either through a relay or
-// directly from its own server.
-const ConfigVersion = 3
-
-// DefaultRootDomain is the operator-run root that relay-hosted schools get
-// their subdomains under. It is only a default: an install may carry any
-// base_domain, including one the school owns.
-const DefaultRootDomain = "learningstack.online"
-
-// Defaults for the operator-run relay endpoint.
-const (
-	DefaultRelaySSHHost = "sish." + DefaultRootDomain
-	DefaultRelaySSHPort = 2222
-)
+// v4 dropped everything that tied an install to an operator: the relay
+// transport, the registration package and the client at a central Dex. A
+// school runs on its own, and its address lives in the public: block alone.
+// There is no upgrade path from earlier versions — no install predates v4.
+const ConfigVersion = 4
 
 // Transport kinds for Public.Transport.
 const (
-	// TransportRelay reaches this install through an SSH reverse tunnel to a
-	// sish endpoint. The server may sit behind NAT. TLS terminates at the
-	// relay, which therefore sees request contents in the clear.
-	TransportRelay = "relay"
 	// TransportDirect reaches this install on the server itself, which holds
 	// public 80/443 and terminates TLS locally.
 	TransportDirect = "direct"
@@ -50,26 +35,24 @@ const (
 // 0640 = owner rw, group r, others none (see ARCHITECTURE.md §16).
 const FilePerm = 0o640
 
-// SetupState drives the three-state setup machine from ARCHITECTURE.md §10.
+// SetupState is either "not set up yet" or "ready". There is no state in
+// between: nothing outside the school has to approve an install.
 type SetupState string
 
 const (
-	SetupStateNeedsSetup           SetupState = "needs_setup"
-	SetupStateAwaitingRegistration SetupState = "awaiting_registration"
-	SetupStateReady                SetupState = "ready"
+	SetupStateNeedsSetup SetupState = "needs_setup"
+	SetupStateReady      SetupState = "ready"
 )
 
 // Config mirrors config.yaml. Field tags use snake_case to match the format
 // shown in ARCHITECTURE.md §12.
 type Config struct {
-	Version      int          `yaml:"version"`
-	SetupState   SetupState   `yaml:"setup_state"`
-	School       School       `yaml:"school"`
-	Catalog      Catalog      `yaml:"catalog"`
-	Admin        Admin        `yaml:"admin"`
-	Dex          Dex          `yaml:"dex"`
-	Registration Registration `yaml:"registration,omitempty"`
-	Public       Public       `yaml:"public"`
+	Version    int        `yaml:"version"`
+	SetupState SetupState `yaml:"setup_state"`
+	School     School     `yaml:"school"`
+	Catalog    Catalog    `yaml:"catalog"`
+	Admin      Admin      `yaml:"admin"`
+	Public     Public     `yaml:"public"`
 	// AutoUpdate steuert das naechtliche Auto-Update aller Apps.
 	AutoUpdate AutoUpdate `yaml:"auto_update,omitempty"`
 }
@@ -100,46 +83,21 @@ type Admin struct {
 	PasswordHash string `yaml:"password_hash"`
 }
 
-// Dex binds this school to a client registration on the central dex.
-// Phase 1 hardcodes the upstream to "moin.schule via central dex", so no
-// upstream selector is stored here.
-//
-// The issuer URL is deliberately absent: it follows from Public.Transport and
-// Public.BaseDomain and is read through public.AuthURL. It used to be stored
-// here as well, written once at setup and preferred over the derived value
-// when building .env — two sources for the one string that has to match
-// character for character between browser, container and the redirect URI
-// registered at the central dex. They could not disagree while the address was
-// immutable, which is exactly the kind of agreement that ends quietly the day
-// switching modes becomes possible.
-type Dex struct {
-	ClientID     string `yaml:"client_id"`
-	ClientSecret string `yaml:"client_secret"`
-}
-
-// Registration tracks progress of the awaiting_registration state.
-type Registration struct {
-	StateEnteredAt            string `yaml:"state_entered_at,omitempty"`
-	PackagePath               string `yaml:"package_path,omitempty"`
-	OperatorPubkeyFingerprint string `yaml:"operator_pubkey_fingerprint,omitempty"`
-}
-
-// Public describes how this install is reached from the internet. It is the
-// authoritative source for every public hostname stackctl builds — see
+// Public describes the addresses this install answers on. It is the
+// authoritative source for every hostname stackctl builds — see
 // internal/public for the constructors that read it.
+//
+// The OIDC issuer of the local Dex is deliberately not stored anywhere: it
+// follows from BaseDomain and is read through public.AuthURL. It has to match
+// character for character between browser, containers and every redirect URI,
+// and one source cannot disagree with itself.
 type Public struct {
-	// Transport is how traffic arrives: TransportRelay or TransportDirect.
+	// Transport is how traffic arrives. TransportDirect is the only one.
 	Transport string `yaml:"transport"`
-	// BaseDomain is the parent of every public hostname. Apps answer at
-	// {app_id}.{base_domain}, the local Dex at auth.{base_domain}. For an
-	// operator-relay install this is {slug}.learningstack.online; a school
-	// with its own domain carries something like "ls.gym-phoenix.de".
+	// BaseDomain is the parent of every hostname, chosen by the school at
+	// setup. Apps answer at {app_id}.{base_domain}, the local Dex at
+	// auth.{base_domain}, e.g. "ls.gym-phoenix.de".
 	BaseDomain string `yaml:"base_domain"`
-	// Relay targets the sish endpoint and is only meaningful for
-	// TransportRelay. Whether that endpoint is operator-run or school-run
-	// makes no difference to stackctl — it is the same SSH reverse tunnel
-	// either way, and only the operator runbook differs.
-	Relay PublicRelay `yaml:"relay,omitempty"`
 	// Direct configures the local reverse proxy and is only meaningful for
 	// TransportDirect.
 	Direct PublicDirect `yaml:"direct,omitempty"`
@@ -158,22 +116,9 @@ type PublicDirect struct {
 	ACMECA string `yaml:"acme_ca,omitempty"`
 }
 
-// PublicRelay stores the sish target. The private key lives next to
-// config.yaml as tunnel_key (see paths.TunnelKeyFile).
-type PublicRelay struct {
-	SSHHost string `yaml:"ssh_host"`
-	SSHPort int    `yaml:"ssh_port"`
-}
-
-// RelayBaseDomain returns the base domain an operator-hosted relay install
-// gets by default.
-func RelayBaseDomain(slug string) string {
-	return slug + "." + DefaultRootDomain
-}
-
 // Default returns a Config pre-populated with the values used for a fresh
-// install. The caller fills in school identity, admin hash, and dex fields
-// during setup.
+// install. The caller fills in school identity, admin hash and address during
+// setup.
 func Default() *Config {
 	return &Config{
 		Version:    ConfigVersion,
@@ -182,11 +127,7 @@ func Default() *Config {
 			URL: "https://raw.githubusercontent.com/lngstck/catalog/main",
 		},
 		Public: Public{
-			Transport: TransportRelay,
-			Relay: PublicRelay{
-				SSHHost: DefaultRelaySSHHost,
-				SSHPort: DefaultRelaySSHPort,
-			},
+			Transport: TransportDirect,
 		},
 	}
 }
@@ -209,62 +150,7 @@ func Load() (*Config, error) {
 	if c.SetupState == "" {
 		c.SetupState = SetupStateNeedsSetup
 	}
-	upgradeFromV2(&c, data)
 	return &c, nil
-}
-
-// legacyConfig is the part of schema v2 that moved rather than disappeared.
-// It is a separate type so Config itself carries no field that exists only to
-// be thrown away — and so this whole block can be deleted in one piece once no
-// v2 file is left in the field.
-type legacyConfig struct {
-	Tunnel PublicRelay `yaml:"tunnel"`
-}
-
-// upgradeFromV2 fills in what schema v3 expects from what schema v2 wrote.
-//
-// v2 had no public: section at all: the address was implicit
-// ({slug}.learningstack.online) and the relay endpoint lived in a top-level
-// tunnel: block. Loading such a file without this step yields an empty relay
-// host and port — and the first Save then drops the old block, so the values
-// are gone for good. The visible failure is worse than it sounds: ssh dials
-// port 0, the login tunnel never comes up, and the school is offline until
-// somebody reconstructs the file by hand.
-//
-// Each step only fills a value that is not already set, so running this on a
-// current file changes nothing.
-func upgradeFromV2(c *Config, raw []byte) {
-	if c.Public.Transport == "" {
-		// Every v2 install was a relay install. That is not a guess: the
-		// direct transport did not exist.
-		c.Public.Transport = TransportRelay
-	}
-	if c.Public.BaseDomain == "" && c.School.Slug != "" {
-		c.Public.BaseDomain = RelayBaseDomain(c.School.Slug)
-	}
-	// The old block is read only from an older file. On a current file a
-	// leftover tunnel: key must not win over what public.relay says.
-	if c.Version < ConfigVersion && c.Public.Transport == TransportRelay && c.Public.Relay.SSHHost == "" {
-		var legacy legacyConfig
-		// A parse error here means the tunnel: block is malformed or absent;
-		// the defaults below cover both.
-		_ = yaml.Unmarshal(raw, &legacy)
-		c.Public.Relay = legacy.Tunnel
-	}
-	if c.Public.Transport == TransportRelay {
-		if c.Public.Relay.SSHHost == "" {
-			c.Public.Relay.SSHHost = DefaultRelaySSHHost
-		}
-		if c.Public.Relay.SSHPort == 0 {
-			c.Public.Relay.SSHPort = DefaultRelaySSHPort
-		}
-	}
-	// Mark the file as current so the next Save writes today's schema. A file
-	// from a *newer* build is left alone: rewriting it downward would silently
-	// discard whatever that build added.
-	if c.Version < ConfigVersion {
-		c.Version = ConfigVersion
-	}
 }
 
 // Save writes config.yaml atomically with 0640 permissions. The parent
@@ -290,8 +176,7 @@ func (c *Config) Save() error {
 	return paths.AtomicWrite(paths.ConfigFile(), out, FilePerm)
 }
 
-// IsReady is true once setup has completed and the tunnel client is
-// registered on System 1.
+// IsReady is true once setup has completed.
 func (c *Config) IsReady() bool {
 	return c != nil && c.SetupState == SetupStateReady
 }
@@ -307,12 +192,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("unsupported config version %d (want %d)", c.Version, ConfigVersion)
 	}
 	switch c.SetupState {
-	case SetupStateNeedsSetup, SetupStateAwaitingRegistration, SetupStateReady:
+	case SetupStateNeedsSetup, SetupStateReady:
 	default:
 		return fmt.Errorf("unknown setup_state %q", c.SetupState)
 	}
 	switch c.Public.Transport {
-	case TransportRelay, TransportDirect:
+	case TransportDirect:
 	case "":
 		return errors.New("public.transport must be set")
 	default:

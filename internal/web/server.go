@@ -133,13 +133,7 @@ func (s *Server) routes() {
 	// Setup (needs_setup state).
 	s.mux.HandleFunc("GET /setup", s.handleSetup)
 	s.mux.HandleFunc("POST /setup", s.handleSetupPost)
-
-	// Registration (awaiting_registration state).
-	s.mux.HandleFunc("GET /setup/register", s.handleRegister)
-	s.mux.HandleFunc("GET /setup/register/download", s.handleRegisterDownload)
-	s.mux.HandleFunc("GET /setup/status", s.handleSetupStatus)
 	s.mux.HandleFunc("GET /setup/preflight", s.handleSetupPreflight)
-	s.mux.HandleFunc("POST /setup/register/skip", s.handleRegisterSkip)
 
 	// Login/Logout (ready state).
 	s.mux.HandleFunc("GET /login", s.handleLogin)
@@ -180,23 +174,15 @@ func (s *Server) routes() {
 	// worker), so it uses authPost like install — not authPostLocked.
 	s.mux.HandleFunc("POST /backups/{name}/restore", s.authPost(s.handleBackupRestore))
 
-	// Oeffentlicher Zugang (ready + auth). Hiess bis Config v3 "Tunnel" —
-	// ein Name, der nur eine der beiden Betriebsarten beschreibt.
+	// Zugang (ready + auth): Adressen von Login, Verwaltung und Apps.
 	s.mux.HandleFunc("GET /public", s.requireAuth(s.handlePublic))
 	s.mux.HandleFunc("GET /public/health", s.requireAuth(s.handlePublicHealth))
-	s.mux.HandleFunc("POST /public/test", s.authPost(s.handlePublicTest))
 	s.mux.HandleFunc("POST /public/auth/start", s.authPostLocked(s.handleAuthPublishStart))
 	s.mux.HandleFunc("POST /public/auth/stop", s.authPostLocked(s.handleAuthPublishStop))
 	s.mux.HandleFunc("POST /public/admin/start", s.authPostLocked(s.handleAdminPublishStart))
 	s.mux.HandleFunc("POST /public/admin/stop", s.authPostLocked(s.handleAdminPublishStop))
 	s.mux.HandleFunc("POST /apps/{id}/public/enable", s.authPostLocked(s.handleAppPublishEnable))
 	s.mux.HandleFunc("POST /apps/{id}/public/disable", s.authPostLocked(s.handleAppPublishDisable))
-
-	// Alte Adresse: Lesezeichen und getippte Pfade sollen nicht ins Leere
-	// laufen. Nur GET — die POST-Routen hatten nie externe Aufrufer.
-	s.mux.HandleFunc("GET /tunnel", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/public", http.StatusMovedPermanently)
-	})
 
 	// LLM-Admin (ready + auth). UI sitzt unter /llm mit Tabs (Provider,
 	// Personas, API-Keys); POST-Endpunkte mutieren die config.yaml und
@@ -371,12 +357,8 @@ func (s *Server) render(w http.ResponseWriter, tmpl string, data any) {
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// State gating.
-		switch s.cfg.SetupState {
-		case config.SetupStateNeedsSetup:
+		if s.cfg.SetupState == config.SetupStateNeedsSetup {
 			http.Redirect(w, r, "/setup", http.StatusSeeOther)
-			return
-		case config.SetupStateAwaitingRegistration:
-			http.Redirect(w, r, "/setup/register", http.StatusSeeOther)
 			return
 		}
 
@@ -455,9 +437,9 @@ func (s *Server) commitState(working *config.State) error {
 
 // requireCSRF validates the csrf_token form field against the current session's
 // token (ARCHITECTURE.md §16). It guards every authenticated, state-changing
-// POST. Pre-auth POSTs (/login, /setup, /setup/register/skip) cannot carry a
-// session-bound token and are intentionally not wrapped — they rely on the
-// SameSite=Lax cookie and the setup-state machine instead.
+// POST. Pre-auth POSTs (/login, /setup) cannot carry a session-bound token
+// and are intentionally not wrapped — they rely on the SameSite=Lax cookie
+// and the setup state instead.
 //
 // It parses the form here so the token is available; r.ParseForm caches, so
 // handlers calling it again are unaffected. All stackctl forms are urlencoded.
@@ -540,12 +522,12 @@ func slugify(name string) string {
 	return result
 }
 
-// bootstrapPublisher brings the public access up: the login first, then every
-// app that was public before, then background supervision.
+// bootstrapPublisher brings the addresses up: the login first, then every
+// app that was published before, then background supervision.
 //
 // It runs twice in a stackctl lifetime — once at startup for an install that
-// is already set up, and once the moment registration completes, so the admin
-// does not have to restart the service to get a login. Both paths must do the
+// is already set up, and once the moment setup completes, so the admin does
+// not have to restart the service to get a login. Both paths must do the
 // same thing, which is why they share this method rather than each keeping
 // their own sequence.
 func (s *Server) bootstrapPublisher() {

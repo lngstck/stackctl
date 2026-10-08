@@ -61,23 +61,6 @@ func byID(t *testing.T, checks []Check, id string) Check {
 	return Check{}
 }
 
-// The operator relay is the frictionless path: the school prepares nothing,
-// so the wizard must not present it with DNS homework.
-func TestRelayOperatorNeedsNoPreparation(t *testing.T) {
-	p := proberWith(fakeResolver{}, nil, true)
-
-	checks := p.Run(context.Background(), Input{Mode: ModeRelayOperator})
-
-	if got := Worst(checks); got != StatusOK {
-		t.Errorf("operator relay reported %q, want %q: %+v", got, StatusOK, checks)
-	}
-	for _, c := range checks {
-		if c.ID == "dns_wildcard" || strings.HasPrefix(c.ID, "port_") {
-			t.Errorf("operator relay must not check %q", c.ID)
-		}
-	}
-}
-
 func TestDirectAllPrerequisitesMet(t *testing.T) {
 	p := proberWith(fakeResolver{"*.ls.gym-phoenix.de": {"198.51.100.7"}}, []string{"198.51.100.7"}, true)
 
@@ -110,25 +93,14 @@ func TestDirectSingleRecordDoesNotPassAsWildcard(t *testing.T) {
 	}
 }
 
-// Wohin der Eintrag zeigen muss, unterscheidet sich je Betriebsart. Ein
-// Hinweis auf das falsche Ziel ist schlimmer als keiner: wer ihm folgt, baut
-// eine Auflösung, die stimmt, und einen Zugang, der trotzdem nie funktioniert.
-func TestWildcardHintNamesTheRightTarget(t *testing.T) {
+// Der Hinweis muss sagen, wohin der Eintrag zeigen soll — sonst baut die
+// Admin eine Auflösung, die stimmt, und einen Zugang, der nie funktioniert.
+func TestWildcardHintNamesTheTarget(t *testing.T) {
 	p := proberWith(fakeResolver{}, nil, true)
 
 	direct := byID(t, p.Run(context.Background(), Input{Mode: ModeDirect, BaseDomain: "ls.gym-phoenix.de"}), "dns_wildcard")
 	if !strings.Contains(direct.Detail, "auf diesen Server") {
-		t.Errorf("direkter Betrieb: Hinweis muss auf diesen Server zeigen: %q", direct.Detail)
-	}
-
-	relay := byID(t, p.Run(context.Background(), Input{
-		Mode: ModeRelayOwn, BaseDomain: "ls.gym-phoenix.de", RelaySSHHost: "sish.learningstack.online",
-	}), "dns_wildcard")
-	if !strings.Contains(relay.Detail, "auf den Relay") {
-		t.Errorf("Relay-Betrieb: Hinweis muss auf den Relay zeigen: %q", relay.Detail)
-	}
-	if strings.Contains(relay.Detail, "auf diesen Server zeigen") {
-		t.Errorf("Relay-Betrieb darf nicht auf diesen Server verweisen: %q", relay.Detail)
+		t.Errorf("Hinweis muss auf diesen Server zeigen: %q", direct.Detail)
 	}
 }
 
@@ -175,52 +147,6 @@ func TestPortCheckWithoutPrivilegesWarns(t *testing.T) {
 	}
 }
 
-// The school's own domain at the relay must point at the relay. Pointing it
-// at the school's own server looks plausible and silently never works.
-func TestRelayOwnDomainPointingAtOwnServerFails(t *testing.T) {
-	p := proberWith(fakeResolver{
-		"*.ls.gym-phoenix.de":       {"198.51.100.7"}, // the school's server
-		"sish.learningstack.online": {"203.0.113.9"},
-	}, []string{"198.51.100.7"}, true)
-
-	checks := p.Run(context.Background(), Input{
-		Mode:         ModeRelayOwn,
-		BaseDomain:   "ls.gym-phoenix.de",
-		RelaySSHHost: "sish.learningstack.online",
-	})
-
-	got := byID(t, checks, "dns_target")
-	if got.Status != StatusFail {
-		t.Errorf("target check = %q, want fail", got.Status)
-	}
-	if !strings.Contains(got.Detail, "203.0.113.9") {
-		t.Errorf("detail should name the relay address so the admin can fix the record: %q", got.Detail)
-	}
-	// Ports belong to the direct mode only — nothing binds them here.
-	for _, c := range checks {
-		if strings.HasPrefix(c.ID, "port_") {
-			t.Errorf("relay mode must not check ports: %+v", c)
-		}
-	}
-}
-
-func TestRelayOwnDomainPointingAtRelayPasses(t *testing.T) {
-	p := proberWith(fakeResolver{
-		"*.ls.gym-phoenix.de":       {"203.0.113.9"},
-		"sish.learningstack.online": {"203.0.113.9"},
-	}, []string{"198.51.100.7"}, true)
-
-	checks := p.Run(context.Background(), Input{
-		Mode:         ModeRelayOwn,
-		BaseDomain:   "ls.gym-phoenix.de",
-		RelaySSHHost: "sish.learningstack.online",
-	})
-
-	if got := Worst(checks); got != StatusOK {
-		t.Errorf("worst = %q, want ok: %+v", got, checks)
-	}
-}
-
 // A pasted wildcard record is the single most likely typo, and it must be
 // caught before it reaches the Dex issuer.
 func TestInvalidDomainStopsBeforeNetworkChecks(t *testing.T) {
@@ -250,41 +176,13 @@ func TestUnknownModeIsRejected(t *testing.T) {
 }
 
 func TestModeDerivedFromConfig(t *testing.T) {
-	tests := []struct {
-		name string
-		cfg  *config.Config
-		want string
-	}{
-		{
-			name: "operator relay",
-			cfg: &config.Config{
-				School: config.School{Slug: "phoenix"},
-				Public: config.Public{Transport: config.TransportRelay, BaseDomain: "phoenix.learningstack.online"},
-			},
-			want: ModeRelayOperator,
-		},
-		{
-			name: "own domain at the relay",
-			cfg: &config.Config{
-				School: config.School{Slug: "phoenix"},
-				Public: config.Public{Transport: config.TransportRelay, BaseDomain: "ls.gym-phoenix.de"},
-			},
-			want: ModeRelayOwn,
-		},
-		{
-			name: "direct",
-			cfg: &config.Config{
-				School: config.School{Slug: "phoenix"},
-				Public: config.Public{Transport: config.TransportDirect, BaseDomain: "ls.gym-phoenix.de"},
-			},
-			want: ModeDirect,
-		},
+	direct := &config.Config{Public: config.Public{Transport: config.TransportDirect, BaseDomain: "ls.gym-phoenix.de"}}
+	if got := Mode(direct); got != ModeDirect {
+		t.Errorf("Mode = %q, want %q", got, ModeDirect)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Mode(tt.cfg); got != tt.want {
-				t.Errorf("Mode = %q, want %q", got, tt.want)
-			}
-		})
+	// A transport this build does not know has no mode, rather than being
+	// mistaken for one that would show the wrong instructions.
+	if got := Mode(&config.Config{Public: config.Public{Transport: "relay"}}); got != "" {
+		t.Errorf("Mode(relay) = %q, want empty", got)
 	}
 }

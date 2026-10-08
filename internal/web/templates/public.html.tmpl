@@ -2,14 +2,10 @@
 {{template "head" .}}
 {{template "sidebar-layout-start" .PageData}}
 
-<h2 class="mb-2">Öffentlicher Zugang</h2>
+<h2 class="mb-2">Zugang</h2>
 
-{{if .TestDone}}
-  {{if eq .TestResult "ok"}}
-    <div role="alert" data-variant="success" class="mb-2">SSH-Verbindung erfolgreich.</div>
-  {{else}}
-    <div role="alert" data-variant="danger" class="mb-2">{{.TestResult}}</div>
-  {{end}}
+{{if .Notice}}
+  <div role="alert" data-variant="danger" class="mb-2">{{.Notice}}</div>
 {{end}}
 
 {{/* Betriebsart — beantwortet die Frage, auf die sich alles Weitere bezieht */}}
@@ -19,20 +15,10 @@
     {{if .BaseDomain}}<code>*.{{.BaseDomain}}</code>{{end}}
   </div>
   <p class="sub mb-0" style="font-size:0.85rem;margin-top:0.4rem;">
-    {{if eq .Mode "relay_operator"}}
-      Die Apps sind über den Relay des Betreibers erreichbar. DNS und
-      Zertifikate liegen dort — dieser Server baut nur die ausgehende
-      Verbindung auf.
-    {{else if eq .Mode "relay_own"}}
-      Die Apps sind unter der Domain der Schule erreichbar, der Verkehr läuft
-      aber über den Relay des Betreibers. Der Wildcard-Eintrag muss deshalb
-      auf den Relay zeigen, nicht auf diesen Server.
-    {{else}}
-      Dieser Server nimmt den Verkehr selbst entgegen und holt seine
-      Zertifikate über Let's Encrypt. Voraussetzung bleibt dauerhaft: der
-      Wildcard-Eintrag zeigt hierher und Port 80 und 443 sind aus dem
-      Internet erreichbar.
-    {{end}}
+    Dieser Server nimmt den Verkehr selbst entgegen und holt seine
+    Zertifikate über Let's Encrypt. Voraussetzung bleibt dauerhaft: der
+    Wildcard-Eintrag zeigt hierher und Port 80 und 443 sind aus dem
+    Internet erreichbar.
   </p>
 </article>
 
@@ -47,45 +33,12 @@
   </div>
 </article>
 
-{{if .IsRelay}}
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
-  {{/* SSH Key card */}}
-  <article class="card">
-    <h4 class="mb-1">SSH-Key</h4>
-    {{if .KeyExists}}
-      <div class="key-display mb-1">{{.SSHPubKey}}</div>
-      <p class="sub" style="font-size:0.85rem;">
-        Ziel: <code>{{.SSHHost}}:{{.SSHPort}}</code>
-      </p>
-    {{else}}
-      <div role="alert" data-variant="warning">
-        Kein SSH-Key vorhanden. Der Key wird beim Setup automatisch erzeugt.
-      </div>
-    {{end}}
-  </article>
-
-  {{/* Connection test card */}}
-  {{if .CanTest}}
-  <article class="card">
-    <h4 class="mb-1">Verbindungstest</h4>
-    <p class="sub mb-2" style="font-size:0.85rem;">
-      Testet den SSH-Handshake zu <code>{{.SSHHost}}</code>.
-    </p>
-    <form method="POST" action="/public/test">
-      {{csrfField $.CSRFToken}}
-      <button type="submit" class="small">Verbindung testen</button>
-    </form>
-  </article>
-  {{end}}
-</div>
-{{end}}
-
 {{/* Dienste von stackctl selbst — im Gegensatz zu den Apps weiter unten */}}
 <h3 class="mb-1">Anmeldung und Verwaltung</h3>
 <p class="sub mb-1" style="font-size:0.85rem;">
-  Die Anmeldung ist Pflicht und wird beim Start automatisch veröffentlicht
-  ({{if .IsRelay}}Tunnel, bei Abbruch selbsttätig mit Backoff neu verbunden{{else}}Route auf den lokalen Dex{{end}});
-  manuelles Stoppen/Starten nur zur Fehlerbehebung. Die Verwaltung ist das
+  Die Anmeldung ist Pflicht und wird beim Start automatisch eingerichtet
+  (Route auf den lokalen Dex); manuelles Stoppen/Starten nur zur
+  Fehlerbehebung. Die Verwaltung ist das
   Gegenteil: standardmäßig aus, und nur auf ausdrückliche Entscheidung hin an.
 </p>
 <table class="mb-3" style="width:100%;">
@@ -99,7 +52,7 @@
       <td>
         <span class="status-dot {{.AuthStatus}}"></span>
         {{if eq .AuthStatus "running"}}Aktiv
-        {{else if eq .AuthStatus "error"}}Fehler{{if .IsRelay}} (Reconnect laeuft){{end}}
+        {{else if eq .AuthStatus "error"}}Fehler
         {{else}}Gestoppt
         {{end}}
       </td>
@@ -111,18 +64,18 @@
           </form>
         {{else if eq .AuthStatus "error"}}
           <form method="POST" action="/public/auth/start" style="display:inline;"
-                title="Erneut veroeffentlichen">
+                title="Route neu einrichten">
             {{csrfField $.CSRFToken}}
             <button type="submit" class="small">Neu verbinden</button>
           </form>
           <form method="POST" action="/public/auth/stop" style="display:inline;"
-                onsubmit="return confirm('Anmeldung abschalten? Login ueber moin.schule funktioniert dann fuer ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
+                onsubmit="return confirm('Anmeldung abschalten? Der Schul-Login funktioniert dann für ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
             {{csrfField $.CSRFToken}}
             <button type="submit" class="small ghost" style="color:var(--danger);">Stoppen</button>
           </form>
         {{else}}
           <form method="POST" action="/public/auth/stop" style="display:inline;"
-                onsubmit="return confirm('Anmeldung abschalten? Login ueber moin.schule funktioniert dann fuer ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
+                onsubmit="return confirm('Anmeldung abschalten? Der Schul-Login funktioniert dann für ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
             {{csrfField $.CSRFToken}}
             <button type="submit" class="small ghost" style="color:var(--danger);">Stoppen</button>
           </form>
@@ -196,7 +149,7 @@
       <td>{{.Port}}</td>
       <td>
         {{if .Published}}
-          <a href="https://{{.PublicHost}}" target="_blank" rel="noopener" class="tunnel-url">{{.PublicHost}}</a>
+          <a href="https://{{.PublicHost}}" target="_blank" rel="noopener" class="host-badge">{{.PublicHost}}</a>
         {{else}}
           <span class="sub">—</span>
         {{end}}
