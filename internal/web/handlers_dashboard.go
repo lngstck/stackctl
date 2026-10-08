@@ -155,7 +155,9 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2) Pro installierter App: Health (läuft?), Tunnel-Status, Update.
-	for id, cs := range st.Containers {
+	//    Sortiert, damit die Karten nicht bei jedem Laden die Plätze tauschen.
+	for _, id := range st.InstalledIDs() {
+		cs := st.Containers[id]
 		data.AppsTotal++
 		running := docker.IsRunning("ls-" + id)
 		if running {
@@ -173,8 +175,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 					Icon:        "⚠",
 					Title:       infraName + " läuft nicht",
 					Detail:      "Ein Pflicht-Dienst ist gestoppt — abhängige Apps funktionieren ohne ihn nicht.",
-					Action:      "/apps",
-					ActionLabel: "Zu den Apps",
+					Action:      "/apps/" + id,
+					ActionLabel: "Öffnen",
 				})
 			} else {
 				data.Issues = append(data.Issues, dashIssue{

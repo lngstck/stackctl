@@ -92,8 +92,10 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// App publication.
-	for id, cs := range s.snapState().Containers {
+	// App publication, sorted so the rows keep their place between loads.
+	st := s.snapState()
+	for _, id := range st.InstalledIDs() {
+		cs := st.Containers[id]
 		if isMandatoryApp(s.cfg, id) {
 			continue // infrastructure, not shown in the app list
 		}

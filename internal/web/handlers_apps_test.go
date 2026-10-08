@@ -1,8 +1,12 @@
 package web
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/lngstck/stackctl/internal/config"
 )
 
 func TestLinkifyAdminNotes(t *testing.T) {
@@ -58,5 +62,37 @@ func TestLinkifyAdminNotes(t *testing.T) {
 
 	if linkifyAdminNotes("") != "" {
 		t.Error("leerer Input muss leer bleiben")
+	}
+}
+
+// Ohne Katalog-Index fehlt nur das Angebot. Installierte Apps und die
+// Meldung der Aktion, die hierher umgeleitet hat, muessen trotzdem erscheinen
+// — vorher brach die Seite ab und zeigte nur "Katalog nicht geladen".
+func TestAppsPageWithoutCatalogKeepsInstalledAppsAndMessage(t *testing.T) {
+	s, st := testServerWithPublisher(t, &fakePublisher{})
+	st.Containers["sponsorenlauf"] = &config.ContainerState{ID: "sponsorenlauf", Name: "Sponsorenlauf"}
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loadTemplates: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	s.handleApps(rec, httptest.NewRequest(http.MethodGet, "/apps?msg=pylearn+gestartet", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		"PyLearn",
+		"Sponsorenlauf",
+		"pylearn gestartet",
+		"Katalog ist noch nicht geladen",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Seite enthaelt %q nicht", want)
+		}
+	}
+	if strings.Contains(body, "Alle Apps sind bereits installiert") {
+		t.Error("ohne Katalog behauptet die Seite, alles sei installiert")
 	}
 }

@@ -29,6 +29,9 @@ type appsData struct {
 	Available []appListEntry
 	Message   string
 	IsError   bool
+	// CatalogMissing is true when the catalog index has not been synced yet.
+	// It is a notice of its own, so it never displaces Message.
+	CatalogMissing bool
 }
 
 // appListEntry holds one entry in the app catalog list.
@@ -165,50 +168,43 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 		PageData: s.pageData("apps"),
 	}
 
-	// Load catalog index.
+	// Without the index only the offer is missing, not what is installed.
+	// Bailing out here used to hide every installed app — and the ?msg= of
+	// the action that just redirected here — so the admin landed on an empty
+	// page right after "Zu den Apps" from a dashboard alarm.
 	idx, err := catalog.LoadIndex()
 	if err != nil {
-		data.Message = "Katalog nicht geladen. Bitte zuerst synchronisieren."
-		data.IsError = true
-		s.render(w, "apps.html.tmpl", data)
-		return
+		data.CatalogMissing = true
+		idx = &catalog.Index{}
 	}
 
 	st := s.snapState()
+	listed := make(map[string]bool, len(idx.Apps))
 	for _, app := range idx.Apps {
-		cs, installed := st.Containers[app.ID]
-		entry := appListEntry{
-			ID:          app.ID,
-			Name:        app.Name,
-			Category:    app.Category,
-			Description: app.Description,
-			Version:     "",
-			IsInstalled: installed,
-			IsMandatory: isMandatoryApp(s.cfg, app.ID),
-		}
+		listed[app.ID] = true
+		data.add(s.appEntry(app, st.Containers[app.ID]))
+	}
 
-		if installed {
-			entry.Version = cs.VersionInstalled
-			containerName := "ls-" + app.ID
-			if docker.IsRunning(containerName) {
-				entry.Status = "running"
-			} else {
-				entry.Status = "stopped"
-			}
-			// Update-Verfuegbarkeit aus gecachter Definition ableiten.
-			if def, err := catalog.LoadDefinition(app.ID); err == nil {
-				if catalog.HasUpdate(cs.VersionInstalled, def.Version) {
-					entry.UpdateAvailable = true
-					entry.UpdateTo = def.Version
-					entry.UpdateBreaking = def.Breaking
-				}
-			}
-			data.Installed = append(data.Installed, entry)
-		} else {
-			entry.Status = ""
-			data.Available = append(data.Available, entry)
+	// Installed apps the index does not list — no index at all, or an app
+	// that has since left the catalog — still belong on the page. The cached
+	// definition fills in what state.yaml does not know.
+	for _, id := range st.InstalledIDs() {
+		if listed[id] {
+			continue
 		}
-		data.All = append(data.All, entry)
+		cs := st.Containers[id]
+		summary := catalog.AppSummary{ID: id, Name: cs.Name}
+		if def, err := catalog.LoadDefinition(id); err == nil {
+			summary.Category = def.Category
+			summary.Description = def.Description
+			if summary.Name == "" {
+				summary.Name = def.Name
+			}
+		}
+		if summary.Name == "" {
+			summary.Name = id
+		}
+		data.add(s.appEntry(summary, cs))
 	}
 
 	pinMandatoryFirst(data.All)
@@ -220,6 +216,48 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.render(w, "apps.html.tmpl", data)
+}
+
+// appEntry builds one card for the apps page. cs is nil for an app that is
+// not installed.
+func (s *Server) appEntry(app catalog.AppSummary, cs *config.ContainerState) appListEntry {
+	entry := appListEntry{
+		ID:          app.ID,
+		Name:        app.Name,
+		Category:    app.Category,
+		Description: app.Description,
+		IsInstalled: cs != nil,
+		IsMandatory: isMandatoryApp(s.cfg, app.ID),
+	}
+	if cs == nil {
+		return entry
+	}
+
+	entry.Version = cs.VersionInstalled
+	if docker.IsRunning("ls-" + app.ID) {
+		entry.Status = "running"
+	} else {
+		entry.Status = "stopped"
+	}
+	// Update-Verfuegbarkeit aus gecachter Definition ableiten.
+	if def, err := catalog.LoadDefinition(app.ID); err == nil {
+		if catalog.HasUpdate(cs.VersionInstalled, def.Version) {
+			entry.UpdateAvailable = true
+			entry.UpdateTo = def.Version
+			entry.UpdateBreaking = def.Breaking
+		}
+	}
+	return entry
+}
+
+// add files an entry under "Alle" and under its tab.
+func (d *appsData) add(e appListEntry) {
+	if e.IsInstalled {
+		d.Installed = append(d.Installed, e)
+	} else {
+		d.Available = append(d.Available, e)
+	}
+	d.All = append(d.All, e)
 }
 
 func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {

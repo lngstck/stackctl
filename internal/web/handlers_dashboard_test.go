@@ -3,6 +3,7 @@
 package web
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -179,4 +180,53 @@ func TestRenderAppsWithMandatoryBadge(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "Pflicht-Dienst — zuerst installieren") {
 		t.Error("rendered apps page missing mandatory badge")
 	}
+}
+
+// Die Karten "laeuft nicht" kommen aus einer Map. Ohne Sortierung tauschten
+// sie bei jedem Laden die Plaetze — wer ein Problem gerade angesehen hat,
+// fand es beim naechsten Laden woanders.
+func TestDashboardIssuesKeepTheirOrder(t *testing.T) {
+	s, st := testServerWithPublisher(t, &fakePublisher{})
+	for _, id := range []string{"zeta", "alpha", "mitte", "beta", "omega"} {
+		st.Containers[id] = &config.ContainerState{ID: id, Name: id}
+	}
+	s.jobs = newJobStore()
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loadTemplates: %v", err)
+	}
+
+	order := func() []int {
+		rec := httptest.NewRecorder()
+		s.handleDashboard(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		body := rec.Body.String()
+		var pos []int
+		for _, name := range []string{"alpha", "beta", "mitte", "omega", "PyLearn", "zeta"} {
+			pos = append(pos, strings.Index(body, name+" läuft nicht"))
+		}
+		return pos
+	}
+
+	first := order()
+	for i := 1; i < len(first); i++ {
+		if first[i-1] < 0 || first[i] < first[i-1] {
+			t.Fatalf("Karten nicht alphabetisch nach ID: Positionen %v", first)
+		}
+	}
+	for i := 0; i < 5; i++ {
+		if got := order(); !equalInts(got, first) {
+			t.Fatalf("Reihenfolge wechselt zwischen zwei Aufrufen: %v vs. %v", first, got)
+		}
+	}
+}
+
+func equalInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
