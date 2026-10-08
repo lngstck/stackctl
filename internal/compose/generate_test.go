@@ -15,7 +15,7 @@ func TestBuildServiceBlockMinimal(t *testing.T) {
 		ID:   "testing",
 		Name: "Testing",
 		Image: ImageSpec{
-			Name: "registry.learningstack.online/testing",
+			Name: "ghcr.io/lngstck/testing",
 			Tag:  "1.0.0",
 		},
 		Ports: []PortSpec{
@@ -25,7 +25,7 @@ func TestBuildServiceBlockMinimal(t *testing.T) {
 
 	svc := BuildServiceBlock(def, Options{})
 
-	if svc["image"] != "registry.learningstack.online/testing:1.0.0" {
+	if svc["image"] != "ghcr.io/lngstck/testing:1.0.0" {
 		t.Errorf("image = %v", svc["image"])
 	}
 	if svc["container_name"] != "ls-testing" {
@@ -45,7 +45,7 @@ func TestBuildServiceBlockFull(t *testing.T) {
 		ID:   "langflow",
 		Name: "Langflow",
 		Image: ImageSpec{
-			Name: "registry.learningstack.online/langflow",
+			Name: "ghcr.io/lngstck/langflow",
 			Tag:  "1.1.0",
 		},
 		Ports: []PortSpec{
@@ -194,7 +194,7 @@ func TestImageSpecFullImage(t *testing.T) {
 		name, tag, want string
 	}{
 		{"postgres", "16.2", "postgres:16.2"},
-		{"registry.learningstack.online/testing", "1.0.0", "registry.learningstack.online/testing:1.0.0"},
+		{"ghcr.io/lngstck/testing", "1.0.0", "ghcr.io/lngstck/testing:1.0.0"},
 		{"ubuntu", "", "ubuntu"},
 	}
 	for _, tc := range cases {

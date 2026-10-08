@@ -36,7 +36,7 @@ version: "1.1.0"
 description: Visueller KI-Flow Builder
 category: education
 image:
-  name: registry.learningstack.online/langflow
+  name: ghcr.io/lngstck/langflow
   tag: "1.1.0"
 ports:
   - host: 8320
@@ -171,7 +171,7 @@ func TestFetchAndLoadDefinition(t *testing.T) {
 	if def.ID != "langflow" {
 		t.Errorf("ID = %q", def.ID)
 	}
-	if def.Image.FullImage() != "registry.learningstack.online/langflow:1.1.0" {
+	if def.Image.FullImage() != "ghcr.io/lngstck/langflow:1.1.0" {
 		t.Errorf("image = %q", def.Image.FullImage())
 	}
 	if def.OIDC == nil || def.OIDC.ClientID != "langflow" {
@@ -274,7 +274,7 @@ func TestToCompose(t *testing.T) {
 	if cd.ID != "langflow" {
 		t.Errorf("compose ID = %q", cd.ID)
 	}
-	if cd.Image.FullImage() != "registry.learningstack.online/langflow:1.1.0" {
+	if cd.Image.FullImage() != "ghcr.io/lngstck/langflow:1.1.0" {
 		t.Errorf("compose image = %q", cd.Image.FullImage())
 	}
 }
