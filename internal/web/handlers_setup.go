@@ -240,6 +240,11 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: save env after setup: %v", err)
 	}
 
+	// The wildcard record comes before the redirect: the first app the
+	// admin installs needs it. A failure does not undo setup — it shows on
+	// the dashboard, and the next start tries again.
+	_ = s.syncWildcard(r.Context())
+
 	// The admin password guards everything from here on.
 	if err := removeSetupCode(); err != nil {
 		log.Printf("web: remove setup code: %v", err)

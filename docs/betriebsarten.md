@@ -14,7 +14,7 @@ erkennt, dass es funktioniert.
 
 |  | Erreichbar | Vorzubereiten | Zertifikat |
 |---|---|---|---|
-| **Nur im Schulnetz** (Standard) | im Schulnetz | Wildcard-DNS auf die LAN-IP, deSEC-Konto, ein CNAME | ein Wildcard-Zertifikat über DNS-01 |
+| **Nur im Schulnetz** (Standard) | im Schulnetz | deSEC-Konto, zwei NS-Einträge beim DNS-Anbieter | ein Wildcard-Zertifikat über DNS-01 |
 | **Direkter Betrieb** (erweitert) | aus dem Internet | Wildcard-DNS auf die öffentliche IP, Port 80/443 offen | je Adresse eins über HTTP-01 |
 
 Gemeinsam ist beiden:
@@ -47,26 +47,46 @@ außen nicht.
 
 ### Vorbereitung
 
-1. **deSEC-Konto** (kostenlos, [desec.io](https://desec.io)): dort eine Domain
-   wie `meine-schule.dedyn.io` anlegen und einen API-Token erzeugen. deSEC
-   hat die DNS-API, die der Anbieter der Schuldomain meist nicht hat.
+Die Domain geht an [deSEC](https://desec.io) — einen gemeinnützigen
+DNS-Anbieter mit API. Dort schreibt Caddy die Zertifikatsprüfung, und
+stackctl legt den Eintrag für die Apps an. Beim Anbieter der Schuldomain
+bleiben nur zwei Einträge.
+
+1. **deSEC-Konto** anlegen (kostenlos) und dort die Domain hinzufügen, z. B.
+   `apps.gymnasium-musterstadt.de`. Es muss nicht die ganze Schuldomain sein.
 2. **Zwei Einträge beim DNS-Anbieter der Schuldomain:**
 
    ```
-   *.apps.gymnasium-musterstadt.de.                 A      192.168.10.5
-   _acme-challenge.apps.gymnasium-musterstadt.de.   CNAME  _acme-challenge.meine-schule.dedyn.io.
+   apps.gymnasium-musterstadt.de.   NS   ns1.desec.io.
+   apps.gymnasium-musterstadt.de.   NS   ns2.desec.org.
    ```
 
-   - Der Wildcard zeigt auf die **LAN-Adresse** dieses Servers.
-   - Der CNAME lenkt die Zertifikatsprüfung zu deSEC um. Den TXT-Eintrag
-     dort schreibt Caddy selbst, mit dem Token.
-   - Manche Anbieter nehmen Einträge mit Unterstrich nur über den Import
-     einer Zonendatei an.
-3. Token und CNAME-Ziel im Assistenten eintragen. Der Assistent zeigt die
-   beiden Einträge passend zur eingegebenen Domain an.
+   Damit beantwortet deSEC alle Namen unter dieser Domain. Je nach Anbieter
+   dauert es einige Minuten bis Stunden, bis das überall angekommen ist.
+3. **Token** bei deSEC erzeugen und im Assistenten eintragen.
 
-Verwaltet deSEC die Schuldomain selbst, entfällt der CNAME: dann das Feld
-„Ziel bei deSEC“ leer lassen.
+Den Eintrag `*.apps.gymnasium-musterstadt.de` auf die Adresse des Servers im
+Schulnetz legt stackctl selbst bei deSEC an — beim Abschluss der Einrichtung,
+bei jedem Start und wenn sich die Server-IP in den Einstellungen ändert.
+Andere Einträge in der Zone fasst stackctl nicht an.
+
+**Hinweis:** Freie Namen unter `dedyn.io` vergibt deSEC derzeit nicht. Das
+ist hier auch nicht nötig — die Schule bringt ihre eigene Domain mit.
+
+### Ohne NS-Einträge (Ausweg)
+
+Erlaubt der Anbieter der Schuldomain keine NS-Einträge für eine Subdomain,
+bleibt die Domain dort, und nur die Zertifikatsprüfung wird umgeleitet:
+
+```
+*.apps.gymnasium-musterstadt.de.                 A      192.168.10.5
+_acme-challenge.apps.gymnasium-musterstadt.de.   CNAME  _acme-challenge.<zone-bei-desec>.
+```
+
+Dafür braucht die Schule eine andere Domain, die bei deSEC liegt, und trägt
+deren Namen im Assistenten unter „Ziel bei deSEC“ ein. Den Wildcard-Eintrag
+pflegt sie in diesem Fall selbst. Manche Anbieter nehmen Einträge mit
+Unterstrich nur über den Import einer Zonendatei an.
 
 ### DNS-Rebind-Schutz
 
@@ -137,10 +157,14 @@ Der Knopf *Voraussetzungen prüfen* fragt ab, was von hier aus sichtbar ist:
 | **gelb** | **nicht bestätigbar** — nicht dasselbe wie kaputt |
 | **rot** | bestätigt kaputt |
 
-Geprüft wird im Schulnetz-Betrieb: Wildcard (mit Zufallsnamen, damit ein
-einzelner Eintrag für `auth.` nicht als Wildcard durchgeht), Ziel des
-Wildcards, Rebind-Schutz, CNAME für `_acme-challenge`, deSEC-Token (eine
-Anfrage an desec.io) und ob Port 80/443 frei sind.
+Geprüft wird im Schulnetz-Betrieb: ob die Domain an deSEC übergeben ist
+(NS-Einträge, gefragt bei einem öffentlichen DNS-Server), ob der deSEC-Token
+gilt und die Domain verwaltet (eine Anfrage an desec.io), der Wildcard (mit
+Zufallsnamen, damit ein einzelner Eintrag für `auth.` nicht als Wildcard
+durchgeht) samt Ziel und Rebind-Schutz, und ob Port 80/443 frei sind. Dass
+der Wildcard vor dem Abschluss noch fehlt, ist normal: stackctl legt ihn erst
+dann an. Im Ausweg ohne NS-Einträge kommt der CNAME für `_acme-challenge`
+dazu.
 
 **Keine Prüfung blockiert die Einrichtung** — außer einem fehlenden
 deSEC-Token im Schulnetz-Betrieb: ohne ihn kann es nie ein Zertifikat geben.
@@ -158,7 +182,7 @@ Unter `/public` steht dieselbe Frage im Präsens: Der Assistent beantwortet
 - **Zertifikat** — gelesen aus dem TLS-Handshake. Gewarnt wird ab **14 Tagen
   Restlaufzeit**: Caddy erneuert rund 30 Tage vorher, wer darunter landet,
   hat ein bestehendes Problem.
-- **DNS** — Wildcard, Ziel und im Schulnetz-Betrieb der CNAME.
+- **DNS** — Übergabe an deSEC (bzw. im Ausweg der CNAME), Wildcard und Ziel.
 
 Token und Ziel bei deSEC lassen sich in den *Einstellungen* ändern.
 
@@ -187,7 +211,8 @@ Im Schulnetz-Betrieb bekommt jede neu installierte App ihre Adresse sofort.
 |---|---|---|
 | Im Schulnetz löst `auth.<domain>` nicht auf, im Mobilfunk schon | DNS-Rebind-Schutz im Router | Ausnahme für die Domain eintragen |
 | Alles außer `auth.` ist unerreichbar | Einzelner DNS-Eintrag statt Wildcard | Wildcard-Eintrag anlegen |
-| Zertifikatsfehler im Schulnetz-Betrieb | Token ungültig oder CNAME fehlt/falsch | Seite *Zugang*, Einstellungen → Zertifikat |
+| Zertifikatsfehler im Schulnetz-Betrieb | NS-Einträge fehlen, Token ungültig oder Domain bei deSEC nicht angelegt | Seite *Zugang*, Einstellungen → Zertifikat |
+| Dashboard: „DNS-Eintrag bei deSEC fehlt“ | Token ohne Schreibrecht, Domain bei deSEC nicht angelegt oder Server-IP keine Adresse | Einstellungen → Server-IP und Token prüfen |
 | Zertifikat läuft ab (direkter Betrieb) | Port 80 nachträglich zugemacht | Port 80 wieder öffnen |
 | Caddy startet nicht | Port 80/443 durch Apache/nginx belegt | anderen Webserver stoppen |
 | „Unbekannte Adresse“ | App nicht installiert oder Adresse abgeschaltet | App-Seite → Adresse einschalten |
@@ -203,6 +228,8 @@ neu — Let's Encrypt erlaubt davon fünf pro Woche und Domain.
 - **Domain oder Betriebsart nach der Einrichtung wechseln** geht nicht.
 - **Nur deSEC** als DNS-API für DNS-01. Andere Anbieter brauchen ein anderes
   Caddy-Modul.
+- **NS-Einträge für eine Subdomain** erlaubt nicht jeder DNS-Anbieter. Dann
+  bleibt der Ausweg über CNAME — mit einer zweiten Domain, die bei deSEC liegt.
 - **Die stackctl-Oberfläche** ist immer auf Port 8090 im Schulnetz
   erreichbar. Unter `admin.<domain>` lässt sie sich zusätzlich einschalten;
   im direkten Betrieb heißt das: aus dem Internet. Das ist standardmäßig aus

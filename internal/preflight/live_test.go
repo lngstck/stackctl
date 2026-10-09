@@ -164,8 +164,36 @@ func TestLiveLocalCertificateHintNamesDNS(t *testing.T) {
 	if strings.Contains(got.Detail, "Port 80") || !strings.Contains(got.Detail, "deSEC") {
 		t.Errorf("Hinweis passt nicht zum Schulnetz-Betrieb: %q", got.Detail)
 	}
+	// Ohne Delegationsziel liegt die Domain bei deSEC: dann zaehlt die
+	// Uebergabe, nicht ein CNAME.
+	if _, ok := findCheck(checks, "dns_delegation"); !ok {
+		t.Error("Pruefung der Uebergabe an deSEC fehlt im laufenden Betrieb")
+	}
+	if _, ok := findCheck(checks, "dns_challenge"); ok {
+		t.Error("ohne Delegationsziel gibt es keinen CNAME zu pruefen")
+	}
+
+	// Mit Delegationsziel bleibt es bei der CNAME-Pruefung.
+	checks = p.Live(context.Background(), LiveInput{
+		Mode: ModeLocal, BaseDomain: "ls.gym-phoenix.de", AuthHost: "auth.ls.gym-phoenix.de",
+		ChallengeDomain: "_acme-challenge.gym-phoenix.example",
+	})
 	if _, ok := findCheck(checks, "dns_challenge"); !ok {
 		t.Error("CNAME-Pruefung fehlt im laufenden Betrieb")
+	}
+}
+
+// Im laufenden Betrieb haelt stackctl den Wildcard-Eintrag selbst — fehlt
+// er, ist das ein Fehler, und der Hinweis zeigt auf die Uebergabe statt auf
+// den Anbieter der Schule.
+func TestLiveManagedWildcardMissingFails(t *testing.T) {
+	p := liveProber(fakeResolver{}, nil, certExpiringIn(60*24*time.Hour), nil)
+	checks := p.Live(context.Background(), LiveInput{
+		Mode: ModeLocal, BaseDomain: "ls.gym-phoenix.de", AuthHost: "auth.ls.gym-phoenix.de",
+	})
+	got, _ := findCheck(checks, "dns_wildcard")
+	if got.Status != StatusFail || !strings.Contains(got.Detail, "deSEC") {
+		t.Errorf("dns_wildcard = %q %q", got.Status, got.Detail)
 	}
 }
 

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/rand"
 	"embed"
 	"encoding/hex"
@@ -63,6 +64,8 @@ type Server struct {
 	// setupCode guards setup until it is done (see setupcode.go). Empty
 	// once setup is complete — and then nothing matches it.
 	setupCode string
+	// dnsSync holds the outcome of the last wildcard sync at deSEC.
+	dnsSync dnsSyncStatus
 }
 
 // Option configures the server.
@@ -120,6 +123,12 @@ func New(cfg *config.Config, state *config.State, opts ...Option) (*Server, erro
 			s.setupCode = code
 			log.Printf("Einrichtungscode: %s (neu anzeigen: sudo stackctl setup-code)", code)
 		}
+	}
+
+	// Keep the wildcard at deSEC in line with this server — in the
+	// background, so a slow or unreachable deSEC never delays startup.
+	if cfg.SetupState == config.SetupStateReady && managesWildcard(cfg) {
+		go s.syncWildcard(context.Background())
 	}
 
 	s.routes()
