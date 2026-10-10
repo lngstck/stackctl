@@ -168,6 +168,7 @@ func TestGenerateConfigLocalWildcard(t *testing.T) {
 			token {env.DESEC_TOKEN}
 		}
 		dns_challenge_override_domain _acme-challenge.gym-phoenix.dedyn.io
+		propagation_delay 5m
 	}
 
 	@auth host auth.ls.gym-phoenix.de
