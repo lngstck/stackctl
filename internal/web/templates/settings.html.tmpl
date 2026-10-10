@@ -54,7 +54,10 @@
 
         {{if .IsLocal}}
         <h3 class="mb-2">Zertifikat</h3>
-        <p class="sub mb-1" style="font-size:0.85rem;">Das Zertifikat kommt über deSEC (DNS-01). Änderungen gehen sofort an den Reverse-Proxy.</p>
+        <p class="sub mb-1" style="font-size:0.85rem;">
+          Das Zertifikat kommt über deSEC (DNS-01). Änderungen gehen sofort an den Reverse-Proxy.
+          {{if not .ChallengeDomain}}Den Eintrag <code>*.{{.PublicBaseDomain}}</code> hält stackctl bei deSEC auf der Server-IP von oben.{{end}}
+        </p>
 
         <label data-field class="mb-1">
           deSEC-Token
@@ -64,8 +67,8 @@
 
         <label data-field class="mb-2">
           Ziel bei deSEC
-          <input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="z.B. _acme-challenge.meine-schule.dedyn.io">
-          <span class="hint">CNAME-Ziel von <code>_acme-challenge.{{.PublicBaseDomain}}</code>. Leer, wenn deSEC die Domain der Schule selbst verwaltet.</span>
+          <input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="leer: deSEC verwaltet {{.PublicBaseDomain}}">
+          <span class="hint">Nur für den Fall, dass der DNS-Anbieter keine NS-Einträge erlaubt: CNAME-Ziel von <code>_acme-challenge.{{.PublicBaseDomain}}</code>. Im Normalfall leer.</span>
         </label>
         {{end}}
 

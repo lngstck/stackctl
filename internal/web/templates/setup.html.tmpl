@@ -42,7 +42,7 @@
       <label data-field class="mb-1">
         Server-IP / Hostname
         <input type="text" name="server_domain" value="{{.ServerDomain}}" placeholder="wird automatisch erkannt" id="server-ip">
-        <span class="hint">Automatisch erkannt. LAN-Adresse dieses Servers.</span>
+        <span class="hint">Automatisch erkannt. Die Adresse dieses Servers im Schulnetz — darauf zeigen Login und Apps.</span>
       </label>
 
       <label data-field class="mb-2">
@@ -67,8 +67,8 @@
           <div class="mode-card__body">
             Login und Apps sind im Schulnetz erreichbar, mit echtem Zertifikat.
             Von aussen kommt niemand heran, keine Schuelerdaten verlassen das
-            Schulnetz. Vorzubereiten: zwei DNS-Eintraege und ein kostenloses
-            Konto bei deSEC fuer das Zertifikat.
+            Schulnetz. Vorzubereiten: ein kostenloses Konto bei deSEC und
+            zwei Einträge beim DNS-Anbieter der Schule.
           </div>
         </label>
       </div>
@@ -103,24 +103,40 @@
       </label>
 
       <div id="local-fields">
+        <p class="sub mb-1" style="font-size:0.85rem;">
+          Für das Zertifikat übernimmt deSEC (kostenlos, gemeinnützig) die
+          Domain. Einmalig vorzubereiten:
+        </p>
+        <ol class="mb-2" style="font-size:0.85rem;padding-left:1.25rem;">
+          <li>Bei <a href="https://desec.io" target="_blank" rel="noopener">desec.io</a> ein Konto anlegen und dort die Domain <code class="js-domain">deine-domain.de</code> hinzufügen.</li>
+          <li id="ns-step">Beim DNS-Anbieter der Schuldomain diese Einträge anlegen:
+            <pre class="mt-1" id="dns-records" style="background:var(--faint);padding:0.75rem 1rem;border-radius:0.5rem;font-size:0.8rem;overflow-x:auto;"></pre>
+          </li>
+          <li>Bei deSEC einen Token erzeugen und hier eintragen.</li>
+        </ol>
+
         <label data-field class="mb-1">
           deSEC-Token
           <input type="password" name="dns_token" value="{{.DNSToken}}" autocomplete="off" id="dns-token">
-          <span class="hint">
-            Fuer das Zertifikat. Bei <a href="https://desec.io" target="_blank" rel="noopener">desec.io</a>
-            ein kostenloses Konto anlegen, dort eine Domain wie
-            <code>meine-schule.dedyn.io</code> registrieren und einen Token erzeugen.
+          <span class="hint" id="wildcard-hint">
+            Den Eintrag <code>*.<span class="js-domain">deine-domain.de</span></code> auf die
+            Server-IP legt stackctl damit selbst bei deSEC an.
           </span>
         </label>
 
-        <label data-field class="mb-1">
-          Ziel bei deSEC
-          <input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="z.B. _acme-challenge.meine-schule.dedyn.io" id="challenge-domain">
-          <span class="hint">Leer lassen, wenn deSEC die Domain der Schule selbst verwaltet.</span>
-        </label>
-
-        <p class="sub mb-1" style="font-size:0.85rem;">Beim DNS-Anbieter der Schuldomain anlegen:</p>
-        <pre class="mb-2" id="dns-records" style="background:var(--faint);padding:0.75rem 1rem;border-radius:0.5rem;font-size:0.8rem;overflow-x:auto;"></pre>
+        <details class="mb-2" {{if .ChallengeDomain}}open{{end}}>
+          <summary class="sub" style="font-size:0.85rem;cursor:pointer;">Der DNS-Anbieter erlaubt keine NS-Einträge?</summary>
+          <p class="sub mt-1 mb-1" style="font-size:0.85rem;">
+            Dann bleibt die Domain beim Anbieter, und nur die Zertifikatsprüfung
+            wird per CNAME zu einer Domain umgeleitet, die bei deSEC liegt. Den
+            Wildcard-Eintrag legst du in diesem Fall selbst beim Anbieter an.
+          </p>
+          <label data-field class="mb-1">
+            Ziel bei deSEC
+            <input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="z.B. _acme-challenge.schule.example" id="challenge-domain">
+            <span class="hint">Leer lassen im Normalfall, wenn deSEC die Domain selbst verwaltet.</span>
+          </label>
+        </details>
       </div>
 
       <div id="direct-fields">
@@ -241,15 +257,24 @@
 
   // The records the admin has to create, filled in as they type. Without
   // a delegation target only the wildcard is needed.
+  // The records the admin has to create, filled in as they type. Normally
+  // the domain goes to deSEC by two NS records and stackctl writes the
+  // wildcard itself; with a delegation target the school keeps its zone and
+  // creates the wildcard plus a CNAME for the challenge.
   function syncPreview() {
     const domain = baseDomain.value.trim().toLowerCase() || 'deine-domain.de';
     domainPreview.textContent = 'auth.' + domain + ', pylearn.' + domain;
-    let records = '*.' + domain + '   A       ' + (serverIP.value.trim() || '<Server-IP>');
-    const target = challengeDomain.value.trim().toLowerCase();
+    document.querySelectorAll('.js-domain').forEach(el => { el.textContent = domain; });
+    const target = challengeDomain.value.trim().toLowerCase().replace(/\.$/, '');
+    let records;
     if (target) {
-      records += '\n_acme-challenge.' + domain + '   CNAME   ' + target + '.';
+      records = '*.' + domain + '   A       ' + (serverIP.value.trim() || '<Server-IP>') +
+        '\n_acme-challenge.' + domain + '   CNAME   ' + target + '.';
+    } else {
+      records = domain + '   NS   ns1.desec.io.\n' + domain + '   NS   ns2.desec.org.';
     }
     dnsRecords.textContent = records;
+    document.getElementById('wildcard-hint').hidden = !!target;
   }
 
   modeInputs.forEach(el => el.addEventListener('change', syncMode));

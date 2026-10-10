@@ -196,6 +196,7 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Public.Local = local
 	}
 
+	addressChanged := serverDomain != s.cfg.School.ServerDomain
 	s.cfg.School.Name = schoolName
 	s.cfg.School.ServerDomain = serverDomain
 	s.cfg.School.ContactEmail = contactEmail
@@ -219,6 +220,10 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 
 	if certChanged {
 		s.applyCertificateSettings()
+	}
+	// A new server address or token moves the wildcard at deSEC along.
+	if certChanged || addressChanged {
+		_ = s.syncWildcard(r.Context())
 	}
 
 	// If the password changed, invalidate existing sessions so the new hash

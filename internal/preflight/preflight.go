@@ -16,18 +16,16 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
-	"net/http"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/desec"
 )
 
 // Operating modes as the wizard presents them, one per transport.
@@ -104,6 +102,9 @@ type Prober struct {
 	// DNSZones lists the zones a deSEC token may manage. It returns
 	// errTokenRejected for a token deSEC does not accept.
 	DNSZones func(ctx context.Context, token string) ([]string, error)
+	// NS returns the nameservers of a name as the internet sees them, or an
+	// error when the name has none of its own.
+	NS func(ctx context.Context, name string) ([]string, error)
 	// randomLabel produces the throwaway label used to prove a wildcard.
 	randomLabel func() string
 }
@@ -119,6 +120,7 @@ func NewProber() *Prober {
 			return lookupCNAMERecord(ctx, publicDNSServer, name)
 		},
 		DNSZones:    desecZones,
+		NS:          publicNS,
 		randomLabel: randomLabel,
 	}
 }
@@ -154,28 +156,54 @@ func (p *Prober) Run(ctx context.Context, in Input) []Check {
 		Detail: fmt.Sprintf("Apps werden unter app.%s erreichbar sein, der Login unter auth.%s.", in.BaseDomain, in.BaseDomain),
 	}}
 
-	wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode)
-	checks = append(checks, wildcard)
-
 	if in.Mode == ModeLocal {
-		checks = append(checks, p.checkPointsHereLocal(resolved, in.BaseDomain))
-		checks = append(checks, p.checkChallenge(ctx, in.BaseDomain, in.ChallengeDomain))
-		checks = append(checks, p.checkDNSToken(ctx, in.DNSToken, challengeZone(in.BaseDomain, in.ChallengeDomain)))
+		if in.ChallengeDomain == "" {
+			// The school hands its domain to deSEC; stackctl writes the
+			// wildcard itself once setup is done, so its absence now is
+			// expected rather than a fault.
+			checks = append(checks, p.checkDelegation(ctx, in.BaseDomain))
+			checks = append(checks, p.checkDNSToken(ctx, in.DNSToken, in.BaseDomain, ""))
+			wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode, wildcardPending)
+			checks = append(checks, wildcard)
+			checks = append(checks, p.checkPointsHereLocal(resolved, in.BaseDomain,
+				" Beim Abschluss der Einrichtung setzt stackctl ihn auf die Server-IP aus diesem Formular."))
+		} else {
+			wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode, wildcardByAdmin)
+			checks = append(checks, wildcard)
+			checks = append(checks, p.checkPointsHereLocal(resolved, in.BaseDomain, ""))
+			checks = append(checks, p.checkChallenge(ctx, in.BaseDomain, in.ChallengeDomain))
+			checks = append(checks, p.checkDNSToken(ctx, in.DNSToken, in.BaseDomain, in.ChallengeDomain))
+		}
 		checks = append(checks, p.checkPort(80, "HTTP (Port 80)", "Darüber leitet der Proxy Aufrufe ohne https:// auf HTTPS um."))
 		checks = append(checks, p.checkPort(443, "HTTPS (Port 443)", "Über diesen Port läuft der gesamte Zugriff auf die Apps."))
 		return checks
 	}
 
+	wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode, wildcardByAdmin)
+	checks = append(checks, wildcard)
 	checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
 	checks = append(checks, p.checkPort(80, "HTTP (Port 80)", "Ohne Port 80 kann Let's Encrypt kein Zertifikat ausstellen und auch keins erneuern."))
 	checks = append(checks, p.checkPort(443, "HTTPS (Port 443)", "Über diesen Port läuft der gesamte Zugriff auf die Apps."))
 	return checks
 }
 
+// wildcardSource says who creates the wildcard record, which decides what a
+// missing record means.
+type wildcardSource int
+
+const (
+	// wildcardByAdmin: the admin creates it at the school's provider.
+	wildcardByAdmin wildcardSource = iota
+	// wildcardPending: stackctl creates it at deSEC once setup is done.
+	wildcardPending
+	// wildcardByStackctl: stackctl keeps it at deSEC on a running install.
+	wildcardByStackctl
+)
+
 // checkWildcard proves the wildcard record by resolving a name nobody could
 // have created by hand. Resolving "auth.domain" alone would pass on a single
 // record and then break for the first app that gets published.
-func (p *Prober) checkWildcard(ctx context.Context, base, mode string) (Check, []net.IP) {
+func (p *Prober) checkWildcard(ctx context.Context, base, mode string, source wildcardSource) (Check, []net.IP) {
 	probe := p.randomLabel() + "." + base
 
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
@@ -183,7 +211,7 @@ func (p *Prober) checkWildcard(ctx context.Context, base, mode string) (Check, [
 
 	addrs, err := p.Resolver.LookupIPAddr(ctx, probe)
 	if err != nil || len(addrs) == 0 {
-		return p.explainMissingWildcard(ctx, probe, base, mode), nil
+		return p.explainMissingWildcard(ctx, probe, base, mode, source), nil
 	}
 
 	ips := make([]net.IP, 0, len(addrs))
@@ -203,7 +231,7 @@ func (p *Prober) checkWildcard(ctx context.Context, base, mode string) (Check, [
 // a public name pointing at a private address — and its fix is in the
 // school's router, not at the DNS provider, so naming the wrong one would
 // send the admin to change a record that is already right.
-func (p *Prober) explainMissingWildcard(ctx context.Context, probe, base, mode string) Check {
+func (p *Prober) explainMissingWildcard(ctx context.Context, probe, base, mode string, source wildcardSource) Check {
 	check := Check{ID: "dns_wildcard", Title: "Wildcard-DNS", Status: StatusFail}
 
 	if p.PublicResolver != nil {
@@ -223,6 +251,20 @@ func (p *Prober) explainMissingWildcard(ctx context.Context, probe, base, mode s
 				base, joinIPs(ips))
 			return check
 		}
+	}
+
+	switch source {
+	case wildcardPending:
+		check.Status = StatusSkip
+		check.Detail = fmt.Sprintf(
+			"*.%s gibt es noch nicht. Den Eintrag legt stackctl beim Abschluss der Einrichtung selbst bei deSEC an.",
+			base)
+		return check
+	case wildcardByStackctl:
+		check.Detail = fmt.Sprintf(
+			"*.%s löst nicht auf. Den Eintrag hält stackctl bei deSEC aktuell — ist die Domain an deSEC übergeben und der Token gültig? Siehe „Übergabe an deSEC“.",
+			base)
+		return check
 	}
 
 	target := "auf diesen Server"
@@ -269,7 +311,10 @@ func (p *Prober) checkPointsHere(resolved []net.IP, base string) Check {
 // checkPointsHereLocal compares the wildcard target against this machine's
 // own addresses. In the school network the server knows its address, so a
 // mismatch is a finding — and a public address is plainly the wrong mode.
-func (p *Prober) checkPointsHereLocal(resolved []net.IP, base string) Check {
+//
+// note is appended to a mismatch, for when stackctl itself maintains the
+// record and the mismatch is about to be, or should have been, corrected.
+func (p *Prober) checkPointsHereLocal(resolved []net.IP, base, note string) Check {
 	const title = "Zeigt auf diesen Server"
 	if len(resolved) == 0 {
 		return Check{ID: "dns_target", Title: title, Status: StatusSkip,
@@ -299,12 +344,12 @@ func (p *Prober) checkPointsHereLocal(resolved []net.IP, base string) Check {
 		return Check{ID: "dns_target", Title: title, Status: StatusFail,
 			Detail: fmt.Sprintf(
 				"*.%s zeigt auf die öffentliche Adresse %s. Für den Betrieb im Schulnetz muss der Eintrag auf die Adresse dieses Servers im Schulnetz zeigen (%s).",
-				base, joinIPs(resolved), own)}
+				base, joinIPs(resolved), own) + note}
 	}
 	return Check{ID: "dns_target", Title: title, Status: StatusWarn,
 		Detail: fmt.Sprintf(
 			"*.%s zeigt auf %s, dieser Server hat aber %s. Steht kein Weiterleiter dazwischen, zeigt der Eintrag auf den falschen Rechner.",
-			base, joinIPs(resolved), own)}
+			base, joinIPs(resolved), own) + note}
 }
 
 // checkChallenge verifies the delegation of the ACME challenge: the
@@ -346,11 +391,15 @@ func (p *Prober) checkChallenge(ctx context.Context, base, target string) Check 
 // checkDNSToken asks deSEC whether the token is accepted and may write the
 // zone the challenge lands in. This request goes to desec.io — it carries the
 // token and nothing about the school beyond what deSEC already holds.
-func (p *Prober) checkDNSToken(ctx context.Context, token, name string) Check {
+//
+// Without a delegation target the token has to manage the school's own
+// domain, which the school added at deSEC; with one, the target's zone.
+func (p *Prober) checkDNSToken(ctx context.Context, token, base, target string) Check {
 	const (
 		id    = "dns_token"
 		title = "deSEC-Token"
 	)
+	name := challengeZone(base, target)
 	if token == "" {
 		return Check{ID: id, Title: title, Status: StatusFail,
 			Detail: "Ohne Token bei deSEC bekommt der Server kein Zertifikat."}
@@ -379,8 +428,78 @@ func (p *Prober) checkDNSToken(ctx context.Context, token, name string) Check {
 	if have == "" {
 		have = "keine"
 	}
+	if target == "" {
+		return Check{ID: id, Title: title, Status: StatusFail,
+			Detail: fmt.Sprintf("%s ist bei deSEC nicht angelegt (vorhanden: %s). Bitte bei deSEC als Domain hinzufügen.", base, have)}
+	}
 	return Check{ID: id, Title: title, Status: StatusFail,
 		Detail: fmt.Sprintf("Der Token verwaltet nicht die Zone von %s (vorhanden: %s).", name, have)}
+}
+
+// checkDelegation asks the internet who answers for the school's domain. For
+// the school-network mode that has to be deSEC: the school's provider lists
+// deSEC's nameservers as NS records for the domain, and from then on deSEC
+// holds both the wildcard and the ACME challenge.
+//
+// The domain may also sit inside a larger zone the school handed over — all
+// of schule.de rather than just sl.schule.de — so the lookup walks up until a
+// name has nameservers of its own.
+func (p *Prober) checkDelegation(ctx context.Context, base string) Check {
+	const (
+		id    = "dns_delegation"
+		title = "Übergabe an deSEC"
+	)
+	if p.NS == nil {
+		return Check{ID: id, Title: title, Status: StatusSkip, Detail: "Nicht geprüft."}
+	}
+	want := fmt.Sprintf("Beim DNS-Anbieter der Schuldomain anlegen: %s NS %s. und %s NS %s.",
+		base, desec.Nameservers[0], base, desec.Nameservers[1])
+
+	zone, servers := "", []string(nil)
+	labels := strings.Split(base, ".")
+	for i := 0; i < len(labels)-1; i++ {
+		name := strings.Join(labels[i:], ".")
+		ns, err := p.NS(ctx, name)
+		if err == nil && len(ns) > 0 {
+			zone, servers = name, ns
+			break
+		}
+	}
+	if zone == "" {
+		return Check{ID: id, Title: title, Status: StatusWarn,
+			Detail: "Die Nameserver von " + base + " konnten nicht abgefragt werden. " + want}
+	}
+
+	var ours, others []string
+	for _, ns := range servers {
+		ns = strings.TrimSuffix(strings.ToLower(ns), ".")
+		if isDeSECNameserver(ns) {
+			ours = append(ours, ns)
+		} else {
+			others = append(others, ns)
+		}
+	}
+	sort.Strings(ours)
+	sort.Strings(others)
+	switch {
+	case len(ours) > 0 && len(others) == 0:
+		return Check{ID: id, Title: title, Status: StatusOK,
+			Detail: fmt.Sprintf("deSEC beantwortet %s (%s).", zone, strings.Join(ours, ", "))}
+	case len(ours) > 0:
+		return Check{ID: id, Title: title, Status: StatusWarn,
+			Detail: fmt.Sprintf("Für %s sind neben deSEC weitere Nameserver eingetragen (%s). Bitte nur die von deSEC stehen lassen — sonst antwortet mal der eine, mal der andere.", zone, strings.Join(others, ", "))}
+	}
+	return Check{ID: id, Title: title, Status: StatusFail,
+		Detail: fmt.Sprintf("%s wird noch von %s beantwortet, nicht von deSEC. %s Neue NS-Einträge brauchen je nach Anbieter bis zu einigen Stunden.", base, strings.Join(others, ", "), want)}
+}
+
+func isDeSECNameserver(ns string) bool {
+	for _, n := range desec.Nameservers {
+		if ns == n {
+			return true
+		}
+	}
+	return false
 }
 
 // challengeZone is the name the TXT record ends up under: the delegation
@@ -463,43 +582,29 @@ func randomLabel() string {
 }
 
 // errTokenRejected is what DNSZones returns when deSEC refuses the token.
-var errTokenRejected = errors.New("token rejected")
+var errTokenRejected = desec.ErrTokenRejected
 
 // desecZones lists the domains a token may manage, from deSEC's API.
 func desecZones(ctx context.Context, token string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
+	return desec.New(token).Zones(ctx)
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://desec.io/api/v1/domains/", nil)
+// publicNS asks Quad9 for the nameservers of name, as the internet sees
+// them — the school's own DNS server may know better or worse.
+func publicNS(ctx context.Context, name string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	records, err := publicResolver().(*net.Resolver).LookupNS(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Token "+token)
-	resp, err := (&http.Client{Timeout: probeTimeout}).Do(req)
-	if err != nil {
-		return nil, err
+	out := make([]string, 0, len(records))
+	for _, r := range records {
+		out = append(out, r.Host)
 	}
-	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return nil, errTokenRejected
-	default:
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	var domains []struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&domains); err != nil {
-		return nil, fmt.Errorf("Antwort unlesbar: %w", err)
-	}
-	names := make([]string, 0, len(domains))
-	for _, d := range domains {
-		names = append(names, d.Name)
-	}
-	return names, nil
+	return out, nil
 }
 
 // publicResolver asks Quad9 directly, bypassing the school's DNS server. It

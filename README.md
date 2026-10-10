@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/insta
 
 Voraussetzungen: Ubuntu 22.04+ oder Debian 12+, Docker 24+ mit Compose-Plugin (`docker-ce` + `docker-compose-plugin`, nicht das Paket `docker.io`), ein eingehender Port 8090 im lokalen Netz.
 
-Der Assistent fragt nach der Domain der Schule und nach der Betriebsart. Für den Standard „nur im Schulnetz“ braucht es zwei DNS-Einträge und ein kostenloses Konto bei deSEC für das Zertifikat — die [Betriebsarten](docs/betriebsarten.md) beschreiben, was wann nötig ist. Die Wahl fällt einmalig bei der Einrichtung.
+Der Assistent fragt nach der Domain der Schule und nach der Betriebsart. Für den Standard „nur im Schulnetz“ braucht es ein kostenloses Konto bei deSEC und zwei NS-Einträge beim DNS-Anbieter der Schule, die die Domain an deSEC übergeben — die [Betriebsarten](docs/betriebsarten.md) beschreiben, was wann nötig ist. Die Wahl fällt einmalig bei der Einrichtung.
 
 ## Entwicklung
 

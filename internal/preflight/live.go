@@ -43,12 +43,22 @@ type LiveInput struct {
 func (p *Prober) Live(ctx context.Context, in LiveInput) []Check {
 	var checks []Check
 
-	wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode)
-	checks = append(checks, wildcard)
-	if in.Mode == ModeLocal {
-		checks = append(checks, p.checkPointsHereLocal(resolved, in.BaseDomain))
+	switch {
+	case in.Mode == ModeLocal && in.ChallengeDomain == "":
+		// The domain sits at deSEC and stackctl keeps the wildcard there.
+		checks = append(checks, p.checkDelegation(ctx, in.BaseDomain))
+		wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode, wildcardByStackctl)
+		checks = append(checks, wildcard)
+		checks = append(checks, p.checkPointsHereLocal(resolved, in.BaseDomain,
+			" stackctl setzt den Eintrag auf die Server-IP aus den Einstellungen — stimmt die?"))
+	case in.Mode == ModeLocal:
+		wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode, wildcardByAdmin)
+		checks = append(checks, wildcard)
+		checks = append(checks, p.checkPointsHereLocal(resolved, in.BaseDomain, ""))
 		checks = append(checks, p.checkChallenge(ctx, in.BaseDomain, in.ChallengeDomain))
-	} else {
+	default:
+		wildcard, resolved := p.checkWildcard(ctx, in.BaseDomain, in.Mode, wildcardByAdmin)
+		checks = append(checks, wildcard)
 		checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
 	}
 

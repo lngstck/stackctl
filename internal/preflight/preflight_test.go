@@ -314,12 +314,117 @@ func TestLocalChallengeDelegation(t *testing.T) {
 		t.Errorf("falscher CNAME: %q %q", got.Status, got.Detail)
 	}
 
-	// Ohne Delegation verwaltet deSEC die Zone der Schuldomain selbst.
+	// Ohne Delegationsziel liegt die Domain selbst bei deSEC — dann gibt es
+	// keinen CNAME zu pruefen.
 	in := localInput()
 	in.ChallengeDomain = ""
-	got = byID(t, localProber(localDNS()).Run(context.Background(), in), "dns_challenge")
-	if got.Status != StatusSkip {
-		t.Errorf("ohne Delegation: %q, want skip", got.Status)
+	for _, c := range localProber(localDNS()).Run(context.Background(), in) {
+		if c.ID == "dns_challenge" {
+			t.Errorf("ohne Delegationsziel keine CNAME-Pruefung, got %+v", c)
+		}
+	}
+}
+
+// handedOver is the standard school-network setup: the school gave its
+// domain to deSEC with two NS records; the token manages it there.
+func handedOver(res fakeResolver, ns map[string][]string) *Prober {
+	p := proberWith(res, []string{"127.0.0.1", "192.168.1.10"}, true)
+	p.DNSZones = func(context.Context, string) ([]string, error) {
+		return []string{"ls.gym-phoenix.de"}, nil
+	}
+	p.NS = func(_ context.Context, name string) ([]string, error) {
+		if servers, ok := ns[name]; ok {
+			return servers, nil
+		}
+		return nil, errors.New("no such host")
+	}
+	return p
+}
+
+func handedOverInput() Input {
+	return Input{Mode: ModeLocal, BaseDomain: "ls.gym-phoenix.de", DNSToken: "token"}
+}
+
+var desecNS = []string{"ns1.desec.io.", "ns2.desec.org."}
+
+// Vor der Einrichtung fehlt der Wildcard-Eintrag zu Recht: stackctl legt ihn
+// erst danach bei deSEC an. Das darf das Setup nicht rot faerben.
+func TestHandedOverBeforeSetup(t *testing.T) {
+	p := handedOver(fakeResolver{}, map[string][]string{"ls.gym-phoenix.de": desecNS})
+	p.PublicResolver = fakeResolver{}
+	checks := p.Run(context.Background(), handedOverInput())
+
+	if got := Worst(checks); got != StatusOK {
+		t.Errorf("worst = %q, want ok: %+v", got, checks)
+	}
+	if got := byID(t, checks, "dns_delegation"); got.Status != StatusOK {
+		t.Errorf("dns_delegation = %q %q", got.Status, got.Detail)
+	}
+	if got := byID(t, checks, "dns_wildcard"); got.Status != StatusSkip || !strings.Contains(got.Detail, "stackctl") {
+		t.Errorf("dns_wildcard = %q %q, want skip mentioning stackctl", got.Status, got.Detail)
+	}
+	if got := byID(t, checks, "dns_token"); got.Status != StatusOK {
+		t.Errorf("dns_token = %q %q", got.Status, got.Detail)
+	}
+}
+
+// Noch nicht uebergeben: der Hinweis nennt genau die beiden NS-Eintraege.
+func TestHandedOverMissingDelegation(t *testing.T) {
+	p := handedOver(fakeResolver{}, map[string][]string{
+		"gym-phoenix.de": {"ns1045.ui-dns.biz.", "ns1050.ui-dns.com."},
+	})
+	got := byID(t, p.Run(context.Background(), handedOverInput()), "dns_delegation")
+	if got.Status != StatusFail {
+		t.Errorf("status = %q, want fail", got.Status)
+	}
+	for _, want := range []string{"ui-dns", "ls.gym-phoenix.de NS ns1.desec.io.", "ls.gym-phoenix.de NS ns2.desec.org."} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("Detail ohne %q: %q", want, got.Detail)
+		}
+	}
+}
+
+// Hat die Schule gleich die ganze Domain an deSEC gegeben, zaehlt das auch.
+func TestHandedOverParentZone(t *testing.T) {
+	p := handedOver(fakeResolver{}, map[string][]string{"gym-phoenix.de": desecNS})
+	p.DNSZones = func(context.Context, string) ([]string, error) { return []string{"gym-phoenix.de"}, nil }
+	checks := p.Run(context.Background(), handedOverInput())
+	if got := byID(t, checks, "dns_delegation"); got.Status != StatusOK || !strings.Contains(got.Detail, "gym-phoenix.de") {
+		t.Errorf("dns_delegation = %q %q", got.Status, got.Detail)
+	}
+	if got := byID(t, checks, "dns_token"); got.Status != StatusOK {
+		t.Errorf("dns_token = %q %q", got.Status, got.Detail)
+	}
+}
+
+// Nameserver von deSEC und vom alten Anbieter gemischt: gelb, mit Namen.
+func TestHandedOverMixedNameserversWarn(t *testing.T) {
+	p := handedOver(fakeResolver{}, map[string][]string{
+		"ls.gym-phoenix.de": {"ns1.desec.io.", "ns1045.ui-dns.biz."},
+	})
+	got := byID(t, p.Run(context.Background(), handedOverInput()), "dns_delegation")
+	if got.Status != StatusWarn || !strings.Contains(got.Detail, "ui-dns") {
+		t.Errorf("dns_delegation = %q %q", got.Status, got.Detail)
+	}
+}
+
+// Domain bei deSEC nicht angelegt: Der Hinweis sagt, was zu tun ist.
+func TestHandedOverDomainNotAtDeSEC(t *testing.T) {
+	p := handedOver(fakeResolver{}, map[string][]string{"ls.gym-phoenix.de": desecNS})
+	p.DNSZones = func(context.Context, string) ([]string, error) { return []string{"andere.de"}, nil }
+	got := byID(t, p.Run(context.Background(), handedOverInput()), "dns_token")
+	if got.Status != StatusFail || !strings.Contains(got.Detail, "hinzufügen") {
+		t.Errorf("dns_token = %q %q", got.Status, got.Detail)
+	}
+}
+
+// Der Eintrag existiert schon, zeigt aber woanders hin: Der Hinweis sagt,
+// dass stackctl ihn bei der Einrichtung korrigiert.
+func TestHandedOverWrongTargetIsCorrected(t *testing.T) {
+	p := handedOver(fakeResolver{"*.ls.gym-phoenix.de": {"192.168.1.99"}}, map[string][]string{"ls.gym-phoenix.de": desecNS})
+	got := byID(t, p.Run(context.Background(), handedOverInput()), "dns_target")
+	if !strings.Contains(got.Detail, "setzt stackctl") {
+		t.Errorf("dns_target soll die Korrektur ankuendigen: %q", got.Detail)
 	}
 }
 

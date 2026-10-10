@@ -129,6 +129,23 @@ func accountIssues(st *config.State, cfg *config.Config) []dashIssue {
 	}}
 }
 
+// dnsSyncIssues meldet, wenn stackctl den Wildcard-Eintrag bei deSEC nicht
+// setzen konnte. Ohne ihn ist keine Adresse erreichbar, auch der Login nicht.
+func (s *Server) dnsSyncIssues() []dashIssue {
+	msg := s.dnsSync.get()
+	if msg == "" {
+		return nil
+	}
+	return []dashIssue{{
+		Level:       "danger",
+		Icon:        "⚠",
+		Title:       "DNS-Eintrag bei deSEC fehlt",
+		Detail:      msg,
+		Action:      "/public",
+		ActionLabel: "Zugang prüfen",
+	}}
+}
+
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	st := s.snapState()
 	data := dashboardData{
@@ -139,6 +156,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	// 0) Fehlende Pflicht-Dienste — auf einem frisch freigeschalteten System
 	//    das Erste, was der Admin tun muss. Steht deshalb ganz oben.
 	data.Issues = append(data.Issues, missingInfraIssues(st)...)
+	data.Issues = append(data.Issues, s.dnsSyncIssues()...)
 	data.Issues = append(data.Issues, accountIssues(st, s.cfg)...)
 
 	// 1) Die Adresse des Logins — die Lebensader für OIDC. Liegt sie, kann
