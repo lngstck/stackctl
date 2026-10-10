@@ -175,10 +175,12 @@ func (s *Server) adminLocalAddr() string {
 
 // handleAdminPublishStart puts stackctl's own UI on the public address.
 //
-// This is the one publish action that changes what an attacker can reach: the
-// control plane installs containers, reads secrets and restores backups, and
-// it is guarded by a single password with no second factor. It is therefore
-// off by default and switched on deliberately, never as a side effect.
+// On a server on the internet this is the one publish action that changes
+// what an attacker can reach: the control plane installs containers, reads
+// secrets and restores backups, and it is guarded by a single password with
+// no second factor. There it is off by default and switched on deliberately.
+// In the school network the address adds no way in, only TLS, and it comes
+// with the proxy (autoPublishAdmin); this handler then only brings it back.
 //
 // What it does not do is close the LAN port. Rebinding stackctl to the
 // loopback interface is the other half of this feature and deliberately not

@@ -138,6 +138,7 @@
 }
 .issue--danger  { border-left-color: var(--danger); }
 .issue--warning { border-left-color: var(--warning); }
+.issue--info    { border-left-color: var(--primary); }
 .issue__icon { font-size: 1rem; line-height: 1.4; flex-shrink: 0; }
 .issue--danger  .issue__icon { color: var(--danger); }
 .issue--warning .issue__icon { color: var(--warning); }

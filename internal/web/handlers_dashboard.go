@@ -158,6 +158,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	data.Issues = append(data.Issues, missingInfraIssues(st)...)
 	data.Issues = append(data.Issues, s.dnsSyncIssues()...)
 	data.Issues = append(data.Issues, accountIssues(st, s.cfg)...)
+	data.Issues = append(data.Issues, s.adminAddressIssues(r)...)
 
 	// 1) Die Adresse des Logins — die Lebensader für OIDC. Liegt sie, kann
 	//    sich niemand mehr mit dem Schulkonto anmelden → höchste Priorität.
