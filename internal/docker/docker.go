@@ -418,7 +418,10 @@ func composeArgs(composeFile, subCmd string, extra ...string) []string {
 // to onLine as it is produced, and returns the exit code plus the full output.
 // It applies the same default timeout as run. onLine may be nil.
 func runStreaming(onLine func(string), name string, args ...string) (int, string) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	// Streaming runs carry image pulls. Open WebUI alone is well over a
+	// gigabyte, and a school line delivers that in more than the five
+	// minutes defaultTimeout allows — the pull was cancelled half way.
+	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)

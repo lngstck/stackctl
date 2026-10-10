@@ -108,7 +108,7 @@ func Parse(content string) (*File, error) {
 			return nil, fmt.Errorf("envfile: line %d: invalid entry %q", lineno, raw)
 		}
 		key := strings.TrimSpace(line[:eq])
-		value := strings.TrimRight(line[eq+1:], " \t")
+		value := unquote(strings.TrimRight(line[eq+1:], " \t"))
 		if key == "" {
 			return nil, fmt.Errorf("envfile: line %d: empty key", lineno)
 		}
@@ -211,7 +211,7 @@ func (f *File) Render() string {
 		}
 		fmt.Fprintf(&b, "# === %s ===\n", sec)
 		for _, k := range f.keyOrder[sec] {
-			fmt.Fprintf(&b, "%s=%s\n", k, f.values[k])
+			fmt.Fprintf(&b, "%s=%s\n", k, quote(f.values[k]))
 		}
 	}
 	return b.String()
@@ -226,6 +226,52 @@ func (f *File) Save(path string) error {
 func (f *File) WriteTo(w io.Writer) (int64, error) {
 	n, err := w.Write([]byte(f.Render()))
 	return int64(n), err
+}
+
+// -- quoting ----------------------------------------------------------------
+
+// needsQuotes lists the characters docker compose would not take literally
+// in an unquoted value: $ starts a variable, " and ' a quoted value, " #" a
+// comment, and surrounding whitespace is trimmed.
+const needsQuotes = "$#\"'\\ \t"
+
+// quote renders a value so docker compose reads exactly that value back. An
+// admin password with "$TY3ry3" in it otherwise became a blank variable and
+// a different password inside the app. Values that need no quotes — every
+// generated secret — stay as they are.
+//
+// Double quotes, because compose expands escapes in them: \\ and \" stand
+// for themselves and $$ for a literal dollar (compose-go dotenv).
+func quote(v string) string {
+	if !strings.ContainsAny(v, needsQuotes) {
+		return v
+	}
+	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `$$`)
+	return `"` + r.Replace(v) + `"`
+}
+
+// unquote reverses quote. Unquoted values are returned as they are.
+func unquote(v string) string {
+	if len(v) < 2 || v[0] != '"' || v[len(v)-1] != '"' {
+		return v
+	}
+	inner := v[1 : len(v)-1]
+	var b strings.Builder
+	for i := 0; i < len(inner); i++ {
+		c := inner[i]
+		if c == '\\' && i+1 < len(inner) && (inner[i+1] == '\\' || inner[i+1] == '"') {
+			b.WriteByte(inner[i+1])
+			i++
+			continue
+		}
+		if c == '$' && i+1 < len(inner) && inner[i+1] == '$' {
+			b.WriteByte('$')
+			i++
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // -- internals --------------------------------------------------------------
