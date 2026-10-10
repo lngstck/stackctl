@@ -4,13 +4,18 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo bash
 #
-# What it does (see ARCHITECTURE.md §11.1):
+# Eine bestimmte Version, z.B. einen Vorab-Stand, den "latest" nicht zeigt:
+#   curl -fsSL .../install.sh | sudo STACKCTL_VERSION=v0.12.0-rc1 bash
+#
+# What it does:
 #   1. Checks OS, architecture, curl, Docker
 #   2. Creates system user "learningstack" (+ docker group)
 #   3. Creates /opt/stackctl and /opt/learningstack
-#   4. Downloads latest stackctl binary from GitHub Releases
+#   4. Downloads the stackctl binary from GitHub Releases and verifies it
+#      against the release's SHA256SUMS
 #   5. Installs systemd service
-#   6. Starts stackctl
+#   6. Starts stackctl and prints the setup link, including the one-time
+#      setup code stackctl creates on its first start
 #
 # Requires: root, Ubuntu/Debian, Docker already installed.
 set -euo pipefail
@@ -62,6 +67,7 @@ esac
 
 # Required tools.
 command -v curl  >/dev/null 2>&1 || die "curl ist nicht installiert. Bitte installieren: apt install curl"
+command -v sha256sum >/dev/null 2>&1 || die "sha256sum fehlt (Paket coreutils)."
 command -v docker >/dev/null 2>&1 || die "Docker ist nicht installiert. Bitte zuerst Docker installieren: https://docs.docker.com/engine/install/"
 
 # stackctl ruft durchgehend 'docker compose ...' (v2-Plugin) auf. Das
@@ -120,23 +126,46 @@ chown -R "$USER:$GROUP" "$INSTALL_DIR"
 chown "$USER:$GROUP" "$DATA_DIR"
 
 # --- Download binary ------------------------------------------------------
-info "Lade stackctl herunter..."
+# Ohne STACKCTL_VERSION die neueste Veroeffentlichung. Vorab-Staende
+# (Pre-Releases) zaehlen fuer GitHub nicht als "latest" und lassen sich nur
+# gezielt installieren.
+if [ -n "${STACKCTL_VERSION:-}" ]; then
+    RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/download/${STACKCTL_VERSION}"
+    info "Lade stackctl ${STACKCTL_VERSION} herunter..."
+else
+    RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/latest/download"
+    info "Lade die neueste stackctl-Version herunter..."
+fi
 ASSET_NAME="stackctl-linux-${GOARCH}"
-DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${ASSET_NAME}"
 
 # Erst in eine Temp-Datei laden, dann atomar nach ${INSTALL_DIR}/stackctl
 # umbenennen. Direktes Schreiben auf ein laufendes Binary scheitert auf
-# Linux mit ETXTBSY (Text file busy) — curl meldet das aber nicht ueber
-# HTTP_CODE, das wuerde stumm bleiben. `mv` ueber das laufende Binary ist
+# Linux mit ETXTBSY (Text file busy). `mv` ueber das laufende Binary ist
 # safe: der Kernel haengt den neuen Inode unter den Namen, der laufende
 # Prozess behaelt seinen alten Inode bis zum Restart.
 TMP_BIN="${INSTALL_DIR}/stackctl.new"
-rm -f "$TMP_BIN"
-HTTP_CODE=$(curl -fSL -w "%{http_code}" -o "$TMP_BIN" "$DOWNLOAD_URL" 2>&1 | tail -1 || true)
-if [ ! -s "$TMP_BIN" ] || [ "${HTTP_CODE}" != "200" ]; then
+TMP_SUMS="${INSTALL_DIR}/SHA256SUMS.new"
+rm -f "$TMP_BIN" "$TMP_SUMS"
+if ! curl -fsSL --retry 3 -o "$TMP_BIN" "${RELEASE_URL}/${ASSET_NAME}"; then
     rm -f "$TMP_BIN"
-    die "Download fehlgeschlagen (HTTP ${HTTP_CODE}). URL: ${DOWNLOAD_URL}"
+    die "Download fehlgeschlagen: ${RELEASE_URL}/${ASSET_NAME}"
 fi
+
+# Pruefsumme wie beim Self-Update (internal/update): ohne SHA256SUMS oder
+# bei Abweichung wird nichts installiert. Die TLS-Verbindung zu GitHub ist
+# damit nicht die einzige Vertrauenskette.
+if ! curl -fsSL --retry 3 -o "$TMP_SUMS" "${RELEASE_URL}/SHA256SUMS"; then
+    rm -f "$TMP_BIN" "$TMP_SUMS"
+    die "Pruefsummen-Datei SHA256SUMS fehlt im Release — Abbruch aus Sicherheitsgruenden."
+fi
+EXPECTED_SUM=$(awk -v f="$ASSET_NAME" '$2 == f || $2 == "*"f { print $1 }' "$TMP_SUMS")
+ACTUAL_SUM=$(sha256sum "$TMP_BIN" | awk '{ print $1 }')
+rm -f "$TMP_SUMS"
+if [ -z "$EXPECTED_SUM" ] || [ "$EXPECTED_SUM" != "$ACTUAL_SUM" ]; then
+    rm -f "$TMP_BIN"
+    die "Pruefsumme stimmt nicht (erwartet ${EXPECTED_SUM:-?}, erhalten ${ACTUAL_SUM}) — nichts installiert."
+fi
+info "Pruefsumme stimmt."
 
 chmod 755 "$TMP_BIN"
 chown "$USER:$GROUP" "$TMP_BIN"
@@ -248,14 +277,43 @@ info "Auto-Update-Timer aktiviert (laeuft naechtlich 03:00 +/- 1h)."
 # --- Detect server IP -----------------------------------------------------
 SERVER_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[\d.]+' || hostname -I | awk '{print $1}' || echo "localhost")
 
+# --- Setup link -----------------------------------------------------------
+# stackctl legt den Einrichtungscode beim ersten Start an. Ohne ihn laesst
+# sich die Einrichtung nicht abschliessen — sonst koennte jede Person im
+# Netz, die zuerst auf Port 8090 kommt, das Admin-Passwort setzen.
+SETUP_CODE_FILE="${INSTALL_DIR}/config/setup-code"
+SETUP_DONE=false
+grep -q '^setup_state: ready' "${INSTALL_DIR}/config/config.yaml" 2>/dev/null && SETUP_DONE=true
+SETUP_LINK=""
+if ! $SETUP_DONE; then
+    for _ in $(seq 1 20); do
+        [ -s "$SETUP_CODE_FILE" ] && break
+        sleep 1
+    done
+    if [ -s "$SETUP_CODE_FILE" ]; then
+        SETUP_LINK="http://${SERVER_IP}:8090/setup?code=$(tr -d '[:space:]' < "$SETUP_CODE_FILE")"
+    fi
+fi
+
 # --- Done -----------------------------------------------------------------
 echo ""
 echo -e "${BOLD}════════════════════════════════════════════════════${NC}"
 echo -e "${BOLD}  stackctl ist installiert und laeuft!${NC}"
 echo ""
-echo -e "  ${GREEN}▸${NC} Web-UI:  ${BOLD}http://${SERVER_IP}:8090${NC}"
+if [ -n "$SETUP_LINK" ]; then
+    echo -e "  Einrichtung im Browser starten:"
+    echo -e "  ${GREEN}▸${NC} ${BOLD}${SETUP_LINK}${NC}"
+    echo ""
+    echo -e "  Der Link enthaelt den Einrichtungscode. Nur an die Person"
+    echo -e "  weitergeben, die einrichtet. Neu anzeigen: sudo stackctl setup-code"
+elif $SETUP_DONE; then
+    echo -e "  ${GREEN}▸${NC} Web-UI:  ${BOLD}http://${SERVER_IP}:8090${NC}"
+else
+    warn "Der Einrichtungscode ist noch nicht da. Gleich noch einmal versuchen:"
+    echo -e "    sudo stackctl setup-code"
+    echo -e "  Einrichtung dann unter ${BOLD}http://${SERVER_IP}:8090/setup${NC}"
+fi
+echo ""
 echo -e "  ${GREEN}▸${NC} Status:  systemctl status stackctl"
 echo -e "  ${GREEN}▸${NC} Logs:    journalctl -u stackctl -f"
-echo ""
-echo -e "  Oeffne die Web-UI im Browser, um das Setup zu starten."
 echo -e "${BOLD}════════════════════════════════════════════════════${NC}"

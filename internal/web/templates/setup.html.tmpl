@@ -17,6 +17,12 @@
 
   <article class="card">
     <form method="post" action="/setup">
+      <label data-field class="mb-2">
+        Einrichtungscode
+        <input type="text" name="setup_code" value="{{.SetupCode}}" required autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" id="setup-code">
+        <span class="hint">Steht im Terminal am Ende der Installation, im Link schon eingetragen. Neu anzeigen: <code>sudo stackctl setup-code</code></span>
+      </label>
+
       <h3 class="mb-2">Schule</h3>
 
       <label data-field class="mb-1">
@@ -265,13 +271,17 @@
 
     // POST, not GET: the token must not end up in a URL or a server log.
     const params = new URLSearchParams({
+      setup_code: document.getElementById('setup-code').value,
       mode: currentMode(),
       base_domain: domain,
       dns_token: dnsToken.value.trim(),
       challenge_domain: challengeDomain.value.trim().toLowerCase(),
     });
     fetch('/setup/preflight', { method: 'POST', body: params })
-      .then(resp => resp.json())
+      .then(resp => {
+        if (resp.status === 403) throw new Error('setup-code');
+        return resp.json();
+      })
       .then(data => {
         const list = document.createElement('ul');
         list.className = 'check-list';
@@ -307,7 +317,11 @@
           checkHint.textContent = 'Mit Einschränkungen bereit.';
         }
       })
-      .catch(() => { checkHint.textContent = 'Prüfung fehlgeschlagen.'; })
+      .catch(err => {
+        checkHint.textContent = err.message === 'setup-code'
+          ? 'Erst den Einrichtungscode oben eintragen.'
+          : 'Prüfung fehlgeschlagen.';
+      })
       .finally(() => { checkBtn.disabled = false; });
   });
 

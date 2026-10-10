@@ -32,8 +32,15 @@ type setupData struct {
 	// school-network mode.
 	DNSToken        string
 	ChallengeDomain string
-	Error           string
+	// SetupCode is what the admin typed or what the link from install.sh
+	// carried; it is echoed back so a failed submit does not lose it.
+	SetupCode string
+	Error     string
 }
+
+// setupCodeHint tells the admin where the code is. It appears whenever the
+// code is missing or wrong.
+const setupCodeHint = "Er steht im Terminal am Ende der Installation. Neu anzeigen: sudo stackctl setup-code"
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.SetupState != config.SetupStateNeedsSetup {
@@ -46,6 +53,11 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		// Only inside the school network is the default: nothing leaves it
 		// without an explicit decision.
 		Mode: preflight.ModeLocal,
+		// The link install.sh prints carries the code, so nobody types it.
+		SetupCode: r.URL.Query().Get("code"),
+	}
+	if s.setupCode == "" {
+		data.Error = "Der Einrichtungscode konnte nicht angelegt werden — die Einrichtung bleibt gesperrt. Details: journalctl -u stackctl"
 	}
 	s.render(w, "setup.html.tmpl", data)
 }
@@ -61,6 +73,10 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSetupPreflight(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.SetupState != config.SetupStateNeedsSetup {
 		http.Error(w, "Setup ist bereits abgeschlossen", http.StatusForbidden)
+		return
+	}
+	if !s.checkSetupCode(r) {
+		http.Error(w, "Einrichtungscode fehlt oder stimmt nicht", http.StatusForbidden)
 		return
 	}
 
@@ -115,6 +131,17 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		ACMEEmail:       acmeEmail,
 		DNSToken:        dnsToken,
 		ChallengeDomain: challengeDomain,
+		SetupCode:       r.FormValue("setup_code"),
+	}
+
+	// The code comes first: without it nothing else is worth checking.
+	if !s.checkSetupCode(r) {
+		data.Error = "Der Einrichtungscode stimmt nicht. " + setupCodeHint
+		if s.limiter != nil && s.limiter.isLocked(clientIP(r)) {
+			data.Error = "Zu viele Fehlversuche. Bitte warte eine Minute."
+		}
+		s.render(w, "setup.html.tmpl", data)
+		return
 	}
 
 	// Validation.
@@ -213,11 +240,34 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: save env after setup: %v", err)
 	}
 
+	// The admin password guards everything from here on.
+	if err := removeSetupCode(); err != nil {
+		log.Printf("web: remove setup code: %v", err)
+	}
+	s.setupCode = ""
+
 	// Publish now — otherwise the login route would only appear on the next
 	// stackctl restart.
 	s.bootstrapPublisher()
 
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+// checkSetupCode validates the request's setup_code field. Misses count
+// towards the same per-address limit as failed logins, which also stops the
+// preflight endpoint from being used to guess.
+func (s *Server) checkSetupCode(r *http.Request) bool {
+	ip := clientIP(r)
+	if s.limiter != nil && s.limiter.isLocked(ip) {
+		return false
+	}
+	if s.validSetupCode(r.FormValue("setup_code")) {
+		return true
+	}
+	if s.limiter != nil {
+		s.limiter.recordFailure(ip)
+	}
+	return false
 }
 
 // resolvePublicMode maps a wizard card onto transport and base domain. Every

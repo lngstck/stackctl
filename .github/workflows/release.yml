@@ -42,13 +42,20 @@ jobs:
         working-directory: dist
         run: shasum -a 256 -c SHA256SUMS
 
+      # Ein Tag mit Bindestrich (v0.12.0-rc1) ist ein Vorab-Stand: GitHub
+      # zaehlt ihn nicht als "latest", install.sh und Self-Update bieten ihn
+      # also niemandem an. Installieren laesst er sich gezielt mit
+      # STACKCTL_VERSION=<tag>.
       - name: GitHub Release erstellen
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          prerelease=""
+          case "${GITHUB_REF_NAME}" in *-*) prerelease="--prerelease" ;; esac
           gh release create "${GITHUB_REF_NAME}" \
             dist/stackctl-linux-amd64 \
             dist/stackctl-linux-arm64 \
             dist/SHA256SUMS \
             --title "${GITHUB_REF_NAME}" \
-            --generate-notes
+            --generate-notes \
+            $prerelease
