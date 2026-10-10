@@ -69,14 +69,13 @@ func TestRenderSettingsSystemUsage(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		"System-Auslastung",
+		"Auslastung",
 		"Arbeitsspeicher",
-		"3.2 GiB / 8.0 GiB · 40%",
-		"width:40%",
+		"3.2 GiB von 8.0 GiB",
+		`value="40"`,
 		"Speicherplatz",
-		"width:92%",
-		"crit",
-		"4 CPU-Kerne",
+		`value="92"`,
+		"4 Kerne",
 		"0.42",
 	} {
 		if !strings.Contains(body, want) {

@@ -1,0 +1,118 @@
+/* learningstack · Grundwerte
+   Alles, was die Sprache ausmacht, hängt an diesen Werten. Farben sind
+   light-dark()-Paare: Der Modus folgt color-scheme, ohne Klassen am Markup. */
+
+:root {
+  color-scheme: light dark;
+
+  /* ── Farbton ────────────────────────────────────────────────
+     Die Plattform ist überall Petrol. Eigene Apps haben je einen
+     eigenen Farbton und setzen ihn mit data-app auf <html>. */
+  --ls-hue-platform: 180;
+  --ls-hue-pylearn: 250;
+  --ls-hue-handheld: 300;
+  --ls-hue-sponsorenlauf: 15;
+  --ls-hue-leihgeraete: 65;
+  --ls-hue: var(--ls-hue-platform);
+
+  /* ── Flächen und Text (fest, unabhängig vom Farbton) ───────── */
+  --ls-bg:          light-dark(#eceef1, #0f1113);
+  --ls-surface:     light-dark(#ffffff, #1b1e22);
+  --ls-surface-2:   light-dark(#f4f5f7, #24282d);
+  --ls-line:        light-dark(#e1e4e8, #2e3238);
+  --ls-line-input:  light-dark(#8b919a, #6e747c);
+  --ls-ink:         light-dark(#16181b, #f1f3f5);
+  --ls-ink-soft:    light-dark(#565c65, #aab0b8);
+  --ls-ink-faint:   light-dark(#7b818a, #7f858d);
+  --ls-scrim:       rgb(10 12 14 / .34);
+
+  /* ── Status (fest, immer mit Wort oder Symbol) ─────────────── */
+  --ls-ok:        light-dark(#15803d, #4ade80);
+  --ls-ok-soft:   light-dark(#dcfce7, #10291a);
+  --ls-warn:      light-dark(#a35404, #fbbf5c);
+  --ls-warn-soft: light-dark(#fef3c7, #3a2a0a);
+  --ls-bad:       light-dark(#c01c1c, #ff8b8b);
+  --ls-bad-soft:  light-dark(#fde8e8, #3a1517);
+  --ls-info:      light-dark(#1d5fb8, #8ab6f5);
+  --ls-info-soft: light-dark(#e3eefc, #142336);
+  --ls-off:       light-dark(#8b919a, #6b7179);
+
+  /* ── Schrift ────────────────────────────────────────────────
+     Systemschrift: vertraut, schnell, nichts zu hosten. */
+  --ls-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", sans-serif;
+  --ls-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --ls-text-xs: .75rem;
+  --ls-text-s: .8125rem;
+  --ls-text-base: .9375rem;
+  --ls-text-m: 1rem;
+  --ls-text-l: 1.125rem;
+  --ls-text-xl: 1.375rem;
+  --ls-text-2xl: clamp(1.5rem, 1.25rem + 1vw, 1.875rem);
+  --ls-text-3xl: clamp(1.8rem, 1.3rem + 1.8vw, 2.5rem);
+  --ls-leading: 1.45;
+  --ls-leading-tight: 1.15;
+  --ls-w-regular: 400;
+  --ls-w-medium: 500;
+  --ls-w-semibold: 600;
+  --ls-w-bold: 700;
+
+  /* ── Abstände (4er-Raster) ─────────────────────────────────── */
+  --ls-space-1: .25rem;
+  --ls-space-2: .5rem;
+  --ls-space-3: .75rem;
+  --ls-space-4: 1rem;
+  --ls-space-5: 1.25rem;
+  --ls-space-6: 1.5rem;
+  --ls-space-8: 2rem;
+  --ls-space-10: 2.5rem;
+  --ls-space-12: 3rem;
+  --ls-space-16: 4rem;
+
+  /* ── Form ───────────────────────────────────────────────────── */
+  --ls-r-xs: 6px;
+  --ls-r-s: 8px;
+  --ls-r-m: 14px;
+  --ls-r-l: 20px;
+  --ls-r-xl: 26px;
+  --ls-r-full: 999px;
+  --ls-shadow-1: 0 1px 2px rgb(0 0 0 / .05), 0 8px 24px -16px rgb(0 0 0 / .28);
+  --ls-shadow-2: 0 1px 2px rgb(0 0 0 / .08), 0 16px 40px -16px rgb(0 0 0 / .45);
+  --ls-shadow-3: 0 2px 6px rgb(0 0 0 / .08), 0 30px 80px -20px rgb(0 0 0 / .5);
+
+  /* ── Kacheln ────────────────────────────────────────────────── */
+  --ls-tile-s: 2.4rem;
+  --ls-tile-m: 3.25rem;
+  --ls-tile-l: 4.25rem;
+  --ls-tile-xl: 5.25rem;
+
+  /* ── Bewegung: eine Kurve, drei Tempi ──────────────────────── */
+  --ls-ease: cubic-bezier(.16, 1, .3, 1);
+  --ls-dur-1: 120ms;
+  --ls-dur-2: 250ms;
+  --ls-dur-3: 450ms;
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  --ls-content: 68rem;
+  --ls-gutter: clamp(1rem, 4vw, 2.5rem);
+  --ls-rail: 5.75rem;
+}
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
+
+/* Eigene Apps: data-app auf <html> setzt den Farbton der ganzen App,
+   auf einer Kachel nur den der Kachel. */
+[data-app="pylearn"]       { --ls-hue: var(--ls-hue-pylearn); }
+[data-app="handheld"]      { --ls-hue: var(--ls-hue-handheld); }
+[data-app="sponsorenlauf"] { --ls-hue: var(--ls-hue-sponsorenlauf); }
+[data-app="leihgeraete"]   { --ls-hue: var(--ls-hue-leihgeraete); }
+[data-app="stackctl"], [data-app="portal"] { --ls-hue: var(--ls-hue-platform); }
+
+/* Akzent: wird überall neu abgeleitet, wo ein Farbton gesetzt wird.
+   Eine fremde App ohne eigenen Eintrag setzt style="--ls-hue: 205" data-hue. */
+:root, [data-app], [data-hue] {
+  --ls-accent:      light-dark(oklch(.49 .11 var(--ls-hue)), oklch(.80 .11 var(--ls-hue)));
+  --ls-accent-ink:  light-dark(#ffffff, oklch(.2 .04 var(--ls-hue)));
+  --ls-accent-soft: light-dark(oklch(.955 .028 var(--ls-hue)), oklch(.30 .05 var(--ls-hue)));
+  --ls-accent-line: light-dark(oklch(.86 .06 var(--ls-hue)), oklch(.42 .07 var(--ls-hue)));
+}

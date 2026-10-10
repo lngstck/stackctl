@@ -19,6 +19,7 @@ import (
 
 	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/llm"
 	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/publish"
 )
@@ -162,7 +163,7 @@ func (s *Server) routes() {
 	// Login/Logout (ready state).
 	s.mux.HandleFunc("GET /login", s.handleLogin)
 	s.mux.HandleFunc("POST /login", s.handleLoginPost)
-	s.mux.HandleFunc("GET /logout", s.handleLogout)
+	s.mux.HandleFunc("POST /logout", s.authPost(s.handleLogout))
 
 	// Dashboard (ready + auth).
 	s.mux.HandleFunc("GET /{$}", s.requireAuth(s.handleDashboard))
@@ -245,14 +246,36 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/server-ip", s.handleServerIP)
 }
 
-// staticHandler returns a handler for /static/ assets.
+// staticHandler returns a handler for /static/ assets. They are small and
+// come over the LAN, so the browser asks every time instead of guessing how
+// long yesterday's copy stays fresh — the stylesheet's @imports carry no
+// version of their own.
 func (s *Server) staticHandler() http.Handler {
+	var h http.Handler
 	if s.devMode {
 		dir := filepath.Join(s.devDir, "static")
-		return http.StripPrefix("/static/", http.FileServer(http.Dir(dir)))
+		h = http.StripPrefix("/static/", http.FileServer(http.Dir(dir)))
+	} else {
+		sub, _ := fs.Sub(staticFS, "static")
+		h = http.StripPrefix("/static/", http.FileServerFS(sub))
 	}
-	sub, _ := fs.Sub(staticFS, "static")
-	return http.StripPrefix("/static/", http.FileServerFS(sub))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		h.ServeHTTP(w, r)
+	})
+}
+
+// llmModelCtx is the context of the "llm-model-fields" template.
+type llmModelCtx struct {
+	Prefix, Provider, UpstreamID, Prompt string
+	Providers                            []llm.Provider
+}
+
+// sheetCtx is the context of the "app-sheet" template.
+type sheetCtx struct {
+	App       appSheet
+	CSRFToken string
+	Mode      string
 }
 
 // templateFuncs returns the shared FuncMap for all templates.
@@ -268,6 +291,29 @@ func templateFuncs() template.FuncMap {
 			// token is a hex string from crypto/rand; escape defensively anyway.
 			return template.HTML(`<input type="hidden" name="csrf_token" value="` +
 				template.HTMLEscapeString(token) + `">`)
+		},
+		// tileSize returns the tile in another size, e.g. for list rows.
+		"tileSize": func(t appTile, size string) appTile {
+			t.Size = size
+			return t
+		},
+		// asset appends this process's boot id to a static path, so a new
+		// stackctl (after an update) never meets yesterday's CSS in the cache.
+		"asset": func(path string) string {
+			return path + "?v=" + bootID
+		},
+		"categoryLabel": categoryLabel,
+		"hue":           hueFor,
+		"abbr":          func(name string) string { return abbreviate(name, name) },
+		// llmModelCtx hands the shared model fields of the KI page their
+		// values; prefix keeps the element ids apart between sheets.
+		"llmModelCtx": func(prefix, provider, upstream, prompt string, providers []llm.Provider) llmModelCtx {
+			return llmModelCtx{Prefix: prefix, Provider: provider, UpstreamID: upstream, Prompt: prompt, Providers: providers}
+		},
+		"join": strings.Join,
+		// sheetCtx hands an app sheet what it needs from the page around it.
+		"sheetCtx": func(a appSheet, csrf, mode string) sheetCtx {
+			return sheetCtx{App: a, CSRFToken: csrf, Mode: mode}
 		},
 		"jsString": func(s string) template.JS {
 			// Escape for safe embedding inside a JS string literal.
@@ -285,7 +331,7 @@ func templateFuncs() template.FuncMap {
 
 // loadTemplates builds a map of page templates. Each page template is
 // parsed together with layout.html.tmpl so that layout defines (head, foot,
-// sidebar-layout-start/end) are available. Because each page is a separate
+// shell-start/end) are available. Because each page is a separate
 // *template.Template, there are no define-name collisions.
 func (s *Server) loadTemplates() error {
 	readFile := func(name string) (string, error) {

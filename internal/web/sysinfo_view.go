@@ -4,6 +4,7 @@ package web
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/lngstck/stackctl/internal/paths"
 	"github.com/lngstck/stackctl/internal/sysinfo"
@@ -27,6 +28,10 @@ type sysView struct {
 	DiskFree    string
 	DiskPercent int
 	DiskLevel   string
+
+	// Short forms for the start screen: "139" of "240 GB", "5,2" of "16 GB".
+	RAMUsedShort, RAMTotalShort, RAMFreeShort    string
+	DiskUsedShort, DiskTotalShort, DiskFreeShort string
 
 	CPUCount int
 	LoadOK   bool
@@ -54,11 +59,17 @@ func buildSysView() sysView {
 		v.RAMUsed = humanBytes(info.RAMUsed)
 		v.RAMTotal = humanBytes(info.RAMTotal)
 		v.RAMFree = humanBytes(info.RAMAvailable)
+		v.RAMUsedShort = gigabytes(info.RAMUsed)
+		v.RAMTotalShort = gigabytes(info.RAMTotal) + " GB"
+		v.RAMFreeShort = gigabytes(info.RAMAvailable) + " GB"
 	}
 	if info.DiskOK {
 		v.DiskUsed = humanBytes(info.DiskUsed)
 		v.DiskTotal = humanBytes(info.DiskTotal)
 		v.DiskFree = humanBytes(info.DiskFree)
+		v.DiskUsedShort = gigabytes(info.DiskUsed)
+		v.DiskTotalShort = gigabytes(info.DiskTotal) + " GB"
+		v.DiskFreeShort = gigabytes(info.DiskFree) + " GB"
 	}
 	if info.LoadOK {
 		v.Load1 = fmt.Sprintf("%.2f", info.Load1)
@@ -90,4 +101,14 @@ func humanBytes(n uint64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// gigabytes formats a byte count in decimal gigabytes, the unit disks are
+// sold in, German style: one decimal below ten ("5,2"), whole numbers above.
+func gigabytes(n uint64) string {
+	gb := float64(n) / 1e9
+	if gb < 10 {
+		return strings.Replace(fmt.Sprintf("%.1f", gb), ".", ",", 1)
+	}
+	return fmt.Sprintf("%.0f", gb)
 }

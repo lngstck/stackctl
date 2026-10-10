@@ -1,234 +1,141 @@
+{{define "title"}}Einrichtung{{end}}
 {{define "page"}}
 {{template "head" .}}
+<body class="sc-bare">
+<main class="sc-bare-main sc-setup" id="inhalt">
+  <a class="ls-wordmark sc-bare-mark" href="/setup"><svg class="ls-mark" aria-hidden="true"><use href="/static/ls/icons/icons.svg#mark"/></svg>learningstack</a>
 
-<div class="centered-box centered-box--wide">
-  <h1 class="mb-2" style="text-align:center;">
-    <span class="wordmark wordmark--lg">
-      <span class="wordmark__mark"></span>
-      <span class="wordmark__name">learningstack</span>
-      <span class="wordmark__app">stackctl</span>
-    </span>
-  </h1>
-  <p class="sub mb-3" style="text-align:center;">Ersteinrichtung – bitte alle Felder ausfuellen.</p>
+  <div class="ls-hello">
+    <h1>Einrichtung</h1>
+    <p>Einmal ausfüllen, dann läuft learningstack an deiner Schule.</p>
+  </div>
 
-  {{if .Error}}
-  <div role="alert" data-variant="danger" class="mb-2">{{.Error}}</div>
-  {{end}}
+  {{if .Error}}<p class="sc-flash" data-tone="bad" role="alert">{{template "icon" "alert"}}<span>{{.Error}}</span></p>{{end}}
 
-  <article class="card">
-    <form method="post" action="/setup">
-      <label data-field class="mb-2">
-        Einrichtungscode
+  <form method="post" action="/setup" class="sc-setup-form">
+    <span class="ls-list-label">Einrichtungscode</span>
+    <div class="ls-list">
+      <div class="ls-field">
+        <label for="setup-code">Code aus dem Terminal</label>
         <input type="text" name="setup_code" value="{{.SetupCode}}" required autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" id="setup-code">
-        <span class="hint">Steht im Terminal am Ende der Installation, im Link schon eingetragen. Neu anzeigen: <code>sudo stackctl setup-code</code></span>
-      </label>
-
-      <h3 class="mb-2">Schule</h3>
-
-      <label data-field class="mb-1">
-        Schulname
-        <input type="text" name="school_name" value="{{.SchoolName}}" placeholder="z.B. Gymnasium Musterstadt" required id="school-name">
-      </label>
-
-      <label data-field class="mb-1">
-        Schul-Slug
-        <div style="display:flex;gap:0.5rem;align-items:center;">
-          <input type="text" name="school_slug" value="{{.SchoolSlug}}" placeholder="aus Schulname ableiten" id="slug-input" style="flex:1;">
-          <button type="button" class="ghost small" id="derive-slug-btn" title="Slug aus Schulname ableiten">Ableiten</button>
-        </div>
-        <span class="hint">Kurzform der Schule (a-z, 0-9, Bindestrich, max. 30 Zeichen). Apps nutzen sie als interne Kennung der Schule.</span>
-      </label>
-
-      <label data-field class="mb-1">
-        Server-IP / Hostname
-        <input type="text" name="server_domain" value="{{.ServerDomain}}" placeholder="wird automatisch erkannt" id="server-ip">
-        <span class="hint">Automatisch erkannt. Die Adresse dieses Servers im Schulnetz — darauf zeigen Login und Apps.</span>
-      </label>
-
-      <label data-field class="mb-2">
-        Kontakt-E-Mail
-        <input type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="admin@schule.de">
-        <span class="hint">Standard-Adresse für Warnungen zu den Zertifikaten.</span>
-      </label>
-
-      <h3 class="mb-1">Betriebsart</h3>
-      <p class="sub mb-2" style="font-size:0.85rem;">
-        Wo sollen Login und Apps erreichbar sein? Das laesst sich spaeter nur
-        mit Aufwand aendern — die Adresse steckt in jedem Login.
-      </p>
-
-      <div class="mode-choice mb-2">
-        <label class="mode-card">
-          <div class="mode-card__top">
-            <input type="radio" name="public_mode" value="local" {{if ne .Mode "direct"}}checked{{end}}>
-            <span class="mode-card__title">Nur im Schulnetz</span>
-            <span class="mode-card__tag">empfohlen</span>
-          </div>
-          <div class="mode-card__body">
-            Login und Apps sind im Schulnetz erreichbar, mit echtem Zertifikat.
-            Von aussen kommt niemand heran, keine Schuelerdaten verlassen das
-            Schulnetz. Vorzubereiten: ein kostenloses Konto bei deSEC und
-            zwei Einträge beim DNS-Anbieter der Schule.
-          </div>
-        </label>
+        <span class="ls-field-hint">Steht am Ende der Installation, im Link schon eingetragen. Neu anzeigen: <code>sudo stackctl setup-code</code></span>
       </div>
+    </div>
 
-      <details class="mb-2" {{if eq .Mode "direct"}}open{{end}}>
-        <summary class="sub" style="font-size:0.85rem;cursor:pointer;">Erweitert: Server direkt am Internet</summary>
-        <div class="mode-choice mt-1">
-          <label class="mode-card">
-            <div class="mode-card__top">
-              <input type="radio" name="public_mode" value="direct" {{if eq .Mode "direct"}}checked{{end}}>
-              <span class="mode-card__title">Direkter Betrieb</span>
-              <span class="mode-card__tag">Ports 80/443 offen</span>
-            </div>
-            <div class="mode-card__body">
-              Der Server haengt selbst am Internet und holt seine Zertifikate
-              ueber Let's Encrypt. Dafuer muss der Wildcard-Eintrag auf seine
-              oeffentliche Adresse zeigen und Port 80 und 443 muessen von
-              aussen erreichbar sein. Login und Apps sind dann aus dem
-              Internet erreichbar.
-            </div>
-          </label>
-        </div>
+    <span class="ls-list-label">Schule</span>
+    <div class="ls-list">
+      <div class="ls-field"><label for="school-name">Schulname</label><input type="text" name="school_name" value="{{.SchoolName}}" placeholder="Gymnasium Musterstadt" required id="school-name"></div>
+      <div class="ls-field"><label for="slug-input">Kennung</label>
+        <div class="sc-suffix"><input type="text" name="school_slug" value="{{.SchoolSlug}}" placeholder="aus dem Schulnamen" id="slug-input" autocapitalize="none" spellcheck="false"><button type="button" data-size="s" data-variant="ghost" id="derive-slug-btn">Ableiten</button></div>
+        <span class="ls-field-hint">Kurzform der Schule: a–z, 0–9, Bindestrich, höchstens 30 Zeichen. Apps nutzen sie intern.</span></div>
+      <div class="ls-field"><label for="server-ip">Adresse dieses Servers im Schulnetz</label><input type="text" name="server_domain" value="{{.ServerDomain}}" placeholder="wird erkannt" id="server-ip" inputmode="decimal"><span class="ls-field-hint">Automatisch erkannt. Darauf zeigen Login und Apps.</span></div>
+      <div class="ls-field"><label for="contact-email">E-Mail für Rückfragen</label><input type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="it@schule.de" id="contact-email"><span class="ls-field-hint">Dorthin gehen Warnungen zu den Zertifikaten.</span></div>
+    </div>
+
+    <span class="ls-list-label">Wo sollen Login und Apps erreichbar sein?</span>
+    <div class="ls-list">
+      <label class="ls-row sc-mode"><input type="radio" name="public_mode" value="local"{{if ne .Mode "direct"}} checked{{end}}>
+        <span class="ls-row-label">Nur im Schulnetz <span class="ls-pill" data-tone="ok" data-dot="no">empfohlen</span><small>Mit echtem Zertifikat. Von außen kommt niemand heran, keine Schülerdaten verlassen das Schulnetz. Vorzubereiten: ein kostenloses Konto bei deSEC und zwei Einträge beim DNS-Anbieter der Schule.</small></span>
+        {{template "icon" "school"}}</label>
+    </div>
+    <details class="ls-list sc-gap-s"{{if eq .Mode "direct"}} open{{end}}>
+      <summary class="ls-row"><span class="ls-row-label">Erweitert: Server direkt am Internet</span></summary>
+      <label class="ls-row sc-mode"><input type="radio" name="public_mode" value="direct"{{if eq .Mode "direct"}} checked{{end}}>
+        <span class="ls-row-label">Direkter Betrieb <span class="ls-pill" data-tone="warn" data-dot="no">Ports 80/443 offen</span><small>Der Server hängt selbst am Internet und holt seine Zertifikate bei Let's Encrypt. Login und Apps sind dann aus dem Internet erreichbar.</small></span>
+        {{template "icon" "globe"}}</label>
+    </details>
+    <p class="ls-list-hint">Lässt sich später nur mit Aufwand ändern: Die Adresse steckt in jedem Login.</p>
+
+    <span class="ls-list-label">Domain</span>
+    <div class="ls-list">
+      <div class="ls-field"><label for="base-domain">Domain der Schule</label><input type="text" name="base_domain" value="{{.BaseDomain}}" placeholder="apps.gymnasium-musterstadt.de" id="base-domain" autocapitalize="none" spellcheck="false">
+        <span class="ls-field-hint">Ohne <code>*.</code> und ohne <code>https://</code>. Darunter liegen Login und Apps, etwa <code id="domain-preview">auth.deine-domain.de, pylearn.deine-domain.de</code></span></div>
+    </div>
+
+    <div id="local-fields">
+      <span class="ls-list-label">Zertifikat über deSEC</span>
+      <div class="ls-list">
+        <div class="ls-row sc-step-row"><span class="sc-num">1</span><span class="ls-row-label">Bei <a href="https://desec.io" target="_blank" rel="noopener">desec.io</a> ein Konto anlegen und dort die Domain <code class="js-domain">deine-domain.de</code> hinzufügen.<small>deSEC ist kostenlos und gemeinnützig.</small></span></div>
+        <div class="ls-row sc-step-row" id="ns-step"><span class="sc-num">2</span><span class="ls-row-label">Beim DNS-Anbieter der Schuldomain diese Einträge anlegen:<pre class="sc-records" id="dns-records"></pre></span></div>
+        <div class="ls-row sc-step-row"><span class="sc-num">3</span><span class="ls-row-label">Bei deSEC einen Token erzeugen und hier eintragen.</span></div>
+        <div class="ls-field"><label for="dns-token">deSEC-Token</label><input type="password" name="dns_token" value="{{.DNSToken}}" autocomplete="off" id="dns-token">
+          <span class="ls-field-hint" id="wildcard-hint">Den Eintrag <code>*.<span class="js-domain">deine-domain.de</span></code> auf diesen Server legt stackctl damit selbst bei deSEC an.</span></div>
+      </div>
+      <details class="ls-list sc-gap-s"{{if .ChallengeDomain}} open{{end}}>
+        <summary class="ls-row"><span class="ls-row-label">Der DNS-Anbieter erlaubt keine NS-Einträge?</span></summary>
+        <div class="ls-field"><label for="challenge-domain">Ziel bei deSEC</label><input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="_acme-challenge.schule.example" id="challenge-domain" autocapitalize="none" spellcheck="false">
+          <span class="ls-field-hint">Dann bleibt die Domain beim Anbieter, nur die Zertifikatsprüfung geht per CNAME zu deSEC. Den Eintrag <code>*.</code> legst du dann selbst beim Anbieter an. Im Normalfall leer.</span></div>
       </details>
+    </div>
 
-      <label data-field class="mb-1">
-        Domain der Schule
-        <input type="text" name="base_domain" value="{{.BaseDomain}}" placeholder="z.B. apps.gymnasium-musterstadt.de" id="base-domain">
-        <span class="hint">
-          Ohne <code>*.</code> und ohne <code>https://</code>. Darunter liegen
-          Login und Apps: <code id="domain-preview">auth.deine-domain.de, pylearn.deine-domain.de</code>
-        </span>
-      </label>
-
-      <div id="local-fields">
-        <p class="sub mb-1" style="font-size:0.85rem;">
-          Für das Zertifikat übernimmt deSEC (kostenlos, gemeinnützig) die
-          Domain. Einmalig vorzubereiten:
-        </p>
-        <ol class="mb-2" style="font-size:0.85rem;padding-left:1.25rem;">
-          <li>Bei <a href="https://desec.io" target="_blank" rel="noopener">desec.io</a> ein Konto anlegen und dort die Domain <code class="js-domain">deine-domain.de</code> hinzufügen.</li>
-          <li id="ns-step">Beim DNS-Anbieter der Schuldomain diese Einträge anlegen:
-            <pre class="mt-1" id="dns-records" style="background:var(--faint);padding:0.75rem 1rem;border-radius:0.5rem;font-size:0.8rem;overflow-x:auto;"></pre>
-          </li>
-          <li>Bei deSEC einen Token erzeugen und hier eintragen.</li>
-        </ol>
-
-        <label data-field class="mb-1">
-          deSEC-Token
-          <input type="password" name="dns_token" value="{{.DNSToken}}" autocomplete="off" id="dns-token">
-          <span class="hint" id="wildcard-hint">
-            Den Eintrag <code>*.<span class="js-domain">deine-domain.de</span></code> auf die
-            Server-IP legt stackctl damit selbst bei deSEC an.
-          </span>
-        </label>
-
-        <details class="mb-2" {{if .ChallengeDomain}}open{{end}}>
-          <summary class="sub" style="font-size:0.85rem;cursor:pointer;">Der DNS-Anbieter erlaubt keine NS-Einträge?</summary>
-          <p class="sub mt-1 mb-1" style="font-size:0.85rem;">
-            Dann bleibt die Domain beim Anbieter, und nur die Zertifikatsprüfung
-            wird per CNAME zu einer Domain umgeleitet, die bei deSEC liegt. Den
-            Wildcard-Eintrag legst du in diesem Fall selbst beim Anbieter an.
-          </p>
-          <label data-field class="mb-1">
-            Ziel bei deSEC
-            <input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="z.B. _acme-challenge.schule.example" id="challenge-domain">
-            <span class="hint">Leer lassen im Normalfall, wenn deSEC die Domain selbst verwaltet.</span>
-          </label>
-        </details>
+    <div id="direct-fields">
+      <span class="ls-list-label">Zertifikat über Let's Encrypt</span>
+      <div class="ls-list">
+        <div class="ls-field"><label for="acme-email">E-Mail für Zertifikats-Warnungen</label><input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="wie oben" id="acme-email"><span class="ls-field-hint">Let's Encrypt meldet sich dort, wenn eine Erneuerung länger scheitert. Leer heißt: die E-Mail von oben.</span></div>
       </div>
+    </div>
 
-      <div id="direct-fields">
-        <label data-field class="mb-1">
-          E-Mail fuer Zertifikats-Warnungen
-          <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="wie Kontakt-E-Mail" id="acme-email">
-          <span class="hint">Let's Encrypt meldet hierhin, wenn eine Erneuerung laengere Zeit scheitert. Leer = Kontakt-E-Mail von oben.</span>
-        </label>
+    <div class="sc-check-bar">
+      <button type="button" data-variant="ghost" id="check-btn">{{template "icon" "check-circle"}}Voraussetzungen prüfen</button>
+      <span id="check-hint" class="sc-check-hint"></span>
+    </div>
+    <div id="check-result" class="ls-list" hidden></div>
+
+    <span class="ls-list-label">Admin-Passwort</span>
+    <div class="ls-list">
+      <div class="ls-field"><label for="password-input">Passwort für diese Verwaltung</label><input type="password" name="password" minlength="8" required id="password-input" autocomplete="new-password"></div>
+      <div class="ls-field"><label for="password-confirm">Noch einmal</label><input type="password" name="password_confirm" minlength="8" required id="password-confirm" autocomplete="new-password"></div>
+      <div class="ls-field">
+        <div class="ls-actions">
+          <button type="button" data-size="s" data-variant="ghost" id="gen-password-btn">Erzeugen</button>
+          <button type="button" data-size="s" data-variant="ghost" id="copy-password-btn" hidden>Kopieren</button>
+          <button type="button" data-size="s" data-variant="ghost" id="show-password-btn" hidden>Anzeigen</button>
+        </div>
+        <span class="ls-field-hint" id="password-hint" hidden></span>
       </div>
+    </div>
 
-      <div class="mb-2" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-        <button type="button" class="ghost small" id="check-btn">Voraussetzungen pruefen</button>
-        <span class="sub" style="font-size:0.8rem;" id="check-hint"></span>
-      </div>
-      <div id="check-result" class="mb-2"></div>
-
-      <h3 class="mb-2">Admin-Zugang</h3>
-
-      <label data-field class="mb-1">
-        Admin-Passwort
-        <input type="password" name="password" minlength="8" required id="password-input">
-      </label>
-
-      <label data-field class="mb-1">
-        Passwort wiederholen
-        <input type="password" name="password_confirm" minlength="8" required id="password-confirm">
-      </label>
-
-      <div class="mb-2" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-        <button type="button" class="ghost small" id="gen-password-btn">Generieren</button>
-        <button type="button" class="ghost small" id="copy-password-btn" style="display:none;">Kopieren</button>
-        <button type="button" class="ghost small" id="show-password-btn" style="display:none;">Anzeigen</button>
-        <span class="sub" style="font-size:0.8rem;display:none;" id="password-hint"></span>
-      </div>
-
-      <button type="submit" class="mt-2" style="width:100%;">Setup abschliessen</button>
-    </form>
-  </article>
-</div>
+    <button type="submit" data-size="l" class="sc-setup-submit" data-busy>Einrichtung abschließen</button>
+  </form>
+</main>
 
 <script>
 (function() {
-  // --- Slug derivation ---
+  // --- Kennung aus dem Schulnamen ---
   const nameInput = document.getElementById('school-name');
   const slugInput = document.getElementById('slug-input');
-  const deriveBtn = document.getElementById('derive-slug-btn');
-
-  deriveBtn.addEventListener('click', function() {
+  document.getElementById('derive-slug-btn').addEventListener('click', function() {
     const name = nameInput.value.trim();
-    if (!name) { slugInput.focus(); return; }
+    if (!name) { nameInput.focus(); return; }
     slugInput.value = deriveSlug(name);
   });
 
   function deriveSlug(name) {
-    // Lowercase + umlaut replacement.
     name = name.toLowerCase();
     const map = {'ä':'ae','ö':'oe','ü':'ue','ß':'ss'};
     name = name.replace(/[äöüß]/g, c => map[c] || c);
-
-    // Split into words, keep only a-z0-9.
     const words = name.split(/[\s\-_.,]+/)
       .map(w => w.replace(/[^a-z0-9]/g, ''))
       .filter(w => w.length > 0);
-
-    // Drop generic school-type words.
+    // Allgemeine Schulform-Wörter tragen nichts zur Kennung bei.
     const skip = new Set([
       'schule','grundschule','oberschule','realschule','hauptschule',
       'gesamtschule','gymnasium','igs','bbs','fos','kgs','ganztagsschule',
       'der','die','das','und','von','zu','am','an','im','in','fuer','for'
     ]);
     let meaningful = words.filter(w => !skip.has(w));
-
-    // Fallback: if everything was filtered, use first non-generic word.
     if (meaningful.length === 0) meaningful = words.slice(0, 1);
-
-    // Join with dashes, truncate to 10 chars at word boundary.
     let slug = '';
     for (const w of meaningful) {
       const next = slug ? slug + '-' + w : w;
       if (next.length > 30) break;
       slug = next;
     }
-
-    // If first word alone is >10, hard-truncate.
-    if (!slug && meaningful.length > 0) {
-      slug = meaningful[0].substring(0, 30);
-    }
-
+    if (!slug && meaningful.length > 0) slug = meaningful[0].substring(0, 30);
     return slug.replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
   }
 
-  // --- Operating mode: show only the fields that mode needs ---
+  // --- Betriebsart: nur die Felder zeigen, die sie braucht ---
   const modeInputs = document.querySelectorAll('input[name="public_mode"]');
   const baseDomain = document.getElementById('base-domain');
   const serverIP = document.getElementById('server-ip');
@@ -250,17 +157,15 @@
     const mode = currentMode();
     localFields.hidden = (mode !== 'local');
     directFields.hidden = (mode !== 'direct');
-    // Results belong to the mode they were produced for.
-    checkResult.innerHTML = '';
+    // Ergebnisse gelten nur für die Betriebsart, für die sie entstanden.
+    checkResult.replaceChildren(); checkResult.hidden = true;
     checkHint.textContent = '';
   }
 
-  // The records the admin has to create, filled in as they type. Without
-  // a delegation target only the wildcard is needed.
-  // The records the admin has to create, filled in as they type. Normally
-  // the domain goes to deSEC by two NS records and stackctl writes the
-  // wildcard itself; with a delegation target the school keeps its zone and
-  // creates the wildcard plus a CNAME for the challenge.
+  // Die Einträge, die die Admin anlegen muss, während sie tippt. Normal
+  // geht die Domain mit zwei NS-Einträgen an deSEC und stackctl setzt den
+  // Wildcard selbst; mit Ziel bei deSEC behält die Schule ihre Zone und legt
+  // Wildcard und CNAME für die Prüfung selbst an.
   function syncPreview() {
     const domain = baseDomain.value.trim().toLowerCase() || 'deine-domain.de';
     domainPreview.textContent = 'auth.' + domain + ', pylearn.' + domain;
@@ -282,19 +187,34 @@
   syncMode();
   syncPreview();
 
-  // --- Prerequisite check ---
+  // --- Voraussetzungen prüfen ---
   const checkBtn = document.getElementById('check-btn');
-  const MARKS = { ok: '✓', warn: '!', fail: '✗', skip: '·' };
+  const TONE = { ok: 'ok', warn: 'warn', fail: 'bad', skip: 'off' };
+  const WORD = { ok: 'in Ordnung', warn: 'Hinweis', fail: 'fehlt', skip: 'später' };
+
+  function row(c) {
+    const r = document.createElement('div');
+    r.className = 'ls-row';
+    const l = document.createElement('span');
+    l.className = 'ls-row-label';
+    l.textContent = c.title;
+    const d = document.createElement('small');
+    d.textContent = c.detail;
+    l.appendChild(d);
+    const p = document.createElement('span');
+    p.className = 'ls-pill'; p.dataset.tone = TONE[c.status] || 'off'; p.textContent = WORD[c.status] || c.status;
+    r.append(l, p);
+    return r;
+  }
 
   checkBtn.addEventListener('click', function() {
     const domain = baseDomain.value.trim().toLowerCase();
     if (!domain) { baseDomain.focus(); return; }
+    checkBtn.setAttribute('aria-busy', 'true'); checkBtn.disabled = true;
+    checkHint.textContent = '';
+    checkResult.replaceChildren(); checkResult.hidden = true;
 
-    checkBtn.disabled = true;
-    checkHint.textContent = 'Prüfe …';
-    checkResult.innerHTML = '';
-
-    // POST, not GET: the token must not end up in a URL or a server log.
+    // POST, nicht GET: Der Token gehört in keine URL und kein Server-Log.
     const params = new URLSearchParams({
       setup_code: document.getElementById('setup-code').value,
       mode: currentMode(),
@@ -308,49 +228,24 @@
         return resp.json();
       })
       .then(data => {
-        const list = document.createElement('ul');
-        list.className = 'check-list';
-        (data.checks || []).forEach(c => {
-          const li = document.createElement('li');
-          li.className = 'check check--' + c.status;
-          const mark = document.createElement('span');
-          mark.className = 'check__mark';
-          mark.textContent = MARKS[c.status] || '·';
-          const body = document.createElement('div');
-          const title = document.createElement('div');
-          title.className = 'check__title';
-          title.textContent = c.title;
-          const detail = document.createElement('div');
-          detail.className = 'check__detail';
-          detail.textContent = c.detail;
-          body.appendChild(title);
-          body.appendChild(detail);
-          li.appendChild(mark);
-          li.appendChild(body);
-          list.appendChild(li);
-        });
-        checkResult.appendChild(list);
-
-        // Failing checks do not block the install: DNS records propagate on
-        // their own schedule, and an admin who prepares the server first is
-        // doing nothing wrong.
-        if (data.summary === 'ok') {
-          checkHint.textContent = 'Alles bereit.';
-        } else if (data.summary === 'fail') {
-          checkHint.textContent = 'Noch nicht vollständig — Setup lässt sich trotzdem abschließen.';
-        } else {
-          checkHint.textContent = 'Mit Einschränkungen bereit.';
-        }
+        checkResult.replaceChildren(...(data.checks || []).map(row));
+        checkResult.hidden = false;
+        // Fehlende Einträge blockieren die Einrichtung nicht: DNS braucht
+        // seine Zeit, und wer den Server zuerst vorbereitet, macht nichts
+        // falsch.
+        if (data.summary === 'ok') checkHint.textContent = 'Alles bereit.';
+        else if (data.summary === 'fail') checkHint.textContent = 'Noch nicht vollständig. Abschließen geht trotzdem.';
+        else checkHint.textContent = 'Mit Einschränkungen bereit.';
       })
       .catch(err => {
         checkHint.textContent = err.message === 'setup-code'
           ? 'Erst den Einrichtungscode oben eintragen.'
           : 'Prüfung fehlgeschlagen.';
       })
-      .finally(() => { checkBtn.disabled = false; });
+      .finally(() => { checkBtn.removeAttribute('aria-busy'); checkBtn.disabled = false; });
   });
 
-  // --- Password generator ---
+  // --- Passwort erzeugen ---
   const genBtn = document.getElementById('gen-password-btn');
   const copyBtn = document.getElementById('copy-password-btn');
   const showBtn = document.getElementById('show-password-btn');
@@ -365,20 +260,17 @@
     pwConfirm.type = 'password';
     pwInput.value = generatedPW;
     pwConfirm.value = generatedPW;
-    copyBtn.style.display = '';
-    showBtn.style.display = '';
+    copyBtn.hidden = false;
+    showBtn.hidden = false;
     showBtn.textContent = 'Anzeigen';
-    pwHint.textContent = 'Passwort generiert – bitte kopieren und sicher aufbewahren.';
-    pwHint.style.display = '';
+    pwHint.textContent = 'Erzeugt. Bitte kopieren und sicher aufbewahren.';
+    pwHint.hidden = false;
   });
 
   copyBtn.addEventListener('click', function() {
-    stackctlCopy(generatedPW).then(function() {
-      pwHint.textContent = 'Kopiert!';
-      copyBtn.textContent = 'Kopiert ✓';
-      setTimeout(function() {
-        copyBtn.textContent = 'Kopieren';
-      }, 2000);
+    window.stackctlCopy(generatedPW).then(function() {
+      copyBtn.textContent = 'Kopiert';
+      setTimeout(function() { copyBtn.textContent = 'Kopieren'; }, 2000);
     });
   });
 
@@ -399,6 +291,5 @@
   }
 })();
 </script>
-
 {{template "foot" .}}
 {{end}}

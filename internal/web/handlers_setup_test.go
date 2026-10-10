@@ -378,7 +378,7 @@ func TestSettingsKeepTokenAndRefreshProxy(t *testing.T) {
 	if fake.refreshed != 1 {
 		t.Errorf("Refresh-Aufrufe = %d, want 1", fake.refreshed)
 	}
-	if strings.Contains(rec.Body.String(), "alt\"") {
+	if strings.Contains(rec.Body.String(), `value="alt"`) {
 		t.Error("gespeicherter Token steht im Formular")
 	}
 }
