@@ -106,6 +106,10 @@ func writeSites(b *strings.Builder, routes []Route) {
 	}
 }
 
+// dnsPropagationDelay is how long Caddy waits after writing the challenge
+// record before asking the CA to look (see writeWildcardSite).
+const dnsPropagationDelay = "2m"
+
 // writeWildcardSite serves every host from one wildcard site with a single
 // certificate obtained over DNS-01. One certificate means one challenge name,
 // so the school delegates exactly one record — and a newly installed app
@@ -128,6 +132,13 @@ func writeWildcardSite(b *strings.Builder, cfg *config.Config, routes []Route) {
 	if target := cfg.Public.Local.ChallengeDomain; target != "" {
 		fmt.Fprintf(b, "\t\tdns_challenge_override_domain %s\n", target)
 	}
+	// deSEC verteilt einen neuen Eintrag nicht auf allen Nameservern
+	// gleichzeitig: ns2.desec.org hat ihn sofort, ns1.desec.io teils erst
+	// nach einer Minute. Fragt Let's Encrypt dort zu früh, scheitert die
+	// Prüfung, und Caddy räumt den Eintrag wieder weg. Gesehen auf test1
+	// am 2026-10-10; das certbot-Plugin von deSEC wartet aus demselben
+	// Grund 80 Sekunden.
+	fmt.Fprintf(b, "\t\tpropagation_delay %s\n", dnsPropagationDelay)
 	b.WriteString("\t}\n")
 
 	for _, r := range routes {
