@@ -65,8 +65,9 @@ func TestGenerateConfigBasic(t *testing.T) {
 	}
 
 	// Kein Anmeldedienst angebunden: Dex startet ohne jeden Connector nicht,
-	// die leere Passwort-Datenbank zaehlt als einer. Ein Upstream-Connector
-	// darf es nicht geben — schon gar nicht einer auf einen Dritten.
+	// die Passwort-Datenbank zaehlt als einer — auch leer. Ein
+	// Upstream-Connector darf es nicht geben, schon gar nicht einer auf einen
+	// Dritten.
 	if doc["enablePasswordDB"] != true {
 		t.Errorf("enablePasswordDB = %v, want true — sonst startet Dex nicht", doc["enablePasswordDB"])
 	}
@@ -74,7 +75,7 @@ func TestGenerateConfigBasic(t *testing.T) {
 		t.Errorf("connectors = %v, want none", doc["connectors"])
 	}
 	if _, ok := doc["staticPasswords"]; ok {
-		t.Error("die Platzhalter-Datenbank muss leer bleiben")
+		t.Error("ohne Testkonten darf es keine Passwort-Eintraege geben")
 	}
 
 	// oauth2 settings.
@@ -166,5 +167,55 @@ func TestBuildRedirectURICustomDomain(t *testing.T) {
 	want := "https://pylearn.ls.gym-phoenix.de/auth/callback"
 	if got != want {
 		t.Errorf("BuildRedirectURI = %q, want %q", got, want)
+	}
+}
+
+// Testkonten landen als Passwort-Eintraege in Dex, in der Form des
+// Claim-Kontrakts: die zufaellige ID wird zum Subjekt, die Rolle zum einzigen
+// groups-Wert. Dex 2.45 liest name, preferredUsername und groups.
+func TestGenerateConfigTestAccounts(t *testing.T) {
+	cfg := testConfig()
+	cfg.Auth.TestAccounts = []config.TestAccount{{
+		ID:           "0123abcd",
+		Name:         "Frau Mueller",
+		Role:         "lehrkraft",
+		Login:        "mueller@ls.gym-phoenix.de",
+		PasswordHash: "$2a$10$abcdefghijklmnopqrstuuJ8lC0XxS0bU0R9J2yXz1Hq5mW0lY8xK",
+	}}
+
+	data, err := GenerateConfig(cfg, nil)
+	if err != nil {
+		t.Fatalf("GenerateConfig: %v", err)
+	}
+	var doc struct {
+		EnablePasswordDB bool `yaml:"enablePasswordDB"`
+		StaticPasswords  []struct {
+			Email             string   `yaml:"email"`
+			Hash              string   `yaml:"hash"`
+			Name              string   `yaml:"name"`
+			PreferredUsername string   `yaml:"preferredUsername"`
+			UserID            string   `yaml:"userID"`
+			Groups            []string `yaml:"groups"`
+		} `yaml:"staticPasswords"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("invalid YAML: %v", err)
+	}
+	if !doc.EnablePasswordDB {
+		t.Error("enablePasswordDB must be on for static passwords")
+	}
+	if len(doc.StaticPasswords) != 1 {
+		t.Fatalf("staticPasswords = %d entries, want 1", len(doc.StaticPasswords))
+	}
+	p := doc.StaticPasswords[0]
+	want := cfg.Auth.TestAccounts[0]
+	if p.Email != want.Login || p.Hash != want.PasswordHash || p.UserID != want.ID || p.Name != want.Name {
+		t.Errorf("entry = %+v, want login/hash/id/name from %+v", p, want)
+	}
+	if p.PreferredUsername != "mueller" {
+		t.Errorf("preferredUsername = %q, want the part before the @", p.PreferredUsername)
+	}
+	if len(p.Groups) != 1 || p.Groups[0] != "lehrkraft" {
+		t.Errorf("groups = %v, want [lehrkraft]", p.Groups)
 	}
 }

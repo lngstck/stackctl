@@ -39,6 +39,15 @@ type settingsData struct {
 	Error           string
 	Message         string
 
+	// Test accounts in Dex's password database, the sign-in until a
+	// school's provider is connected.
+	Accounts []accountRow
+	Roles    []roleOption
+	// AccountsNotice is the outcome of an account action, shown in the
+	// accounts card itself — the redirect lands there, not at the top.
+	AccountsNotice    string
+	AccountsNoticeErr bool
+
 	// System-Tab (ehemals /system).
 	CurrentVersion  string
 	LatestVersion   string
@@ -76,6 +85,8 @@ func (s *Server) settingsData(msg, errMsg string) settingsData {
 		ChallengeDomain:  s.cfg.Public.Local.ChallengeDomain,
 		HasDNSToken:      s.cfg.Public.Local.DNSToken != "",
 		AutoUpdate:       s.cfg.AutoUpdate.Enabled,
+		Accounts:         accountRows(s.cfg),
+		Roles:            roleOptions(),
 		Message:          msg,
 		Error:            errMsg,
 		CurrentVersion:   update.CurrentVersion(),
@@ -125,6 +136,8 @@ func (s *Server) withSystemFlash(data settingsData, r *http.Request) settingsDat
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	data := s.withSystemFlash(s.settingsData("", ""), r)
+	data.AccountsNotice = r.URL.Query().Get("konten")
+	data.AccountsNoticeErr = r.URL.Query().Get("konten_err") == "1"
 	s.render(w, "settings.html.tmpl", data)
 }
 

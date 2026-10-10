@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -62,8 +63,69 @@ type Config struct {
 	Catalog    Catalog    `yaml:"catalog"`
 	Admin      Admin      `yaml:"admin"`
 	Public     Public     `yaml:"public"`
+	// Auth beschreibt, womit sich Lehrkraefte und Schueler:innen in den Apps
+	// anmelden.
+	Auth Auth `yaml:"auth,omitempty"`
 	// AutoUpdate steuert das naechtliche Auto-Update aller Apps.
 	AutoUpdate AutoUpdate `yaml:"auto_update,omitempty"`
+}
+
+// Auth holds the sign-in for teachers and students, as opposed to Admin,
+// which is stackctl's own login.
+type Auth struct {
+	// TestAccounts live in Dex's own password database. They stand in for the
+	// school's sign-in service until one is connected — for trying things
+	// out, not for teaching.
+	TestAccounts []TestAccount `yaml:"test_accounts,omitempty"`
+}
+
+// TestAccount is one person in Dex's password database.
+type TestAccount struct {
+	// ID becomes the person's stable subject. It is random, not derived from
+	// the login, so a deleted account's data is never inherited by the next
+	// person given the same login.
+	ID   string `yaml:"id"`
+	Name string `yaml:"name"`
+	// Role is one of the claims contract's roles (internal/claims).
+	Role string `yaml:"role"`
+	// Login is what the person types into Dex's login form. Dex asks for an
+	// e-mail address and puts this value into the email claim, so it has
+	// that shape: {name}@{base_domain}.
+	Login        string `yaml:"login"`
+	PasswordHash string `yaml:"password_hash"`
+}
+
+// TestAccountByID returns the account with the given ID, or nil.
+func (a *Auth) TestAccountByID(id string) *TestAccount {
+	for i := range a.TestAccounts {
+		if a.TestAccounts[i].ID == id {
+			return &a.TestAccounts[i]
+		}
+	}
+	return nil
+}
+
+// TestAccountByLogin returns the account with the given login, or nil. Logins
+// compare case-insensitively, as Dex does.
+func (a *Auth) TestAccountByLogin(login string) *TestAccount {
+	for i := range a.TestAccounts {
+		if strings.EqualFold(a.TestAccounts[i].Login, login) {
+			return &a.TestAccounts[i]
+		}
+	}
+	return nil
+}
+
+// RemoveTestAccount deletes the account with the given ID and reports whether
+// there was one.
+func (a *Auth) RemoveTestAccount(id string) bool {
+	for i := range a.TestAccounts {
+		if a.TestAccounts[i].ID == id {
+			a.TestAccounts = append(a.TestAccounts[:i], a.TestAccounts[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 // AutoUpdate konfiguriert das naechtliche Auto-Update.
