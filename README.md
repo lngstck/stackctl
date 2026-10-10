@@ -15,6 +15,17 @@ stackctl ist das einzige Tool, das ein Schul-Admin auf einem frischen Linux-Serv
 
 ## Installation
 
+Voraussetzungen: Debian 12+ oder Ubuntu 22.04+ (amd64 oder arm64), Docker Engine mit Compose-Plugin (`docker-ce` + `docker-compose-plugin`, nicht das Paket `docker.io`), Port 8090 im Schulnetz erreichbar. Der Server braucht eine feste Adresse im Schulnetz, im Router also eine feste IP-Zuweisung: Auf diese Adresse zeigen später Login und Apps.
+
+Auf einem frischen Debian fehlen curl und Docker noch. Als root:
+
+```bash
+apt update && apt install -y curl ca-certificates
+curl -fsSL https://get.docker.com | sh
+```
+
+Dann stackctl installieren (ohne `sudo`, wenn du schon root bist):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo bash
 ```
@@ -26,8 +37,6 @@ Eine bestimmte Version installieren, etwa einen Vorab-Stand:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo STACKCTL_VERSION=v0.12.0-rc1 bash
 ```
-
-Voraussetzungen: Ubuntu 22.04+ oder Debian 12+, Docker 24+ mit Compose-Plugin (`docker-ce` + `docker-compose-plugin`, nicht das Paket `docker.io`), ein eingehender Port 8090 im lokalen Netz.
 
 Der Assistent fragt nach der Domain der Schule und nach der Betriebsart. Für den Standard „nur im Schulnetz“ braucht es ein kostenloses Konto bei deSEC und zwei NS-Einträge beim DNS-Anbieter der Schule, die die Domain an deSEC übergeben — die [Betriebsarten](docs/betriebsarten.md) beschreiben, was wann nötig ist. Die Wahl fällt einmalig bei der Einrichtung.
 

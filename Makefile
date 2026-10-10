@@ -18,15 +18,17 @@ build:
 	@mkdir -p $(DIST)
 	go build -ldflags "$(LDFLAGS)" -o $(DIST)/stackctl $(PKG)
 
-## build-linux-amd64: Cross-Compile für x86_64-Server
+## build-linux-amd64: Cross-Compile für x86_64-Server. CGO_ENABLED=0 macht
+## das Binary statisch: Auf einem Linux-Runner gebaut, hinge es sonst an
+## dessen glibc-Version und liefe auf älteren Servern nicht.
 build-linux-amd64:
 	@mkdir -p $(DIST)
-	GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(DIST)/stackctl-linux-amd64 $(PKG)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(DIST)/stackctl-linux-amd64 $(PKG)
 
 ## build-linux-arm64: Cross-Compile für arm64-Server
 build-linux-arm64:
 	@mkdir -p $(DIST)
-	GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(DIST)/stackctl-linux-arm64 $(PKG)
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(DIST)/stackctl-linux-arm64 $(PKG)
 
 ## build-all: alle Release-Targets + SHA256SUMS
 build-all: build-linux-amd64 build-linux-arm64 checksums

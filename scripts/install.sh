@@ -17,7 +17,9 @@
 #   6. Starts stackctl and prints the setup link, including the one-time
 #      setup code stackctl creates on its first start
 #
-# Requires: root, Ubuntu/Debian, Docker already installed.
+# Requires: root, Ubuntu/Debian, Docker Engine with the Compose plugin
+# (docker-ce + docker-compose-plugin). On a fresh Debian, curl and Docker
+# are not there yet — README.md lists the commands.
 set -euo pipefail
 
 GITHUB_REPO="lngstck/stackctl"
@@ -103,10 +105,13 @@ else
     info "Benutzer '$USER' existiert bereits."
 fi
 
-# Ensure group exists and user is in docker group.
+# Ensure group exists and user is in docker group. Ohne Gruppe 'docker'
+# startet der Dienst gar nicht (SupplementaryGroups=docker in der Unit) —
+# das soll hier auffallen, nicht erst im Journal.
+getent group docker >/dev/null || die "Gruppe 'docker' fehlt. stackctl braucht Docker Engine (docker-ce), kein rootless Docker."
 getent group "$GROUP" >/dev/null || groupadd "$GROUP"
-usermod -aG docker "$USER" 2>/dev/null || true
-usermod -g "$GROUP" "$USER" 2>/dev/null || true
+usermod -aG docker "$USER"
+usermod -g "$GROUP" "$USER"
 
 # --- Create directories ---------------------------------------------------
 info "Erstelle Verzeichnisse..."
@@ -293,6 +298,15 @@ if ! $SETUP_DONE; then
     if [ -s "$SETUP_CODE_FILE" ]; then
         SETUP_LINK="http://${SERVER_IP}:8090/setup?code=$(tr -d '[:space:]' < "$SETUP_CODE_FILE")"
     fi
+fi
+
+# Laeuft der Dienst gar nicht, nuetzt der Link nichts. Dann lieber gleich
+# zeigen, woran es liegt, als die Admin ins Leere zu schicken.
+sleep 2
+if ! systemctl is-active --quiet stackctl; then
+    error "stackctl laeuft nicht. Die letzten Zeilen aus dem Journal:"
+    journalctl -u stackctl -n 20 --no-pager >&2 || true
+    die "Installation abgebrochen. Nach einer Korrektur install.sh einfach erneut ausfuehren."
 fi
 
 # --- Done -----------------------------------------------------------------
