@@ -51,8 +51,10 @@
 <p class="sub mb-1" style="font-size:0.85rem;">
   Die Anmeldung ist Pflicht und wird beim Start automatisch eingerichtet
   (Route auf den lokalen Dex); manuelles Stoppen/Starten nur zur
-  Fehlerbehebung. Die Verwaltung ist das
-  Gegenteil: standardmäßig aus, und nur auf ausdrückliche Entscheidung hin an.
+  Fehlerbehebung. {{if eq .Mode "local"}}Die Verwaltung bekommt ihre Adresse,
+  sobald der Reverse-Proxy installiert ist: Sie bleibt im Schulnetz, und das
+  Passwort geht verschlüsselt durchs Netz.{{else}}Die Verwaltung ist das
+  Gegenteil: standardmäßig aus, und nur auf ausdrückliche Entscheidung hin an.{{end}}
 </p>
 <table class="mb-3" style="width:100%;">
   <thead>

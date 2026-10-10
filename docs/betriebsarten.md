@@ -23,7 +23,8 @@ Gemeinsam ist beiden:
   Domain, z. B. `apps.gymnasium-musterstadt.de`. Daraus folgt fest:
   - `auth.<domain>`: die Anmeldung (lokaler Dex)
   - `<app>.<domain>`: jede App, z. B. `pylearn.<domain>`
-  - `admin.<domain>`: diese Oberfläche, nur wenn eingeschaltet
+  - `admin.<domain>`: diese Oberfläche. Im Schulnetz-Betrieb an, sobald Caddy
+    installiert ist; im direkten Betrieb nur, wenn eingeschaltet
 - **Caddy** hält Port 80/443 auf dem Server, terminiert TLS und verteilt die
   Anfragen anhand des Hostnamens an die Apps. Er ist Pflichtdienst.
 
@@ -231,7 +232,8 @@ neu — Let's Encrypt erlaubt davon fünf pro Woche und Domain.
 - **NS-Einträge für eine Subdomain** erlaubt nicht jeder DNS-Anbieter. Dann
   bleibt der Ausweg über CNAME — mit einer zweiten Domain, die bei deSEC liegt.
 - **Die stackctl-Oberfläche** ist immer auf Port 8090 im Schulnetz
-  erreichbar. Unter `admin.<domain>` lässt sie sich zusätzlich einschalten;
-  im direkten Betrieb heißt das: aus dem Internet. Das ist standardmäßig aus
-  und will überlegt sein — die Oberfläche installiert Apps, zeigt Passwörter
-  und spielt Backups zurück, geschützt nur durch das Admin-Passwort.
+  erreichbar, dort aber unverschlüsselt. Im Schulnetz-Betrieb kommt mit Caddy
+  `admin.<domain>` dazu, mit TLS und ebenfalls nur von innen erreichbar.
+  Im direkten Betrieb hieße `admin.<domain>`: aus dem Internet. Dort ist sie
+  deshalb aus und will überlegt sein — die Oberfläche installiert Apps, zeigt
+  Passwörter und spielt Backups zurück, geschützt nur durch das Admin-Passwort.

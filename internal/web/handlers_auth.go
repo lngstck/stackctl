@@ -10,6 +10,9 @@ import (
 // loginData is the template context for login.html.tmpl.
 type loginData struct {
 	Error string
+	// SecureURL is the encrypted address of this UI when the page came in
+	// over the plain LAN port (see secureAdminURL).
+	SecureURL string
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +27,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.render(w, "login.html.tmpl", loginData{})
+	s.render(w, "login.html.tmpl", loginData{SecureURL: s.secureAdminURL(r)})
 }
 
 func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +53,8 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	if !secrets.VerifyPassword(s.cfg.Admin.PasswordHash, password) {
 		s.limiter.recordFailure(ip)
 		s.render(w, "login.html.tmpl", loginData{
-			Error: "Falsches Passwort.",
+			Error:     "Falsches Passwort.",
+			SecureURL: s.secureAdminURL(r),
 		})
 		return
 	}

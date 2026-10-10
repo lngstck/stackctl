@@ -24,6 +24,13 @@
       <button type="submit" style="width:100%;">Anmelden</button>
     </form>
   </article>
+
+  {{if .SecureURL}}
+  <p class="sub mt-2" style="text-align:center;font-size:0.85rem;">
+    Hier geht das Passwort unverschlüsselt durchs Netz. Verschlüsselt:
+    <a href="{{.SecureURL}}">{{.SecureURL}}</a>
+  </p>
+  {{end}}
 </div>
 
 {{template "foot" .}}

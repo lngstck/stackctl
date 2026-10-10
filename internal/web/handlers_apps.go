@@ -491,6 +491,9 @@ func (s *Server) runAppJob(
 		if msg := s.autoPublish(working, job.AppID); msg != "" {
 			result.Messages = append(result.Messages, msg)
 		}
+		if msg := s.autoPublishAdmin(working, job.AppID); msg != "" {
+			result.Messages = append(result.Messages, msg)
+		}
 	}
 
 	// Persist env (incl. system keys), the mutated state clone, and — if the
