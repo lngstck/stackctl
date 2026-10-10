@@ -1,0 +1,154 @@
+/* learningstack · Basis
+   Reines HTML soll ohne Klassen richtig aussehen. Alles steht in :where(),
+   damit die eigene CSS einer App immer gewinnt. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* hidden gilt immer, auch gegen display aus Bausteinen */
+[hidden] { display: none !important; }
+
+:where(html) {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-color: var(--ls-line-input) transparent;
+}
+
+:where(body) {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--ls-font);
+  font-size: var(--ls-text-base);
+  line-height: var(--ls-leading);
+  color: var(--ls-ink);
+  background: var(--ls-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection { background: var(--ls-accent); color: var(--ls-accent-ink); }
+
+:where(:focus-visible) {
+  outline: 2px solid var(--ls-accent);
+  outline-offset: 3px;
+  border-radius: var(--ls-r-xs);
+}
+
+/* ── Text ──────────────────────────────────────────────────── */
+:where(h1, h2, h3, h4) { margin: 0; line-height: var(--ls-leading-tight); text-wrap: balance; letter-spacing: -.015em; }
+:where(h1) { font-size: var(--ls-text-3xl); font-weight: var(--ls-w-bold); letter-spacing: -.025em; }
+:where(h2) { font-size: var(--ls-text-xl); font-weight: var(--ls-w-bold); }
+:where(h3) { font-size: var(--ls-text-m); font-weight: var(--ls-w-semibold); }
+:where(h4) { font-size: var(--ls-text-base); font-weight: var(--ls-w-semibold); }
+:where(p) { margin: 0; text-wrap: pretty; }
+:where(p + p) { margin-top: var(--ls-space-3); }
+:where(small) { font-size: var(--ls-text-s); }
+:where(strong, b) { font-weight: var(--ls-w-semibold); }
+
+:where(a) { color: var(--ls-accent); text-decoration: none; text-underline-offset: .2em; text-decoration-thickness: 1px; }
+:where(a:hover) { text-decoration-line: underline; }
+
+:where(code, kbd, samp, pre) { font-family: var(--ls-font-mono); font-size: .9em; }
+:where(:not(pre) > code) { background: var(--ls-surface-2); border-radius: var(--ls-r-xs); padding: .1em .35em; }
+:where(kbd) { font-size: var(--ls-text-xs); font-weight: var(--ls-w-semibold); background: var(--ls-surface-2); border-radius: 5px; padding: .1rem .4rem; box-shadow: inset 0 -1px 0 var(--ls-line); }
+:where(pre) { margin: 0; overflow-x: auto; }
+:where(hr) { border: 0; border-top: 1px solid var(--ls-line); margin: var(--ls-space-6) 0; }
+:where(img, svg, video) { max-width: 100%; }
+:where(ul, ol) { padding-left: 1.25rem; }
+
+/* Tabellarische Zahlen überall dort, wo gemessen wird */
+:where(table, meter, progress, .ls-num, time) { font-variant-numeric: tabular-nums; }
+
+/* ── Knöpfe ───────────────────────────────────────────────────
+   Standard ist der Hauptknopf. Varianten über data-variant:
+   ghost (zweitrangig), danger (zerstörend), plain (wie ein Link). */
+:where(button, .ls-btn) {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  font: inherit; font-size: var(--ls-text-s); font-weight: var(--ls-w-semibold); line-height: 1.2;
+  padding: .55rem 1rem; min-height: 2.25rem;
+  border: 0; border-radius: var(--ls-r-full);
+  background: var(--ls-accent); color: var(--ls-accent-ink);
+  cursor: pointer; white-space: nowrap; text-decoration: none;
+  transition: filter var(--ls-dur-1), transform var(--ls-dur-1), background-color var(--ls-dur-2);
+}
+:where(button, .ls-btn):hover { filter: brightness(1.07); text-decoration: none; }
+:where(button, .ls-btn):active { transform: scale(.97); }
+:where(button, .ls-btn)[data-variant="ghost"] { background: var(--ls-surface-2); color: var(--ls-ink); }
+:where(button, .ls-btn)[data-variant="ghost"]:hover { filter: none; background: var(--ls-line); }
+:where(button, .ls-btn)[data-variant="danger"] { background: var(--ls-bad-soft); color: var(--ls-bad); }
+:where(button, .ls-btn)[data-variant="plain"] { background: none; color: var(--ls-accent); padding-inline: .25rem; min-height: 0; }
+:where(button, .ls-btn)[data-size="s"] { font-size: var(--ls-text-xs); padding: .35rem .7rem; min-height: 1.85rem; }
+:where(button, .ls-btn)[data-size="l"] { font-size: var(--ls-text-base); padding: .7rem 1.25rem; min-height: 2.75rem; }
+:where(button, .ls-btn) > svg { width: 1.1em; height: 1.1em; flex: none; }
+:where(button, .ls-btn):disabled, :where(.ls-btn)[aria-disabled="true"] { opacity: .45; cursor: not-allowed; filter: none; transform: none; }
+:where(button, .ls-btn)[aria-busy="true"] { color: transparent !important; position: relative; pointer-events: none; }
+:where(button, .ls-btn)[aria-busy="true"]::after {
+  content: ""; position: absolute; width: 1rem; height: 1rem; border-radius: 50%;
+  border: 2px solid var(--ls-accent-ink); border-right-color: transparent;
+  animation: ls-spin .7s linear infinite;
+}
+:where(button, .ls-btn)[data-variant="ghost"][aria-busy="true"]::after { border-color: var(--ls-ink); border-right-color: transparent; }
+@keyframes ls-spin { to { rotate: 1turn; } }
+
+/* ── Formulare ─────────────────────────────────────────────── */
+:where(label) { font-weight: var(--ls-w-medium); }
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea) {
+  font: inherit; color: var(--ls-ink);
+  width: 100%; min-height: 2.5rem;
+  padding: .55rem .75rem;
+  background: var(--ls-surface);
+  border: 1px solid var(--ls-line-input);
+  border-radius: var(--ls-r-s);
+  transition: border-color var(--ls-dur-1), box-shadow var(--ls-dur-1);
+}
+:where(textarea) { min-height: 6.5rem; resize: vertical; line-height: 1.5; }
+:where(select) { appearance: none; padding-right: 2.25rem;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ls-ink-soft) 50%), linear-gradient(-45deg, transparent 50%, var(--ls-ink-soft) 50%);
+  background-position: calc(100% - 1.05rem) 52%, calc(100% - .75rem) 52%; background-size: .3rem .3rem; background-repeat: no-repeat; }
+:where(input, select, textarea):focus-visible { outline: none; border-color: var(--ls-accent); box-shadow: 0 0 0 3px var(--ls-accent-line); }
+:where(input, select, textarea)::placeholder { color: var(--ls-ink-soft); opacity: 1; }
+:where(input, select, textarea)[aria-invalid="true"], :where(input, select, textarea):user-invalid { border-color: var(--ls-bad); }
+:where(input, select, textarea):disabled { opacity: .55; cursor: not-allowed; }
+:where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--ls-accent); width: 1.15rem; height: 1.15rem; margin: 0; flex: none; }
+
+/* Schalter: <input type="checkbox" role="switch"> */
+:where(input[type="checkbox"][role="switch"]) {
+  appearance: none; width: 2.6rem; height: 1.55rem; border-radius: var(--ls-r-full);
+  background: var(--ls-line-input); position: relative; cursor: pointer;
+  transition: background-color var(--ls-dur-2) var(--ls-ease);
+}
+:where(input[type="checkbox"][role="switch"])::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: calc(1.55rem - 4px); aspect-ratio: 1; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .3); transition: translate var(--ls-dur-2) var(--ls-ease);
+}
+:where(input[type="checkbox"][role="switch"]):checked { background: var(--ls-accent); }
+:where(input[type="checkbox"][role="switch"]):checked::after { translate: 1.05rem 0; }
+
+/* ── Messwerte ─────────────────────────────────────────────── */
+:where(progress, meter) { appearance: none; width: 100%; height: .4rem; border: 0; border-radius: var(--ls-r-full); background: var(--ls-surface-2); overflow: hidden; display: block; }
+:where(progress)::-webkit-progress-bar { background: var(--ls-surface-2); }
+:where(progress)::-webkit-progress-value { background: var(--ls-accent); border-radius: var(--ls-r-full); }
+:where(progress)::-moz-progress-bar { background: var(--ls-accent); border-radius: var(--ls-r-full); }
+:where(meter)::-webkit-meter-bar { background: var(--ls-surface-2); border: 0; height: .4rem; border-radius: var(--ls-r-full); }
+:where(meter)::-webkit-meter-optimum-value { background: var(--ls-accent); border-radius: var(--ls-r-full); }
+:where(meter)::-webkit-meter-suboptimum-value { background: var(--ls-warn); border-radius: var(--ls-r-full); }
+:where(meter)::-webkit-meter-even-less-good-value { background: var(--ls-bad); border-radius: var(--ls-r-full); }
+:where(meter):-moz-meter-optimum::-moz-meter-bar { background: var(--ls-accent); }
+:where(meter):-moz-meter-sub-optimum::-moz-meter-bar { background: var(--ls-warn); }
+:where(meter):-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--ls-bad); }
+
+/* ── Tabelle ───────────────────────────────────────────────── */
+:where(table) { width: 100%; border-collapse: collapse; font-size: var(--ls-text-base); }
+:where(th) { text-align: left; font-size: var(--ls-text-xs); font-weight: var(--ls-w-semibold); color: var(--ls-ink-soft); padding: .55rem 1rem; border-bottom: 1px solid var(--ls-line); }
+:where(td) { padding: .7rem 1rem; border-bottom: 1px solid var(--ls-line); vertical-align: middle; }
+:where(tr:last-child td) { border-bottom: 0; }
+
+/* ── Aufklapper ───────────────────────────────────────────── */
+:where(summary) { cursor: pointer; list-style: none; display: flex; align-items: center; gap: .5rem; }
+:where(summary)::-webkit-details-marker { display: none; }
+:where(summary)::after { content: ""; margin-left: auto; width: .45rem; height: .45rem; border-right: 2px solid var(--ls-ink-faint); border-bottom: 2px solid var(--ls-ink-faint); rotate: -45deg; transition: rotate var(--ls-dur-2) var(--ls-ease); }
+:where(details[open] > summary)::after { rotate: 45deg; }
+
+/* ── Bewegung nur, wenn erwünscht ─────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

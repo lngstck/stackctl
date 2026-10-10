@@ -1,142 +1,112 @@
 {{define "head"}}
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-app="stackctl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>stackctl</title>
-  <!-- Farbschema VOR dem CSS anwenden (kein Flash bei erzwungenem Hell/Dunkel). -->
-  <script src="/static/js/theme.js"></script>
-  <!-- Designsprache „Indigo" — Reihenfolge ist entscheidend:
-       Fonts → oat (Framework) → theme (Token-Overrides) → components → stackctl. -->
-  <link rel="stylesheet" href="/static/theme/fonts.css">
-  <link rel="stylesheet" href="/static/oat.min.css">
-  <link rel="stylesheet" href="/static/theme/theme.css">
-  <link rel="stylesheet" href="/static/theme/components.css">
-  <link rel="stylesheet" href="/static/stackctl.css">
+  <title>{{block "title" .}}{{end}} · stackctl</title>
+  {{/* Erzwungenen Hell/Dunkel-Modus vor dem ersten Bild setzen, sonst
+       blitzt die Seite im falschen Modus auf. Wählen lässt er sich im
+       Kontomenü, gemerkt wird er von learningstack.js. */}}
+  <script>try{var t=localStorage.getItem('ls-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
+  <link rel="stylesheet" href="{{asset "/static/ls/learningstack.css"}}">
+  <link rel="stylesheet" href="{{asset "/static/stackctl.css"}}">
+  <script src="{{asset "/static/ls/js/learningstack.js"}}" defer></script>
+  <script src="{{asset "/static/stackctl.js"}}" defer></script>
 </head>
-<body>
 {{end}}
 
 {{define "foot"}}
-<script src="/static/oat.min.js"></script>
-<script>
-// Clipboard helper with execCommand fallback. Needed because
-// navigator.clipboard is only available in secure contexts (HTTPS or
-// localhost); stackctl is usually reached via http://<LAN-IP>:8090, where
-// the modern API is blocked silently.
-window.stackctlCopy = function(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    return navigator.clipboard.writeText(text);
-  }
-  return new Promise(function(resolve, reject) {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.top = '0';
-    ta.style.left = '0';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    try {
-      var ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      ok ? resolve() : reject(new Error('execCommand returned false'));
-    } catch (err) {
-      document.body.removeChild(ta);
-      reject(err);
-    }
-  });
-};
-
-// Delegierter Handler fuer <button data-copy="...">: kopiert den Wert ins
-// Clipboard und zeigt kurzes "Kopiert ✓"-Feedback. Wert kommt aus dem
-// data-Attribut — kein onclick-Inlining, das spart manuelles Escapen.
-document.addEventListener('click', function(ev) {
-  var btn = ev.target.closest('[data-copy]');
-  if (!btn) return;
-  ev.preventDefault();
-  var text = btn.getAttribute('data-copy');
-  var original = btn.textContent;
-  stackctlCopy(text).then(function() {
-    btn.textContent = 'Kopiert ✓';
-    setTimeout(function() { btn.textContent = original; }, 1500);
-  }).catch(function(err) {
-    console.error('copy failed:', err);
-    btn.textContent = 'Fehler';
-    setTimeout(function() { btn.textContent = original; }, 1500);
-  });
-});
-
-// Loading-State fuer synchrone, lang laufende POSTs (Install, Update,
-// Remove — docker compose pull kann Minuten dauern, siehe #1). Forms,
-// die `data-loading-msg="..."` setzen, bekommen ihren Submit-Button auf
-// disabled und den Button-Text auf die Nachricht — verhindert Doppel-
-// Submit und macht das Warten erklaerlich. Greift erst nach onsubmit-
-// confirm(), weil der 'submit'-Event nur feuert wenn confirm true ergab.
-document.addEventListener('submit', function(ev) {
-  var form = ev.target;
-  if (!form.matches || !form.matches('form[data-loading-msg]')) return;
-  var btn = form.querySelector('button[type=submit], button:not([type])');
-  if (!btn) return;
-  btn.disabled = true;
-  btn.textContent = form.getAttribute('data-loading-msg');
-});
-</script>
 {{block "scripts" .}}{{end}}
 </body>
 </html>
 {{end}}
 
-{{define "copy-btn"}}<button type="button" class="ghost small" data-copy="{{.}}" style="margin-left:0.5rem;font-size:0.75rem;padding:0.1rem 0.5rem;">Kopieren</button>{{end}}
+{{/* Plattform-Rahmen: Dock, Kopfzeile, Inhalt. .PageData muss übergeben
+     werden. Die Suche steht nur auf Seiten, deren Inhalt sie filtert. */}}
+{{define "shell-start"}}
+<body class="ls-shell"{{if .OpenSheet}} data-open="{{.OpenSheet}}"{{end}}>
+<a class="ls-skip" href="#inhalt">Zum Inhalt</a>
 
-{{define "sidebar-layout-start"}}
-<div data-sidebar-layout>
-  <aside data-sidebar>
-    <div style="padding: 0.85rem 1rem 0.5rem;">
-      <a href="/" class="wordmark">
-        <span class="wordmark__mark"></span>
-        <span class="wordmark__name">learningstack</span>
-        <span class="wordmark__app">stackctl</span>
-      </a>
-    </div>
-    <nav>
-      <ul class="unstyled">
-        <li><a href="/" {{activeNav .NavActive "dashboard"}}>Dashboard</a></li>
-        <li><a href="/apps" {{activeNav .NavActive "apps"}}>Apps</a></li>
-        <li><a href="/settings" {{activeNav .NavActive "settings"}}>Einstellungen</a></li>
-        <li><a href="/public" {{activeNav .NavActive "public"}}>Zugang</a></li>
-        <li><a href="/backups" {{activeNav .NavActive "backups"}}>Sicherung</a></li>
-        {{if .LLMInstalled}}<li><a href="/llm" {{activeNav .NavActive "llm"}}>LLM</a></li>{{end}}
-      </ul>
-    </nav>
-  </aside>
+<nav class="ls-dock" aria-label="Bereiche">
+  <a href="/" {{activeNav .NavActive "dashboard"}}>{{template "dock-icon" "grid"}}Start</a>
+  <a href="/apps" {{activeNav .NavActive "apps"}}>{{template "dock-icon" "bag"}}Katalog</a>
+  <a href="/public" {{activeNav .NavActive "public"}}>{{template "dock-icon" "shield"}}Zugang</a>
+  <a href="/backups" {{activeNav .NavActive "backups"}}>{{template "dock-icon" "archive"}}Sicherung</a>
+  {{if .LLMInstalled}}<a href="/llm" {{activeNav .NavActive "llm"}}>{{template "dock-icon" "spark"}}KI</a>{{end}}
+  <a href="/settings" {{activeNav .NavActive "settings"}}>{{template "dock-icon" "gear"}}Einstellungen</a>
+</nav>
 
-  <main>
-    <nav data-topnav>
-      <button data-sidebar-toggle aria-label="Menue" class="ghost">&#9776;</button>
-      <div class="hstack gap-2">
-        <span class="school-name">{{.SchoolName}}</span>
-        <button id="theme-toggle" type="button" class="ghost theme-toggle"
-                title="Farbschema wechseln" aria-label="Farbschema wechseln">
-          <span class="theme-toggle__icon" aria-hidden="true">◐</span>
-        </button>
-        <ot-dropdown>
-          <button class="ghost" popovertarget="user-menu">Admin &#x25BE;</button>
-          <div popover="auto" id="user-menu">
-            <a href="/logout" role="menuitem">Abmelden</a>
-          </div>
-        </ot-dropdown>
+<div class="ls-page">
+  <header class="ls-top">
+    <a class="ls-wordmark" href="/"><svg class="ls-mark" aria-hidden="true"><use href="/static/ls/icons/icons.svg#mark"/></svg>learningstack</a>
+    {{if .Search}}
+    <label class="ls-search">{{template "icon" "search"}}<span class="ls-sr">App suchen</span><input type="search" placeholder="App suchen" data-ls-filter autocomplete="off"><kbd>/</kbd></label>
+    {{end}}
+    <div class="ls-top-end">
+      <span class="ls-hide-s">{{.SchoolName}}</span>
+      <button type="button" class="ls-avatar sc-account" popovertarget="sc-account" aria-label="Konto und Darstellung">{{template "icon" "user"}}</button>
+      <div class="sc-menu" id="sc-account" popover>
+        <span class="ls-list-label">Darstellung</span>
+        <div class="ls-seg" role="group" aria-label="Darstellung">
+          <button type="button" data-ls-theme="system">System</button>
+          <button type="button" data-ls-theme="light">Hell</button>
+          <button type="button" data-ls-theme="dark">Dunkel</button>
+        </div>
+        <form method="post" action="/logout">
+          {{csrfField .CSRFToken}}
+          <button type="submit" data-variant="ghost">{{template "icon" "logout"}}Abmelden</button>
+        </form>
       </div>
-    </nav>
+    </div>
+  </header>
 
-    <div style="padding:1.5rem">
+  <main class="ls-main" id="inhalt">
 {{end}}
 
-{{define "sidebar-layout-end"}}
-    </div>
+{{define "shell-end"}}
   </main>
 </div>
 {{end}}
+
+{{/* Seiten ohne Dock: Anmelden, Einrichtung. */}}
+{{define "bare-start"}}
+<body class="sc-bare">
+<main class="sc-bare-main" id="inhalt">
+  <a class="ls-wordmark sc-bare-mark" href="/"><svg class="ls-mark" aria-hidden="true"><use href="/static/ls/icons/icons.svg#mark"/></svg>learningstack</a>
+{{end}}
+
+{{define "bare-end"}}
+</main>
+{{end}}
+
+{{define "icon"}}<svg class="ls-icon" aria-hidden="true"><use href="/static/ls/icons/icons.svg#{{.}}"/></svg>{{end}}
+{{define "dock-icon"}}<svg aria-hidden="true"><use href="/static/ls/icons/icons.svg#{{.}}"/></svg>{{end}}
+
+{{/* Kachel einer App. Erwartet ein appTile (handlers_start.go). */}}
+{{define "tile"}}<span class="ls-tile"{{if .Size}} data-size="{{.Size}}"{{end}}{{if .Face.Own}} data-app="{{.Face.ID}}"{{else}} style="--ls-hue: {{.Face.Hue}}"{{end}}{{if .Off}} data-state="off"{{end}}>{{if .Face.Icon}}<svg aria-hidden="true"><use href="/static/ls/icons/icons.svg#{{.Face.Icon}}"/></svg>{{else}}<b>{{.Face.Abbr}}</b>{{end}}{{if .Alert}}<span class="ls-badge" data-kind="alert">{{template "dock-icon" "alert"}}</span>{{else if .Update}}<span class="ls-badge" data-kind="update">{{template "dock-icon" "update"}}</span>{{end}}{{if .Internet}}<span class="ls-badge" data-kind="internet">{{template "dock-icon" "globe"}}</span>{{end}}</span>{{end}}
+
+{{/* Hinweis mit genau einer Handlung. Erwartet ein notice. */}}
+{{define "notice"}}
+<article class="ls-card ls-notice" data-tone="{{.Tone}}">
+  {{if .Tile}}{{template "tile" .Tile}}{{else}}<span class="ls-notice-icon">{{template "dock-icon" .Icon}}</span>{{end}}
+  <h3>{{if .Sheet}}<button type="button" data-ls-open="{{.Sheet}}">{{.Title}}</button>{{else if .Href}}<a href="{{.Href}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}</h3>
+  {{if .Detail}}<p>{{.Detail}}</p>{{end}}
+  {{if .ActionLabel}}
+  <div class="ls-actions">
+    {{if .PostTo}}
+    <form method="post" action="{{.PostTo}}">{{csrfField .CSRFToken}}<button type="submit" data-size="s" data-busy>{{.ActionLabel}}</button></form>
+    {{else if .Sheet}}
+    <button type="button" data-size="s" data-variant="ghost" data-ls-open="{{.Sheet}}">{{.ActionLabel}}</button>
+    {{else}}
+    <a class="ls-btn" data-size="s" data-variant="ghost" href="{{.Href}}">{{.ActionLabel}}</a>
+    {{end}}
+  </div>
+  {{end}}
+</article>
+{{end}}
+
+{{/* Kurze Rückmeldung nach einer Aktion: Erfolg ruhig, Fehler rot. */}}
+{{define "flash"}}{{if .Text}}<p class="sc-flash" data-tone="{{if .Err}}bad{{else}}ok{{end}}" role="{{if .Err}}alert{{else}}status{{end}}">{{template "icon" (or (and .Err "alert") "check-circle")}}<span>{{.Text}}</span></p>{{end}}{{end}}
+
+{{define "copy-btn"}}<button type="button" class="sc-copy" data-copy="{{.}}" aria-label="Kopieren" title="Kopieren">{{template "icon" "copy"}}</button>{{end}}

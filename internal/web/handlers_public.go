@@ -49,6 +49,7 @@ type publicAppEntry struct {
 	PublicHost   string
 	PublishState string // "running" | "stopped" | "error"
 	HasOIDC      bool
+	Tile         appTile
 }
 
 func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +90,10 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 			Published:    cs.PublicEnabled,
 			PublicHost:   cs.PublicHost,
 			PublishState: publish.StatusStopped,
+			Tile:         appTile{Face: faceFor(id, cs.Name), Size: "s"},
+		}
+		if entry.Name == "" {
+			entry.Name = id
 		}
 		if s.publisher != nil {
 			entry.PublishState = s.publisher.Status(id)

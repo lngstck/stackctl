@@ -233,6 +233,7 @@ func (s *jobStore) get(id string) (*Job, bool) {
 // "Letzte Aktivität" list. Flüchtig: lebt nur so lange wie der jobStore (max
 // maxRetainedJobs, weg nach Prozess-Neustart).
 type activityItem struct {
+	ID      string
 	Title   string
 	Kind    string
 	Done    bool
@@ -270,6 +271,7 @@ func (s *jobStore) recent(n int) []activityItem {
 			when = j.startedAt
 		}
 		out = append(out, activityItem{
+			ID:      j.ID,
 			Title:   j.Title,
 			Kind:    j.Kind,
 			Done:    j.done,

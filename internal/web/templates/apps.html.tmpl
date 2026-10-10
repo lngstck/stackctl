@@ -1,107 +1,106 @@
+{{define "title"}}Katalog{{end}}
 {{define "page"}}
 {{template "head" .}}
-{{template "sidebar-layout-start" .PageData}}
+{{template "shell-start" .PageData}}
 
-<div style="display:flex;justify-content:space-between;align-items:center;" class="mb-2">
-  <h2>Apps</h2>
-  <form method="post" action="/system/catalog/sync" style="display:inline">
-        {{csrfField $.CSRFToken}}
+<div class="ls-pagehead">
+  <span class="ls-tile" data-size="m">{{template "dock-icon" "bag"}}</span>
+  <div>
+    <h1>Katalog</h1>
+    <p>{{if .CatalogMissing}}Noch nicht geladen{{else if eq .Available 0}}Alles installiert{{else if eq .Available 1}}1 App zum Installieren{{else}}{{.Available}} Apps zum Installieren{{end}}</p>
+  </div>
+  <form method="post" action="/system/catalog/sync" class="ls-actions">
+    {{csrfField .CSRFToken}}
     <input type="hidden" name="return" value="/apps">
-    <button class="ghost small">Katalog aktualisieren</button>
+    <button type="submit" data-variant="ghost" data-busy>{{template "icon" "refresh"}}Katalog aktualisieren</button>
   </form>
 </div>
 
-{{if .Message}}
-<div role="alert" data-variant="{{if .IsError}}danger{{else}}success{{end}}" class="mb-2">{{.Message}}</div>
-{{end}}
+{{template "flash" .Flash}}
 {{if .CatalogMissing}}
-<div role="alert" data-variant="warning" class="mb-2">Der Katalog ist noch nicht geladen. Installierte Apps stehen trotzdem unten; für neue Apps bitte „Katalog aktualisieren“.</div>
+<p class="sc-flash" data-tone="bad" role="status">{{template "icon" "alert"}}<span>Der Katalog ist noch nicht geladen. Installierte Apps stehen trotzdem hier; für neue Apps oben „Katalog aktualisieren“.</span></p>
 {{end}}
 
-<ot-tabs>
-  <div role="tablist">
-    <button role="tab" aria-selected="true">Alle ({{len .All}})</button>
-    <button role="tab">Installiert ({{len .Installed}})</button>
-    <button role="tab">Verfuegbar ({{len .Available}})</button>
+{{range .Shelves}}
+<section class="ls-shelf">
+  <h3>{{.Title}} <span>{{len .Apps}}</span></h3>
+  <div class="ls-launcher" data-size="l">
+    {{range .Apps}}
+    <button type="button" class="ls-app" data-ls-item="{{.Name}} {{.Category}} {{.Description}}" data-ls-open="app-{{.ID}}">
+      {{template "tile" .Tile}}
+      <span class="ls-app-name">{{.Label}}</span>
+      {{if .Installed}}<span class="ls-app-state">installiert</span>{{else if .IsMandatory}}<span class="ls-app-state" data-tone="bad">zuerst installieren</span>{{end}}
+    </button>
+    {{end}}
   </div>
+</section>
+{{end}}
+<div class="ls-empty" data-ls-empty hidden>{{template "dock-icon" "search"}}<strong>Keine App gefunden.</strong><span>Der Katalog wächst. Was fehlt dir?</span></div>
 
-  <!-- Alle -->
-  <div role="tabpanel">
-    {{if not .All}}
-    <p class="sub mt-2">Katalog ist leer. Bitte zuerst synchronisieren.</p>
-    {{else}}
-    <div class="app-grid mt-2">
-      {{range .All}}
-      {{template "app-card" .}}
-      {{end}}
-    </div>
+{{range .Apps}}
+<dialog class="ls-sheet" id="app-{{.ID}}" aria-labelledby="app-{{.ID}}-title">
+  <form method="dialog" class="ls-sheet-bar"><button class="ls-iconbtn" aria-label="Schließen">{{template "icon" "x"}}</button></form>
+  <div class="ls-sheet-hero">
+    {{template "tile" (tileSize .Tile "")}}
+    <h2 id="app-{{.ID}}-title">{{.Name}}</h2>
+    {{if .Description}}<p>{{.Description}}</p>{{end}}
+    {{if .Installed}}
+    <span class="ls-pill" data-tone="ok">installiert</span>
+    <div class="ls-actions"><a class="ls-btn" href="/apps/{{.ID}}">Auf Start ansehen</a></div>
+    {{else if .Version}}
+    <span class="ls-pill" data-dot="no">Version {{.Version}}</span>
     {{end}}
   </div>
 
-  <!-- Installiert -->
-  <div role="tabpanel">
-    {{if not .Installed}}
-    <p class="sub mt-2">Noch keine Apps installiert.</p>
-    {{else}}
-    <div class="app-grid mt-2">
-      {{range .Installed}}
-      {{template "app-card" .}}
+  {{if not .Installed}}
+  {{if .IsMandatory}}<p class="sc-sheet-note" data-tone="warn">{{template "icon" "info"}}<span>Pflicht-Dienst — zuerst installieren. Andere Apps bauen darauf auf.</span></p>{{end}}
+  {{if .Error}}<p class="sc-flash" data-tone="bad" role="alert">{{template "icon" "alert"}}<span>{{.Error}}</span></p>{{end}}
+
+  {{if .Missing}}
+  <p class="sc-sheet-note" data-tone="warn">{{template "icon" "alert"}}<span>Braucht zuerst: {{join .Missing ", "}}.</span></p>
+  {{else if not .Version}}
+  <p class="sc-sheet-note" data-tone="bad">{{template "icon" "alert"}}<span>Die Beschreibung dieser App fehlt. Bitte oben „Katalog aktualisieren“.</span></p>
+  {{else}}
+  <form method="post" action="/apps/{{.ID}}/install">
+    {{csrfField $.CSRFToken}}
+    {{if .Prompts}}
+    <span class="ls-list-label">Einstellungen</span>
+    <div class="ls-list">
+      {{$app := .}}
+      {{range .Prompts}}
+      <div class="ls-field">
+        <label for="{{$app.ID}}-{{.Key}}">{{.Question}}</label>
+        {{$val := index $app.Values .Key}}
+        {{if .Options}}
+        <select id="{{$app.ID}}-{{.Key}}" name="{{.Key}}">
+          {{range .Options}}<option value="{{.}}"{{if eq . $val}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        {{else}}
+        <input id="{{$app.ID}}-{{.Key}}" type="text" name="{{.Key}}" value="{{$val}}" placeholder="{{.Default}}"{{if .Required}} required{{end}}>
+        {{end}}
+        {{if .Hint}}<span class="ls-field-hint">{{.Hint}}</span>{{end}}
+      </div>
       {{end}}
     </div>
     {{end}}
-  </div>
 
-  <!-- Verfuegbar -->
-  <div role="tabpanel">
-    {{if .CatalogMissing}}
-    <p class="sub mt-2">Katalog noch nicht geladen.</p>
-    {{else if not .Available}}
-    <p class="sub mt-2">Alle Apps sind bereits installiert.</p>
-    {{else}}
-    <div class="app-grid mt-2">
-      {{range .Available}}
-      {{template "app-card" .}}
-      {{end}}
+    {{if or .HasOIDC .Secrets .UsesAdminPw}}
+    <span class="ls-list-label">Gut zu wissen</span>
+    <div class="ls-list">
+      {{if .HasOIDC}}<div class="ls-row"><span class="ls-row-label">Anmeldung mit Schulkonto<small>{{if .AutoAddress}}Die App bekommt gleich ihre Adresse im Schulnetz.{{else}}Funktioniert erst, wenn die App eine Adresse hat. Im direkten Betrieb ist sie damit aus dem Internet erreichbar.{{end}}</small></span>{{template "icon" "key"}}</div>{{end}}
+      {{if or .Secrets .UsesAdminPw}}<div class="ls-row"><span class="ls-row-label">Zugangsdaten erzeugt stackctl selbst<small>{{if .UsesAdminPw}}Die App benutzt das Admin-Passwort von stackctl.{{else}}Was du davon brauchst, steht nach der Installation da.{{end}}</small></span>{{template "icon" "lock"}}</div>{{end}}
     </div>
     {{end}}
-  </div>
-</ot-tabs>
 
-{{template "sidebar-layout-end" .PageData}}
+    <div class="ls-sheet-foot">
+      <button type="submit" data-size="l" data-busy>{{template "icon" "download"}}Installieren</button>
+    </div>
+  </form>
+  {{end}}
+  {{end}}
+</dialog>
+{{end}}
+
+{{template "shell-end" .PageData}}
 {{template "foot" .}}
-{{end}}
-
-{{define "app-card"}}
-<article class="card app-card">
-  <div class="card-header">
-    {{if .IsInstalled}}
-    <span class="status-dot {{.Status}}"></span>
-    {{else}}
-    <span class="status-dot unknown"></span>
-    {{end}}
-    <strong>{{.Name}}</strong>
-    <span class="badge" style="margin-left:auto">{{.Category}}</span>
-  </div>
-  <p class="sub card-desc">{{.Description}}</p>
-  <div class="card-meta">
-    {{if and .IsMandatory (not .IsInstalled)}}
-    <span class="badge" data-variant="danger" style="font-size:0.75rem">Pflicht-Dienst — zuerst installieren</span>
-    {{end}}
-    {{if .IsInstalled}}
-    <div class="sub" style="font-size:0.8rem;">v{{.Version}} installiert</div>
-    {{if .UpdateAvailable}}
-    <span class="badge" data-variant="{{if .UpdateBreaking}}warning{{else}}success{{end}}" style="margin-top:0.25rem;font-size:0.75rem">
-      {{if .UpdateBreaking}}Update (manuell): v{{.UpdateTo}}{{else}}Update verfuegbar: v{{.UpdateTo}}{{end}}
-    </span>
-    {{end}}
-    {{end}}
-  </div>
-  <div class="card-footer">
-    {{if .IsInstalled}}
-    <a href="/apps/{{.ID}}" class="button small">Details</a>
-    {{else}}
-    <a href="/apps/{{.ID}}/install" class="button small">Installieren</a>
-    {{end}}
-  </div>
-</article>
 {{end}}

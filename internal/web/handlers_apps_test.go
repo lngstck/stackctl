@@ -167,3 +167,65 @@ func TestAutoPublishFailureIsReportedNotRecorded(t *testing.T) {
 		t.Errorf("state = %+v, want unveraendert", cs)
 	}
 }
+
+// /apps/{id} zeigt Start mit dem Blatt dieser App — Adresse, Version und
+// Aktionen stehen dort, nicht mehr auf einer eigenen Seite.
+func TestAppDetailOpensSheetOnStart(t *testing.T) {
+	s, st := testServerWithPublisher(t, &fakePublisher{})
+	st.Containers["pylearn"].PublicEnabled = true
+	st.Containers["pylearn"].PublicHost = "pylearn.ls.gym-phoenix.de"
+	s.jobs = newJobStore()
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loadTemplates: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/apps/pylearn?msg=PyLearn+eingeschaltet", nil)
+	req.SetPathValue("id", "pylearn")
+	rec := httptest.NewRecorder()
+	s.handleAppDetail(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`data-open="app-pylearn"`,
+		`id="app-pylearn"`,
+		"pylearn.ls.gym-phoenix.de",
+		"/apps/pylearn/public/disable",
+		"/apps/pylearn/remove",
+		"PyLearn eingeschaltet",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Start ohne %q", want)
+		}
+	}
+
+	// Nicht installiert: kein Blatt auf Start, zurück in den Katalog.
+	req = httptest.NewRequest(http.MethodGet, "/apps/moodle", nil)
+	req.SetPathValue("id", "moodle")
+	rec = httptest.NewRecorder()
+	s.handleAppDetail(rec, req)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/apps" {
+		t.Errorf("nicht installiert: %d → %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// Der Schalter im Blatt heißt "Automatisch aktualisieren": an schickt
+// auto=on, aus schickt nichts.
+func TestAutoUpdateSwitch(t *testing.T) {
+	s, st := testServerWithPublisher(t, &fakePublisher{})
+	toggle := func(form string) {
+		req := httptest.NewRequest(http.MethodPost, "/apps/pylearn/autoupdate", strings.NewReader(form))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetPathValue("id", "pylearn")
+		s.handleAppAutoUpdateToggle(httptest.NewRecorder(), req)
+	}
+	toggle("")
+	if !s.snapState().Containers["pylearn"].AutoUpdateDisabled {
+		t.Error("ausgeschaltet: AutoUpdateDisabled bleibt false")
+	}
+	toggle("auto=on")
+	if s.snapState().Containers["pylearn"].AutoUpdateDisabled {
+		t.Error("eingeschaltet: AutoUpdateDisabled bleibt true")
+	}
+	_ = st
+}

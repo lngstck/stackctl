@@ -143,7 +143,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Ungueltige Formulardaten."), r))
+		s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Ungültige Formulardaten."), r))
 		return
 	}
 
@@ -161,7 +161,7 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 	var newPassword string
 	if password != "" || passwordConfirm != "" {
 		if password != passwordConfirm {
-			s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Passwoerter stimmen nicht ueberein."), r))
+			s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Die Passwörter stimmen nicht überein."), r))
 			return
 		}
 		if len(password) < 8 {
@@ -188,7 +188,7 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 		local.ChallengeDomain = normalizeDomain(r.FormValue("challenge_domain"))
 		if local.ChallengeDomain != "" {
 			if err := config.ValidateChallengeDomain(local.ChallengeDomain); err != nil {
-				s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Ziel bei deSEC ungueltig: "+preflight.TranslateDomainError(err)), r))
+				s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Ziel bei deSEC ungültig: "+preflight.TranslateDomainError(err)), r))
 				return
 			}
 		}

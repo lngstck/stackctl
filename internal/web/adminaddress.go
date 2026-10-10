@@ -75,7 +75,7 @@ func (s *Server) adminAddressIssues(r *http.Request) []dashIssue {
 	}
 	return []dashIssue{{
 		Level:       "info",
-		Icon:        "🔒",
+		Icon:        "lock",
 		Title:       "Verwaltung verschlüsselt aufrufen",
 		Detail:      "Über " + url + " geht das Passwort verschlüsselt durchs Schulnetz.",
 		Action:      url,

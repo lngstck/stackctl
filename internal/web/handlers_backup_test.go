@@ -39,7 +39,7 @@ func TestRenderBackupsPage(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		"Backup erstellen",
+		"Sicherung anlegen",
 		"backup-musterschule-20260624-143000.tar.gz.age",
 		"/download",
 		"tok",
