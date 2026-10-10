@@ -1,254 +1,137 @@
+{{define "title"}}Zugang{{end}}
 {{define "page"}}
 {{template "head" .}}
-{{template "sidebar-layout-start" .PageData}}
+{{template "shell-start" .PageData}}
 
-<h2 class="mb-2">Zugang</h2>
-
-{{if .Notice}}
-  <div role="alert" data-variant="danger" class="mb-2">{{.Notice}}</div>
-{{end}}
-
-{{/* Betriebsart — beantwortet die Frage, auf die sich alles Weitere bezieht */}}
-<article class="card mb-3">
-  <div style="display:flex;align-items:baseline;gap:0.6rem;flex-wrap:wrap;">
-    <h4 style="margin:0;">{{.ModeLabel}}</h4>
-    {{if .BaseDomain}}<code>*.{{.BaseDomain}}</code>{{end}}
+<div class="ls-pagehead">
+  <span class="ls-tile" data-size="m">{{template "dock-icon" "shield"}}</span>
+  <div>
+    <h1>Zugang</h1>
+    <p>{{if eq .Mode "local"}}<span class="ls-where" data-where="school">{{template "dock-icon" "school"}}Schulnetz</span>{{else}}<span class="ls-where" data-where="internet">{{template "dock-icon" "globe"}}Internet</span>{{end}} {{.ModeLabel}}{{if .BaseDomain}} · <code>*.{{.BaseDomain}}</code>{{end}}</p>
   </div>
-  <p class="sub mb-0" style="font-size:0.85rem;margin-top:0.4rem;">
-    {{if eq .Mode "local"}}
-      Login und Apps sind nur im Schulnetz erreichbar. Der Wildcard-Eintrag
-      zeigt auf die Adresse dieses Servers im Schulnetz, das Zertifikat kommt
-      über deSEC (DNS-01).
-    {{else}}
-      Dieser Server nimmt den Verkehr selbst entgegen und holt seine
-      Zertifikate über Let's Encrypt. Voraussetzung bleibt dauerhaft: der
-      Wildcard-Eintrag zeigt hierher und Port 80 und 443 sind aus dem
-      Internet erreichbar.
-    {{end}}
-  </p>
-  {{if eq .Mode "local"}}
-  <p class="sub mb-0" style="font-size:0.85rem;margin-top:0.4rem;">
-    Zugang von außen richtet stackctl nicht ein. Wer ihn braucht, löst das
-    selbst (VPN oder eigener Tunnel) — und muss dann auch
-    <code>{{.AuthHost}}</code> mit nach außen geben, sonst scheitert der Login.
-  </p>
-  {{end}}
-</article>
+  <div class="ls-actions"><button type="button" data-variant="ghost" id="health-btn">{{template "icon" "refresh"}}Erneut prüfen</button></div>
+</div>
 
-{{/* Zustand — was der Assistent einmal geprüft hat, hier laufend */}}
-<article class="card mb-3">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:0.6rem;flex-wrap:wrap;">
-    <h4 style="margin:0;">Zustand</h4>
-    <button type="button" class="ghost small" id="health-btn">Erneut prüfen</button>
-  </div>
-  <div id="health-result" class="mt-2">
-    <p class="sub" style="font-size:0.85rem;">Wird geprüft …</p>
-  </div>
-</article>
+{{if .Notice}}<p class="sc-flash" data-tone="bad" role="alert">{{template "icon" "alert"}}<span>{{.Notice}}</span></p>{{end}}
 
-{{/* Dienste von stackctl selbst — im Gegensatz zu den Apps weiter unten */}}
-<h3 class="mb-1">Anmeldung und Verwaltung</h3>
-<p class="sub mb-1" style="font-size:0.85rem;">
-  Die Anmeldung ist Pflicht und wird beim Start automatisch eingerichtet
-  (Route auf den lokalen Dex); manuelles Stoppen/Starten nur zur
-  Fehlerbehebung. Die Verwaltung ist das
-  Gegenteil: standardmäßig aus, und nur auf ausdrückliche Entscheidung hin an.
-</p>
-<table class="mb-3" style="width:100%;">
-  <thead>
-    <tr><th>Dienst</th><th>Adresse</th><th>Status</th><th></th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Anmeldung (Dex)</td>
-      <td><code>{{.AuthHost}}</code></td>
-      <td>
-        <span class="status-dot {{.AuthStatus}}"></span>
-        {{if eq .AuthStatus "running"}}Aktiv
-        {{else if eq .AuthStatus "error"}}Fehler
-        {{else}}Gestoppt
-        {{end}}
-      </td>
-      <td style="text-align:right;">
-        {{if eq .AuthStatus "stopped"}}
-          <form method="POST" action="/public/auth/start" style="display:inline;">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="small">Starten</button>
-          </form>
-        {{else if eq .AuthStatus "error"}}
-          <form method="POST" action="/public/auth/start" style="display:inline;"
-                title="Route neu einrichten">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="small">Neu einrichten</button>
-          </form>
-          <form method="POST" action="/public/auth/stop" style="display:inline;"
-                onsubmit="return confirm('Anmeldung abschalten? Der Schul-Login funktioniert dann für ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="small ghost" style="color:var(--danger);">Stoppen</button>
-          </form>
+<div class="sc-columns">
+  <div>
+    <span class="ls-list-label">Prüfung</span>
+    <div class="ls-list" id="health-result" aria-live="polite">
+      <div class="ls-row"><span class="ls-row-label">Wird geprüft …</span></div>
+    </div>
+    <p class="ls-list-hint">
+      {{if eq .Mode "local"}}Login und Apps sind nur im Schulnetz erreichbar. Der Eintrag <code>*.{{.BaseDomain}}</code> zeigt auf diesen Server, das Zertifikat kommt über deSEC.
+      {{else}}Dieser Server nimmt den Verkehr selbst an und holt seine Zertifikate bei Let's Encrypt. Dafür muss <code>*.{{.BaseDomain}}</code> hierher zeigen und Port 80 und 443 aus dem Internet erreichbar sein.{{end}}
+    </p>
+  </div>
+
+  <div>
+    <span class="ls-list-label">Anmeldung und Verwaltung</span>
+    <div class="ls-list">
+      <div class="ls-row">
+        <span class="ls-tile" data-size="s" style="--ls-hue: 260">{{template "dock-icon" "key"}}</span>
+        <span class="ls-row-label">Anmeldung<small><code>{{.AuthHost}}</code></small></span>
+        {{template "route-pill" .AuthStatus}}
+        {{if eq .AuthStatus "running"}}
+        <button type="button" data-size="s" data-variant="ghost" data-ls-open="auth-stop">Stoppen</button>
         {{else}}
-          <form method="POST" action="/public/auth/stop" style="display:inline;"
-                onsubmit="return confirm('Anmeldung abschalten? Der Schul-Login funktioniert dann für ALLE Apps nicht mehr, bis sie wieder gestartet wird.');">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="small ghost" style="color:var(--danger);">Stoppen</button>
-          </form>
+        <form method="post" action="/public/auth/start">{{csrfField .CSRFToken}}<button type="submit" data-size="s" data-busy>{{if eq .AuthStatus "error"}}Neu einrichten{{else}}Starten{{end}}</button></form>
         {{end}}
-      </td>
-    </tr>
-    <tr>
-      <td>
-        Verwaltung (diese Oberfläche)
-        <span class="sub" style="display:block;font-size:0.78rem;">
-          Im Schulnetz: <code>{{.AdminLocalAddr}}</code>
-        </span>
-      </td>
-      <td><code>{{.AdminHost}}</code></td>
-      <td>
-        {{/* "Aus" ist hier der Normalzustand, kein Alarm — deshalb ein
-             neutraler Punkt statt des roten aus der Anmeldungszeile. */}}
-        <span class="status-dot {{if eq .AdminStatus "stopped"}}off{{else}}{{.AdminStatus}}{{end}}"></span>
-        {{if eq .AdminStatus "running"}}Aktiv
-        {{else if eq .AdminStatus "error"}}Fehler
-        {{else}}Aus
-        {{end}}
-      </td>
-      <td style="text-align:right;">
+      </div>
+      <div class="ls-row">
+        <span class="ls-tile" data-size="s">{{template "dock-icon" "gear"}}</span>
+        <span class="ls-row-label">Diese Verwaltung<small><code>{{.AdminHost}}</code> · im Schulnetz immer unter <code>{{.AdminLocalAddr}}</code></small></span>
+        {{if eq .AdminStatus "stopped"}}<span class="ls-pill" data-tone="off">aus</span>{{else}}{{template "route-pill" .AdminStatus}}{{end}}
         {{if eq .AdminStatus "stopped"}}
-          <form method="POST" action="/public/admin/start" style="display:inline;"
-                onsubmit="return confirm('Diese Oberfläche zusätzlich unter {{.AdminHost}} erreichbar machen{{if ne .Mode "local"}} — aus dem Internet{{end}}?\n\nSie kann Apps installieren, Passwörter und Schlüssel anzeigen und Backups zurückspielen — geschützt nur durch das Admin-Passwort, ohne zweiten Faktor.\n\nDer Zugang über {{.AdminLocalAddr}} bleibt daneben bestehen.');">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="small ghost">Einschalten</button>
-          </form>
+        <button type="button" data-size="s" data-variant="ghost" data-ls-open="admin-start">Einschalten</button>
         {{else}}
-          <form method="POST" action="/public/admin/stop" style="display:inline;">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="small ghost">Ausschalten</button>
-          </form>
+        <form method="post" action="/public/admin/stop">{{csrfField .CSRFToken}}<button type="submit" data-size="s" data-variant="ghost" data-busy>Ausschalten</button></form>
         {{end}}
-      </td>
-    </tr>
-  </tbody>
-</table>
+      </div>
+    </div>
+    <p class="ls-list-hint">Die Anmeldung braucht jede App mit Schulkonto, sie läuft immer. Die Verwaltung unter eigener Adresse ist aus, bis du sie einschaltest.</p>
+    {{if eq .Mode "local"}}<p class="ls-list-hint">Zugang von außen richtet stackctl nicht ein. Wer ihn über VPN oder einen eigenen Tunnel löst, muss <code>{{.AuthHost}}</code> mit nach außen geben, sonst scheitert der Login.</p>{{end}}
 
-<p class="sub mb-3" style="font-size:0.82rem;">
-  Die Verwaltung bleibt unter <code>{{.AdminLocalAddr}}</code> erreichbar,
-  auch eingeschaltet. Das Einschalten gibt ihr <em>zusätzlich</em> die Adresse
-  oben{{if ne .Mode "local"}}, aus dem Internet{{end}} — ein falsch
-  gesetzter DNS-Eintrag kann also niemanden aussperren.
-</p>
-
-{{/* Apps */}}
-<h3 class="mb-1">Apps</h3>
-
-{{if .Apps}}
-<table style="width:100%;">
-  <thead>
-    <tr>
-      <th>App</th>
-      <th>Port</th>
-      <th>Adresse</th>
-      <th>Status</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {{range .Apps}}
-    <tr>
-      <td>
-        {{.Name}}
-        {{if and .HasOIDC (not .Published)}}
-          <span title="App mit Schul-Login, aber ohne Adresse — der Login funktioniert nicht" style="color:var(--danger);">&#9888;</span>
-        {{end}}
-      </td>
-      <td>{{.Port}}</td>
-      <td>
+    <span class="ls-list-label">Apps</span>
+    <div class="ls-list">
+      {{range .Apps}}
+      <div class="ls-row">
+        {{template "tile" .Tile}}
+        <span class="ls-row-label">{{.Name}}<small>{{if .Published}}<a href="https://{{.PublicHost}}" target="_blank" rel="noopener">{{.PublicHost}}</a>{{else}}keine Adresse{{if .HasOIDC}}, Anmeldung geht so nicht{{end}}{{end}}</small></span>
+        {{if .Published}}{{template "route-pill" .PublishState}}{{else}}<span class="ls-pill" data-tone="{{if .HasOIDC}}warn{{else}}off{{end}}">aus</span>{{end}}
         {{if .Published}}
-          <a href="https://{{.PublicHost}}" target="_blank" rel="noopener" class="host-badge">{{.PublicHost}}</a>
+        <form method="post" action="/apps/{{.ID}}/public/disable">{{csrfField $.CSRFToken}}<button type="submit" data-size="s" data-variant="ghost" data-busy>Abschalten</button></form>
         {{else}}
-          <span class="sub">—</span>
+        <form method="post" action="/apps/{{.ID}}/public/enable">{{csrfField $.CSRFToken}}<button type="submit" data-size="s" data-busy>Einschalten</button></form>
         {{end}}
-      </td>
-      <td>
-        {{if .Published}}
-          <span class="status-dot {{.PublishState}}"></span>
-          {{if eq .PublishState "running"}}Aktiv
-          {{else if eq .PublishState "error"}}Fehler
-          {{else}}Gestoppt
-          {{end}}
-        {{else}}
-          <span class="sub">Aus</span>
-        {{end}}
-      </td>
-      <td style="text-align:right;">
-        {{if .Published}}
-          <form method="POST" action="/apps/{{.ID}}/public/disable" style="display:inline;"
-                onsubmit="return confirm('Adresse abschalten?{{if .HasOIDC}} Der Schul-Login dieser App funktioniert dann nicht mehr.{{end}}');">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="small ghost">Deaktivieren</button>
-          </form>
-        {{else}}
-          <form method="POST" action="/apps/{{.ID}}/public/enable" style="display:inline;">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="small">Aktivieren</button>
-          </form>
-        {{end}}
-      </td>
-    </tr>
-    {{end}}
-  </tbody>
-</table>
-{{else}}
-  <p class="sub">Keine optionalen Apps installiert. (Pflicht-Dienste wie Dex und PostgreSQL werden hier nicht aufgelistet.)</p>
-{{end}}
+      </div>
+      {{else}}
+      <div class="ls-row"><span class="ls-row-label">Noch keine Apps<small>Die Grundversorgung steht hier nicht.</small></span></div>
+      {{end}}
+    </div>
+  </div>
+</div>
 
+<dialog class="ls-dialog" id="auth-stop" aria-labelledby="auth-stop-t">
+  <form method="post" action="/public/auth/stop">
+    {{csrfField .CSRFToken}}
+    <h2 id="auth-stop-t">Anmeldung stoppen?</h2>
+    <p>Dann meldet sich niemand mehr in einer App an, bis du sie wieder startest. Nur zur Fehlersuche.</p>
+    <div class="ls-actions"><button type="button" data-variant="ghost" data-close>Abbrechen</button><button type="submit" data-variant="danger" data-busy>Stoppen</button></div>
+  </form>
+</dialog>
+
+<dialog class="ls-dialog" id="admin-start" aria-labelledby="admin-start-t">
+  <form method="post" action="/public/admin/start">
+    {{csrfField .CSRFToken}}
+    <h2 id="admin-start-t">Verwaltung unter {{.AdminHost}}?</h2>
+    <p>Sie ist dann zusätzlich unter dieser Adresse erreichbar{{if ne .Mode "local"}}, auch aus dem Internet{{end}}. Von dort lassen sich Apps installieren, Zugangsdaten ansehen und Sicherungen zurückspielen, geschützt nur durch das Admin-Passwort.</p>
+    <p>Unter {{.AdminLocalAddr}} bleibt sie wie bisher erreichbar.</p>
+    <div class="ls-actions"><button type="button" data-variant="ghost" data-close>Abbrechen</button><button type="submit" data-busy>Einschalten</button></div>
+  </form>
+</dialog>
+
+{{template "shell-end" .PageData}}
 <script>
-(function() {
-  const btn = document.getElementById('health-btn');
-  const out = document.getElementById('health-result');
-  const MARKS = { ok: '✓', warn: '!', fail: '✗', skip: '·' };
+(function () {
+  var btn = document.getElementById('health-btn');
+  var out = document.getElementById('health-result');
+  var TONE = { ok: 'ok', warn: 'warn', fail: 'bad', skip: 'off' };
+  var WORD = { ok: 'in Ordnung', warn: 'Hinweis', fail: 'Fehler', skip: 'übersprungen' };
+
+  function row(label, detail, status) {
+    var r = document.createElement('div');
+    r.className = 'ls-row';
+    var l = document.createElement('span');
+    l.className = 'ls-row-label';
+    l.textContent = label;
+    if (detail) { var d = document.createElement('small'); d.textContent = detail; l.appendChild(d); }
+    r.appendChild(l);
+    if (status) {
+      var p = document.createElement('span');
+      p.className = 'ls-pill'; p.dataset.tone = TONE[status] || 'off'; p.textContent = WORD[status] || status;
+      r.appendChild(p);
+    }
+    return r;
+  }
 
   function load() {
-    btn.disabled = true;
-    out.innerHTML = '<p class="sub" style="font-size:0.85rem;">Wird geprüft …</p>';
-
-    fetch('/public/health')
-      .then(resp => resp.json())
-      .then(data => {
-        const list = document.createElement('ul');
-        list.className = 'check-list';
-        (data.checks || []).forEach(c => {
-          const li = document.createElement('li');
-          li.className = 'check check--' + c.status;
-          const mark = document.createElement('span');
-          mark.className = 'check__mark';
-          mark.textContent = MARKS[c.status] || '·';
-          const body = document.createElement('div');
-          const title = document.createElement('div');
-          title.className = 'check__title';
-          title.textContent = c.title;
-          const detail = document.createElement('div');
-          detail.className = 'check__detail';
-          detail.textContent = c.detail;
-          body.appendChild(title);
-          body.appendChild(detail);
-          li.appendChild(mark);
-          li.appendChild(body);
-          list.appendChild(li);
-        });
-        out.innerHTML = '';
-        out.appendChild(list);
+    btn.setAttribute('aria-busy', 'true'); btn.disabled = true;
+    fetch('/public/health', { cache: 'no-store' })
+      .then(function (resp) { return resp.json(); })
+      .then(function (data) {
+        out.replaceChildren.apply(out, (data.checks || []).map(function (c) { return row(c.title, c.detail, c.status); }));
       })
-      .catch(() => {
-        out.innerHTML = '<p class="sub" style="font-size:0.85rem;">Prüfung fehlgeschlagen.</p>';
-      })
-      .finally(() => { btn.disabled = false; });
+      .catch(function () { out.replaceChildren(row('Prüfung fehlgeschlagen', 'stackctl hat nicht geantwortet.', 'fail')); })
+      .finally(function () { btn.removeAttribute('aria-busy'); btn.disabled = false; });
   }
 
   btn.addEventListener('click', load);
   load();
 })();
 </script>
-
-{{template "sidebar-layout-end" .}}
 {{template "foot" .}}
 {{end}}
+
+{{define "route-pill"}}{{if eq . "running"}}<span class="ls-pill" data-tone="ok">aktiv</span>{{else if eq . "error"}}<span class="ls-pill" data-tone="bad">Fehler</span>{{else}}<span class="ls-pill" data-tone="warn">gestoppt</span>{{end}}{{end}}

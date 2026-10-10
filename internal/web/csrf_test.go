@@ -88,7 +88,7 @@ func TestTemplatesParseWithCSRFHelper(t *testing.T) {
 		t.Fatalf("loadTemplates: %v", err)
 	}
 	for _, name := range []string{
-		"apps.html.tmpl", "app_detail.html.tmpl", "dashboard.html.tmpl",
+		"apps.html.tmpl", "job.html.tmpl", "dashboard.html.tmpl",
 		"settings.html.tmpl", "llm.html.tmpl", "public.html.tmpl",
 	} {
 		if _, ok := s.pages[name]; !ok {

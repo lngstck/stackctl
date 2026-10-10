@@ -99,10 +99,12 @@ func TestRenderDashboardWithMissingInfra(t *testing.T) {
 		t.Fatalf("loadTemplates: %v", err)
 	}
 
-	data := dashboardData{
+	data := startData{
 		PageData: PageData{NavActive: "dashboard", SchoolName: "Musterschule", SchoolSlug: "musterschule", CSRFToken: "tok"},
-		Issues:   missingInfraIssues(stateWith()),
 		Sys:      sysView{},
+	}
+	for _, is := range missingInfraIssues(stateWith()) {
+		data.Notices = append(data.Notices, noticeFor(is, nil, "tok"))
 	}
 
 	rec := httptest.NewRecorder()
@@ -111,7 +113,7 @@ func TestRenderDashboardWithMissingInfra(t *testing.T) {
 		t.Fatalf("render status = %d, want 200; body:\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	// HasApps ist hier false (frisches System) — die Karten müssen TROTZDEM
+	// HasApps ist hier false (frisches System) — die Hinweise müssen TROTZDEM
 	// erscheinen, zusammen mit dem "Noch keine Apps"-Hinweis.
 	for _, want := range []string{
 		"Noch keine Apps installiert",
@@ -126,23 +128,23 @@ func TestRenderDashboardWithMissingInfra(t *testing.T) {
 	}
 }
 
-// Rendert die Apps-Übersicht mit einem nicht installierten Pflicht-Dienst —
-// der Hinweis-Badge muss erscheinen.
+// Rendert den Katalog mit einem nicht installierten Pflicht-Dienst — der
+// Hinweis im Installations-Blatt muss erscheinen.
 func TestRenderAppsWithMandatoryBadge(t *testing.T) {
 	s := &Server{}
 	if err := s.loadTemplates(); err != nil {
 		t.Fatalf("loadTemplates: %v", err)
 	}
 
-	data := appsData{
-		PageData: PageData{NavActive: "apps", SchoolName: "Musterschule", SchoolSlug: "musterschule", CSRFToken: "tok"},
-		All: []appListEntry{
-			{ID: "postgres", Name: "PostgreSQL", IsMandatory: true},
-			{ID: "pylearn", Name: "PyLearn"},
-		},
-		Available: []appListEntry{
-			{ID: "postgres", Name: "PostgreSQL", IsMandatory: true},
-		},
+	postgres := catalogApp{
+		ID: "postgres", Name: "PostgreSQL", Label: "Datenbank", Version: "1.3", IsMandatory: true,
+		Tile: appTile{Face: faceFor("postgres", "PostgreSQL")}, Values: map[string]string{},
+	}
+	data := catalogData{
+		PageData:  PageData{NavActive: "apps", SchoolName: "Musterschule", SchoolSlug: "musterschule", CSRFToken: "tok"},
+		Shelves:   []catalogShelf{{Title: "Grundversorgung", Apps: []catalogApp{postgres}}},
+		Apps:      []catalogApp{postgres},
+		Available: 1,
 	}
 
 	rec := httptest.NewRecorder()

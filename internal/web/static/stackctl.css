@@ -1,242 +1,150 @@
-/* stackctl custom styles – Designsprache „Indigo".
-   Lädt NACH oat.min.css + theme.css + components.css. Nutzt durchgängig
-   die Theme-Tokens → Light/Dark automatisch via light-dark(). Wortmarke,
-   Status-Dot-Basis, card-head/kv-row/meter-row kommen aus components.css;
-   hier nur stackctl-spezifische Patterns + Token-Anbindung. */
+/* stackctl · nur, was die Designsprache (static/ls/) nicht mitbringt.
+   Ohne @layer, damit es gegen die Bausteine gewinnt. Klassen mit sc-. */
 
-/* Standard folgt dem OS; theme.js erzwingt bei Bedarf Hell/Dunkel. */
-:root { color-scheme: light dark; }
-
-.sub { color: var(--muted-foreground); }
-
-/* ── Status-Dots ──────────────────────────────────────────────
-   Basis (Form, 0.6rem) kommt aus components.css. Hier nur das
-   Mapping der stackctl-Statuswörter auf die Status-Tokens. Ein
-   kleiner Rechtsabstand, weil die Dots im Markup teils ohne
-   Flex-Gap direkt vor Text stehen (z.B. Tabelle auf „Zugang“). */
-.status-dot { margin-inline-end: 0.4rem; }
-.status-dot.running  { background: var(--success); }
-.status-dot.stopped  { background: var(--danger); }
-.status-dot.starting { background: var(--warning); }
-.status-dot.error    { background: var(--danger); }
-.status-dot.unknown  { background: var(--faint-foreground); }
-/* "off" ist eine Entscheidung, kein Defekt: der oeffentliche Zugang zur
-   Verwaltung ist standardmaessig aus und darf nicht wie ein Fehler aussehen. */
-.status-dot.off      { background: var(--faint-foreground); }
-
-/* ── App-Karten-Raster – subgrid für bündige Fußzeilen ──────── */
-.app-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 1rem;
-  align-items: start;
+/* ── Kontomenü in der Kopfzeile ────────────────────────────── */
+.sc-account { border: 0; padding: 0; cursor: pointer; }
+.sc-account > .ls-icon { width: 1.05rem; height: 1.05rem; }
+.sc-menu {
+  inset: auto; position-area: bottom span-left; margin: .5rem 0 0;
+  border: 0; padding: var(--ls-space-4); border-radius: var(--ls-r-l);
+  background: var(--ls-surface); color: var(--ls-ink); box-shadow: var(--ls-shadow-3);
+  display: none; gap: var(--ls-space-3); min-width: 15rem;
 }
-.app-card {
-  display: grid !important;
-  grid-template-rows: subgrid;
-  grid-row: span 4;
-}
-.app-card .card-header {
-  display: flex; align-items: center; gap: 0.5rem;
-}
-.app-card .card-desc { font-size: 0.9rem; }
-.app-card .card-meta {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding-top: 0.25rem;
-}
-.app-card .card-footer {
-  display: flex; align-items: center; justify-content: flex-end;
-  gap: 0.5rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
+.sc-menu:popover-open { display: grid; }
+.sc-menu .ls-list-label { margin: 0; }
+.sc-menu form button { width: 100%; }
+/* Ohne Anchor Positioning: rechts oben unter die Kopfzeile */
+@supports not (position-area: bottom) {
+  .sc-menu { position: fixed; top: 3.5rem; right: var(--ls-gutter); left: auto; }
 }
 
-/* ── Adress-Badge ─────────────────────────────────────────── */
-.host-badge {
-  font-size: 0.75rem;
-  font-family: var(--font-mono);
-  background: var(--faint);
-  color: var(--foreground);
-  padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-small);
-  word-break: break-all;
-}
+/* ── Rückmeldung nach einer Aktion ─────────────────────────── */
+.sc-flash { display: flex; align-items: flex-start; gap: .5rem; max-width: 46rem; margin: 0 auto var(--ls-space-5); padding: .7rem 1rem; border-radius: var(--ls-r-m); font-size: var(--ls-text-s); }
+.sc-flash > .ls-icon { margin-top: .1rem; }
+.sc-flash[data-tone="ok"]  { background: var(--ls-ok-soft); color: var(--ls-ok); }
+.sc-flash[data-tone="bad"] { background: var(--ls-bad-soft); color: var(--ls-bad); font-weight: var(--ls-w-medium); }
+.ls-sheet .sc-flash, .ls-panel .sc-flash { margin: 0 0 var(--ls-space-4); max-width: none; }
 
-/* ── Ghost-Buttons: dezente Kante, damit Sekundäraktionen im
-   dichten Admin-UI als Buttons lesbar bleiben (oat lässt ghost
-   randlos). Token-basiert, kein !important nötig. ───────────── */
-:is(button, a.button, input[type=submit]).ghost {
-  border-color: var(--border);
-}
-:is(button, a.button, input[type=submit]).ghost:hover {
-  border-color: var(--muted-foreground);
-}
+/* ── Kopieren ──────────────────────────────────────────────── */
+.sc-copy { flex: none; width: 2rem; height: 2rem; min-height: 0; padding: 0; border-radius: 50%; background: var(--ls-surface-2); color: var(--ls-ink-soft); }
+.sc-copy:hover { filter: none; color: var(--ls-ink); background: var(--ls-line); }
+.sc-copy[data-copied] { color: var(--ls-ok); }
 
-/* ── Theme-Umschalter (Topnav) ──────────────────────────────── */
-.theme-toggle {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 2.25rem; padding-inline: 0;
-  font-size: 1rem; line-height: 1;
-}
-.theme-toggle__icon { display: inline-block; }
+/* ── Start ─────────────────────────────────────────────────── */
+a.sc-widget-link { color: inherit; text-decoration: none; transition: transform var(--ls-dur-2) var(--ls-ease); }
+a.sc-widget-link:hover { text-decoration: none; transform: translateY(-2px); }
+.sc-infra { margin-top: var(--ls-space-8); gap: var(--ls-space-2) var(--ls-space-3); }
+.sc-infra-state { gap: .4rem; margin-right: var(--ls-space-2); }
+.sc-infra-state[data-tone="ok"]  > .ls-icon { color: var(--ls-ok); }
+.sc-infra-state[data-tone="bad"] { color: var(--ls-bad); }
+button.ls-chip { font: inherit; font-size: var(--ls-text-s); font-weight: var(--ls-w-regular); min-height: 0; color: var(--ls-ink-soft); background: var(--ls-surface-2); padding: .2rem .7rem .2rem .25rem; }
+button.ls-chip:hover { filter: none; background: var(--ls-line); color: var(--ls-ink); }
+button.ls-chip[data-tone="bad"] { color: var(--ls-bad); background: var(--ls-bad-soft); }
+.sc-legend { margin-top: var(--ls-space-6); }
+.ls-empty.ls-card { padding: var(--ls-space-10) var(--ls-space-4); }
+.ls-empty .ls-btn { margin-top: var(--ls-space-3); }
 
-/* ── Topnav ─────────────────────────────────────────────────── */
-.school-name { font-size: 1.05rem; font-weight: var(--font-medium); }
-[data-topnav] {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-[data-topnav] > :last-child { margin-left: auto; }
+/* ── Blatt ─────────────────────────────────────────────────── */
+.sc-sheet-note { display: flex; gap: .5rem; align-items: flex-start; margin: 0 0 var(--ls-space-4); padding: .7rem .9rem; border-radius: var(--ls-r-m); background: var(--ls-info-soft); color: var(--ls-info); font-size: var(--ls-text-s); }
+.sc-sheet-note > .ls-icon { margin-top: .1rem; }
+.sc-sheet-note[data-tone="warn"] { background: var(--ls-warn-soft); color: var(--ls-warn); }
+.sc-sheet-note[data-tone="bad"]  { background: var(--ls-bad-soft); color: var(--ls-bad); }
+.ls-sheet .ls-list-label:first-of-type { margin-top: var(--ls-space-4); }
+form.sc-row-form { margin: 0; }
+.sc-switch-row { display: flex; align-items: center; gap: .85rem; flex: 1; min-width: 0; cursor: pointer; font-weight: var(--ls-w-regular); }
+.sc-tech { display: grid; grid-template-columns: auto 1fr; gap: .35rem 1rem; margin: 0; padding: 0 1rem .9rem; font-size: var(--ls-text-s); color: var(--ls-ink-soft); }
+.sc-tech dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.sc-danger-zone { margin-top: var(--ls-space-6); }
+.sc-break code, code.sc-break { overflow-wrap: anywhere; }
+.sc-pre { white-space: pre-wrap; }
+.ls-row > .ls-icon:last-child { color: var(--ls-ink-faint); }
 
-/* Default-Padding von main reduzieren, damit die Topnav nicht zu hoch wird. */
-[data-sidebar-layout] > main { padding-top: 0; }
+/* Rückfrage im Dialog */
+.sc-check { display: flex; gap: .65rem; align-items: flex-start; margin-top: var(--ls-space-4); font-weight: var(--ls-w-medium); cursor: pointer; }
+.sc-check input { margin-top: .15rem; }
+.sc-check small { display: block; color: var(--ls-ink-soft); font-weight: var(--ls-w-regular); }
+dialog.ls-dialog p.sc-warn, .sc-warn { color: var(--ls-bad); font-weight: var(--ls-w-medium); }
 
-/* Sidebar: aktiver Eintrag */
-[data-sidebar] a[aria-current="page"] { font-weight: var(--font-semibold); }
+/* ── Seiten ohne Dock: Anmelden, Einrichtung ─────────────── */
+.sc-bare-main { max-width: 26rem; margin: 0 auto; padding: clamp(2rem, 12vh, 7rem) var(--ls-gutter) var(--ls-space-12); display: grid; gap: var(--ls-space-5); }
+.sc-bare-mark { justify-self: center; font-size: 1.3rem; }
+.sc-bare-mark .ls-mark { width: 1.7rem; height: 1.7rem; }
+.sc-login { display: grid; gap: var(--ls-space-4); padding: var(--ls-space-6); }
+.sc-login h1 { font-size: var(--ls-text-xl); }
+.sc-login > p { color: var(--ls-ink-soft); margin-top: calc(-1 * var(--ls-space-3)); }
+.sc-login .ls-field { padding: 0; }
+.sc-login .sc-flash { margin: 0; }
 
-/* ── Zentrierte Box (Setup, Login, Register) ────────────────── */
-.centered-box {
-  max-width: 480px;
-  margin: 3rem auto;
-}
+/* ── Vorgang (Installation, Update, Sicherung) ────────────── */
+.sc-job { max-width: 40rem; margin: 0 auto; }
+.sc-job .ls-pagehead p { gap: .6rem; }
+.sc-step > .ls-icon { width: 1.2rem; height: 1.2rem; }
+.sc-step[data-state="done"]    > .ls-icon { color: var(--ls-ok); }
+.sc-step[data-state="failed"]  > .ls-icon { color: var(--ls-bad); }
+.sc-step[data-state="failed"]  .ls-row-label { color: var(--ls-bad); font-weight: var(--ls-w-medium); }
+.sc-step[data-state="pending"] { color: var(--ls-ink-soft); }
+.sc-step[data-state="pending"] > .ls-icon { color: var(--ls-ink-faint); }
+.sc-step[data-state="running"] > .ls-icon { color: var(--ls-accent); animation: ls-spin 1.1s linear infinite; }
+.sc-step[data-state="running"] .ls-row-label { font-weight: var(--ls-w-semibold); }
+.sc-job-log { margin-top: var(--ls-space-4); }
+.sc-job-log pre { max-height: 20rem; overflow: auto; margin: 0; padding: 0 1rem 1rem; font-size: var(--ls-text-xs); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ls-ink-soft); }
+.sc-job-result { margin-top: var(--ls-space-5); }
+.sc-job-result .sc-flash { margin: 0 0 var(--ls-space-4); max-width: none; }
+.sc-job-actions { margin-top: var(--ls-space-5); }
 
-/* ── Abstandshilfen ─────────────────────────────────────────── */
-.mb-1 { margin-bottom: 0.5rem; }
-.mb-2 { margin-bottom: 1rem; }
-.mb-3 { margin-bottom: 1.5rem; }
-.mt-2 { margin-top: 1rem; }
-.mt-3 { margin-top: 1.5rem; }
-.gap-1 { gap: 0.5rem; }
-.gap-2 { gap: 1rem; }
+/* ── Geteilte Ansicht (Einstellungen, KI) ─────────────────── */
+.ls-panel > .ls-list.sc-gap, .ls-panel > .sc-gap { margin-top: var(--ls-space-5); }
+.ls-panel > .sc-gap-s { margin-top: var(--ls-space-3); }
+.ls-panel > .ls-list-label { margin-top: var(--ls-space-6); }
+.ls-panel .ls-sheet-foot { margin-top: var(--ls-space-4); }
+.ls-panel > .sc-flash { margin-top: var(--ls-space-4); }
+.ls-split > div > .sc-flash { margin: 0 0 var(--ls-space-5); max-width: none; }
+.ls-split > nav .ls-row > .ls-icon:last-child { color: var(--ls-ink-faint); }
+.sc-suffix { display: flex; align-items: center; gap: .5rem; }
+.sc-suffix > span { color: var(--ls-ink-soft); font-size: var(--ls-text-s); white-space: nowrap; }
+.sc-meter { width: 7rem; flex: none; }
+@media (max-width: 40rem) { .sc-meter { display: none; } }
+.ls-field > button { justify-self: start; }
 
-/* ── Dashboard ──────────────────────────────────────────────── */
-.dash-section { margin-block: 1.25rem; }
+/* ── Zugang: zwei Spalten, am Handy untereinander ─────────── */
+.sc-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--ls-space-6); align-items: start; }
+@media (max-width: 60rem) { .sc-columns { grid-template-columns: 1fr; } }
+.sc-columns form { margin: 0; }
+.ls-row > form { margin: 0; flex: none; }
 
-/* "Alles in Ordnung"-Zustand (keine offenen Punkte) */
-.dash-allgood {
-  display: flex; align-items: center; gap: 0.7rem;
-  padding: 1rem 1.1rem;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--success);
-  border-radius: var(--radius-medium);
-  background: color-mix(in srgb, var(--success) 7%, transparent);
-}
-.dash-allgood__icon { color: var(--success); font-size: 1.25rem; line-height: 1; }
+/* ── Sicherung ─────────────────────────────────────────────── */
+.sc-narrow { max-width: 46rem; }
+.sc-gap-l { margin-top: var(--ls-space-8); }
+.sc-encrypt-pass { display: none; }
+.sc-encrypt:has(input[name="encrypt"]:checked) .sc-encrypt-pass { display: grid; border-top: 1px solid var(--ls-line); }
+.ls-pill > .ls-icon { width: .85rem; height: .85rem; }
+.ls-row > .ls-icon:first-child { color: var(--ls-ink-soft); }
+.sc-newkey { display: grid; gap: .35rem; min-width: 0; color: var(--ls-ink); }
+.sc-newkey .sc-suffix code { flex: 1; min-width: 0; }
+.sc-sheet-note[data-tone="ok"] { background: var(--ls-ok-soft); color: var(--ls-ok); }
+form.ls-list > button.ls-row { width: 100%; }
+.ls-row-label code, .ls-list-hint code, .ls-pagehead code { overflow-wrap: anywhere; }
 
-/* Handlungsbedarf-Liste */
-.issue-list { display: flex; flex-direction: column; gap: 0.6rem; }
-.issue {
-  display: flex; align-items: flex-start; gap: 0.75rem;
-  padding: 0.8rem 0.9rem;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-left-width: 3px;
-  border-radius: var(--radius-medium);
-}
-.issue--danger  { border-left-color: var(--danger); }
-.issue--warning { border-left-color: var(--warning); }
-.issue__icon { font-size: 1rem; line-height: 1.4; flex-shrink: 0; }
-.issue--danger  .issue__icon { color: var(--danger); }
-.issue--warning .issue__icon { color: var(--warning); }
-.issue__body { flex: 1; min-width: 0; }
-.issue__title { font-weight: var(--font-semibold); }
-.issue__detail { font-size: 0.85rem; color: var(--muted-foreground); margin-top: 0.1rem; }
-.issue__action { flex-shrink: 0; align-self: center; }
-
-/* Kennzahlen-Raster */
-.dash-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
-  gap: 1rem;
-  align-items: start;
-}
-
-/* Große Kennzahl (Apps X von Y) */
-.dash-stat { display: flex; align-items: baseline; gap: 0.5rem; }
-.dash-stat__num {
-  font-size: 2rem; font-weight: var(--font-bold);
-  letter-spacing: -0.02em; line-height: 1;
-}
-.dash-stat__unit { color: var(--muted-foreground); font-size: 0.9rem; }
-
-/* System-Metriken (RAM/Platte/Last) */
-.dash-metric { margin-block-end: 0.7rem; }
-.dash-metric:last-child { margin-block-end: 0; }
-.dash-metric__top {
-  display: flex; justify-content: space-between; align-items: baseline;
-  gap: 0.75rem; font-size: 0.9rem;
-}
-.dash-metric__val { color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.8rem; }
-.dash-meter {
-  background: var(--muted); border-radius: 0.4rem;
-  height: 0.55rem; overflow: hidden; margin-top: 0.3rem;
-}
-.dash-meter > span { display: block; height: 100%; border-radius: 0.4rem; }
-.dash-meter > span.ok   { background: var(--success); }
-.dash-meter > span.warn { background: var(--warning); }
-.dash-meter > span.crit { background: var(--danger); }
-
-/* Kompakte Listen (Updates, Aktivität) */
-.dash-list { list-style: none; padding: 0; margin: 0; }
-.dash-list li {
-  display: flex; align-items: center; gap: 0.6rem;
-  padding: 0.5rem 0; font-size: 0.9rem;
-  border-bottom: 1px solid var(--border);
-}
-.dash-list li:last-child { border-bottom: none; }
-.dash-list .grow { flex: 1; min-width: 0; }
-.dash-empty { color: var(--muted-foreground); font-size: 0.9rem; }
-
-/* ── Betriebsart-Auswahl (Setup) ─────────────────────────────
-   Die drei Karten sind eine Radio-Gruppe: das echte <input> bleibt im
-   DOM (Tastatur + Formular-Semantik), sichtbar ist die Karte. */
-.centered-box--wide { max-width: 760px; }
-
-.mode-choice { display: flex; flex-direction: column; gap: 0.6rem; }
-.mode-card {
-  display: block; cursor: pointer;
-  padding: 0.85rem 1rem;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-medium);
-}
-.mode-card:hover { border-color: var(--ring); }
-.mode-card:has(input:checked) {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary);
-}
-.mode-card:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
-.mode-card__top { display: flex; align-items: baseline; gap: 0.55rem; }
-.mode-card__title { font-weight: var(--font-semibold); }
-.mode-card__tag {
-  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--muted-foreground);
-}
-.mode-card__body {
-  font-size: 0.85rem; color: var(--muted-foreground);
-  margin-top: 0.2rem; padding-left: 1.6rem;
-}
-.mode-card__addr {
-  font-family: var(--font-mono); font-size: 0.8rem;
-  margin-top: 0.3rem; padding-left: 1.6rem;
-  overflow-wrap: anywhere;
-}
-
-/* ── Voraussetzungs-Prüfung ──────────────────────────────────── */
-.check-list { list-style: none; padding: 0; margin: 0; }
-.check {
-  display: flex; align-items: flex-start; gap: 0.6rem;
-  padding: 0.5rem 0; font-size: 0.85rem;
-  border-bottom: 1px solid var(--border);
-}
-.check:last-child { border-bottom: none; }
-.check__mark { flex-shrink: 0; line-height: 1.5; font-weight: var(--font-semibold); }
-.check--ok   .check__mark { color: var(--success); }
-.check--warn .check__mark { color: var(--warning); }
-.check--fail .check__mark { color: var(--danger); }
-.check--skip .check__mark { color: var(--muted-foreground); }
-.check__title { font-weight: var(--font-semibold); }
-.check__detail { color: var(--muted-foreground); margin-top: 0.1rem; }
+/* ── Einrichtung ───────────────────────────────────────────── */
+.sc-setup.sc-bare-main { max-width: 40rem; gap: 0; }
+.sc-setup .ls-hello { margin: var(--ls-space-6) 0 var(--ls-space-6); }
+.sc-setup > .sc-flash { margin: 0 0 var(--ls-space-4); max-width: none; }
+.sc-setup-form > .ls-list-label { margin-top: var(--ls-space-6); }
+.sc-setup-form > .ls-list-label:first-child { margin-top: 0; }
+.sc-setup-form .ls-list-label + .ls-list .ls-pill { margin-left: .35rem; vertical-align: .1em; }
+.sc-mode { align-items: flex-start; }
+.sc-mode > input { margin-top: .2rem; }
+.sc-mode > .ls-icon { color: var(--ls-ink-soft); margin-top: .15rem; }
+.sc-step-row { align-items: flex-start; }
+.sc-num { flex: none; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center; background: var(--ls-accent-soft); color: var(--ls-accent); font-size: var(--ls-text-xs); font-weight: var(--ls-w-bold); }
+.sc-records { margin: .5rem 0 0; padding: .65rem .8rem; border-radius: var(--ls-r-s); background: var(--ls-surface-2); font-size: var(--ls-text-xs); line-height: 1.6; overflow-x: auto; }
+.sc-check-bar { display: flex; align-items: center; gap: var(--ls-space-3); flex-wrap: wrap; margin-top: var(--ls-space-6); }
+.sc-check-hint { color: var(--ls-ink-soft); font-size: var(--ls-text-s); }
+#check-result { margin-top: var(--ls-space-3); }
+.sc-setup-submit { width: 100%; margin-top: var(--ls-space-8); }
+.sc-setup .ls-field .ls-actions { gap: .4rem; }
+.sc-job-icon[data-tone="info"] { background: var(--ls-info-soft); color: var(--ls-info); }
+.sc-job-icon[data-tone="info"] > svg { animation: ls-spin 1.4s linear infinite; }
+.sc-job-icon[data-tone="ok"]   { background: var(--ls-ok-soft); color: var(--ls-ok); }
+.sc-job-icon[data-tone="bad"]  { background: var(--ls-bad-soft); color: var(--ls-bad); }
+#local-fields > .ls-list-label:first-child, #direct-fields > .ls-list-label:first-child { margin-top: var(--ls-space-6); }

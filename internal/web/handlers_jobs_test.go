@@ -123,3 +123,26 @@ func TestHandleJobStatusReturnsSnapshot(t *testing.T) {
 		t.Errorf("log: %+v", snap.Log)
 	}
 }
+
+// Die Designsprache liegt in static/ls/ — sie muss im Binary stecken, sonst
+// steht auf dem Server eine Seite ohne Gestaltung.
+func TestStaticServesDesignSystem(t *testing.T) {
+	s := &Server{}
+	for _, path := range []string{
+		"/static/ls/learningstack.css",
+		"/static/ls/css/tokens.css",
+		"/static/ls/icons/icons.svg",
+		"/static/ls/js/learningstack.js",
+		"/static/stackctl.css",
+		"/static/stackctl.js",
+	} {
+		rec := httptest.NewRecorder()
+		s.staticHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK || rec.Body.Len() == 0 {
+			t.Errorf("%s: status %d, %d Bytes", path, rec.Code, rec.Body.Len())
+		}
+		if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+			t.Errorf("%s: Cache-Control = %q", path, got)
+		}
+	}
+}

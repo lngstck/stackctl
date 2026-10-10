@@ -1,0 +1,248 @@
+/* learningstack · Bausteine */
+
+/* ── Icons (aus icons/icons.svg) ──────────────────────────── */
+.ls-icon { width: 1.15em; height: 1.15em; flex: none; vertical-align: -.2em; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── Wortmarke: in allen Apps identisch ───────────────────── */
+.ls-wordmark { display: inline-flex; align-items: center; gap: .5rem; color: var(--ls-ink); font-weight: var(--ls-w-bold); font-size: 1.05rem; letter-spacing: -.015em; text-decoration: none; white-space: nowrap; }
+.ls-wordmark:hover { text-decoration: none; }
+.ls-wordmark .ls-mark { width: 1.35rem; height: 1.35rem; color: var(--ls-accent); fill: currentColor; stroke: none; }
+.ls-wordmark small { font-size: var(--ls-text-s); font-weight: var(--ls-w-medium); color: var(--ls-ink-soft); letter-spacing: 0; }
+
+/* ── App-Kachel ───────────────────────────────────────────────
+   Farbton aus --ls-hue: data-app="pylearn" für eigene Apps,
+   style="--ls-hue: 205" für Katalog-Apps. Inhalt: Icon oder Kürzel. */
+.ls-tile {
+  --size: var(--ls-tile-l);
+  position: relative; flex: none;
+  width: var(--size); height: var(--size); border-radius: calc(var(--size) * .27);
+  display: grid; place-items: center;
+  background: light-dark(oklch(.965 .025 var(--ls-hue)), oklch(.31 .05 var(--ls-hue)));
+  color: light-dark(oklch(.46 .12 var(--ls-hue)), oklch(.85 .09 var(--ls-hue)));
+  box-shadow: inset 0 0 0 1px light-dark(oklch(.9 .035 var(--ls-hue)), oklch(.38 .05 var(--ls-hue)));
+  transition: transform var(--ls-dur-2) var(--ls-ease), filter var(--ls-dur-3);
+}
+.ls-tile > svg { width: 45%; height: 45%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ls-tile > img { width: 62%; height: 62%; object-fit: contain; }
+.ls-tile > b { font-size: calc(var(--size) * .28); font-weight: var(--ls-w-bold); letter-spacing: -.02em; line-height: 1; }
+.ls-tile[data-size="s"]  { --size: var(--ls-tile-s); }
+.ls-tile[data-size="m"]  { --size: var(--ls-tile-m); }
+.ls-tile[data-size="xl"] { --size: var(--ls-tile-xl); }
+.ls-tile[data-state="off"] { filter: grayscale(1) opacity(.5); }
+.ls-tile[data-variant="add"] { background: transparent; color: var(--ls-ink-soft); box-shadow: inset 0 0 0 2px var(--ls-line); }
+
+/* Markierungen: genau drei Bedeutungen */
+.ls-badge { position: absolute; width: 1.45rem; height: 1.45rem; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 0 0 3px var(--ls-bg); }
+.ls-badge > svg { width: .85rem; height: .85rem; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+.ls-badge[data-kind="update"] { right: -.35rem; top: -.35rem; background: var(--ls-warn); color: light-dark(#fff, #2a1800); }
+.ls-badge[data-kind="alert"]  { right: -.35rem; top: -.35rem; background: var(--ls-bad); color: light-dark(#fff, #2a0606); }
+.ls-badge[data-kind="internet"] { left: -.35rem; bottom: -.35rem; background: var(--ls-ink); color: var(--ls-surface); }
+
+/* ── Startbildschirm ───────────────────────────────────────── */
+.ls-launcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.25rem, 1fr)); gap: var(--ls-space-5) var(--ls-space-2); }
+.ls-launcher[data-size="l"] { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }
+.ls-launcher[data-size="l"] .ls-tile { --size: var(--ls-tile-xl); }
+.ls-app {
+  display: grid; justify-items: center; align-content: start; gap: .45rem; text-align: center;
+  padding: .35rem .15rem; border-radius: var(--ls-r-m);
+  color: var(--ls-ink); background: none; text-decoration: none; cursor: pointer;
+  font: inherit; font-weight: var(--ls-w-regular); min-height: 0; white-space: normal;
+}
+.ls-app:hover { text-decoration: none; filter: none; }
+.ls-app:hover .ls-tile { transform: translateY(-3px); }
+.ls-app:active { transform: none; }
+.ls-app:active .ls-tile { transform: scale(.96); }
+.ls-app-name { font-size: var(--ls-text-s); font-weight: var(--ls-w-semibold); line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-app-state { font-size: var(--ls-text-xs); color: var(--ls-ink-soft); margin-top: -.3rem; }
+.ls-app-state[data-tone="bad"] { color: var(--ls-bad); font-weight: var(--ls-w-semibold); }
+.ls-app[hidden] { display: none; }
+.ls-launcher[data-size="l"] .ls-app-name { font-size: var(--ls-text-base); }
+
+.ls-shelf + .ls-shelf { margin-top: var(--ls-space-8); }
+.ls-shelf > :is(h2, h3) { font-size: var(--ls-text-s); font-weight: var(--ls-w-semibold); color: var(--ls-ink-soft); margin: 0 0 var(--ls-space-4) .25rem; display: flex; gap: .4rem; }
+.ls-shelf > :is(h2, h3) span { color: var(--ls-ink-soft); font-weight: var(--ls-w-regular); }
+.ls-shelf[hidden] { display: none; }
+
+/* Zustandssatz: die größte Schrift beantwortet „Ist alles gut?“ */
+.ls-hello { text-align: center; margin: var(--ls-space-5) 0 var(--ls-space-8); }
+.ls-hello h1 { margin: 0; }
+.ls-hello p { margin: .35rem 0 0; color: var(--ls-ink-soft); font-size: var(--ls-text-m); }
+
+/* ── Karten ────────────────────────────────────────────────── */
+.ls-card { background: var(--ls-surface); border-radius: var(--ls-r-l); box-shadow: var(--ls-shadow-1); padding: var(--ls-space-4) var(--ls-space-5); }
+.ls-card[data-pad="0"] { padding: 0; overflow: hidden; }
+
+.ls-widget { display: grid; gap: .3rem; align-content: start; }
+.ls-widget > header { display: flex; align-items: center; gap: .4rem; font-size: var(--ls-text-xs); font-weight: var(--ls-w-semibold); color: var(--ls-ink-soft); }
+.ls-widget-value { font-size: var(--ls-text-xl); font-weight: var(--ls-w-bold); letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.ls-widget-value small { font-size: var(--ls-text-s); font-weight: var(--ls-w-medium); color: var(--ls-ink-soft); letter-spacing: 0; }
+.ls-widget > p { color: var(--ls-ink-soft); font-size: var(--ls-text-s); }
+
+/* Hinweis mit genau einer Handlung */
+.ls-notice { display: grid; grid-template-columns: auto 1fr; gap: .15rem var(--ls-space-4); align-items: center; }
+.ls-notice > .ls-tile, .ls-notice > .ls-notice-icon { grid-row: 1 / 4; align-self: start; }
+.ls-notice-icon { width: var(--ls-tile-m); height: var(--ls-tile-m); border-radius: var(--ls-r-m); display: grid; place-items: center; background: var(--ls-surface-2); color: var(--ls-ink-soft); }
+.ls-notice-icon > svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.ls-notice h3 { font-size: var(--ls-text-base); }
+.ls-notice h3 :is(a, button) { all: unset; cursor: pointer; }
+.ls-notice h3 :is(a, button):hover { text-decoration: underline; text-underline-offset: .2em; }
+.ls-notice h3 :is(a, button):focus-visible { outline: 2px solid var(--ls-accent); outline-offset: 3px; border-radius: var(--ls-r-xs); }
+.ls-notice p { color: var(--ls-ink-soft); font-size: var(--ls-text-s); max-width: 62ch; }
+.ls-notice .ls-actions { grid-column: 2; margin-top: .5rem; }
+.ls-notice[data-tone="bad"]  { box-shadow: var(--ls-shadow-1), inset 0 0 0 1.5px var(--ls-bad); }
+.ls-notice[data-tone="bad"]  .ls-notice-icon { background: var(--ls-bad-soft); color: var(--ls-bad); }
+.ls-notice[data-tone="warn"] .ls-notice-icon { background: var(--ls-warn-soft); color: var(--ls-warn); }
+.ls-notice[data-tone="info"] .ls-notice-icon { background: var(--ls-info-soft); color: var(--ls-info); }
+.ls-notice[data-tone="ok"]   .ls-notice-icon { background: var(--ls-ok-soft); color: var(--ls-ok); }
+
+.ls-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+
+/* ── Status ────────────────────────────────────────────────── */
+.ls-pill { display: inline-flex; align-items: center; gap: .35rem; font-size: var(--ls-text-xs); font-weight: var(--ls-w-semibold); padding: .14rem .55rem; border-radius: var(--ls-r-full); background: var(--ls-surface-2); color: var(--ls-ink-soft); white-space: nowrap; }
+.ls-pill::before { content: ""; width: .45rem; height: .45rem; border-radius: 50%; background: currentColor; }
+.ls-pill[data-tone="ok"]   { color: var(--ls-ok); background: var(--ls-ok-soft); }
+.ls-pill[data-tone="warn"] { color: var(--ls-warn); background: var(--ls-warn-soft); }
+.ls-pill[data-tone="bad"]  { color: var(--ls-bad); background: var(--ls-bad-soft); }
+.ls-pill[data-tone="info"] { color: var(--ls-info); background: var(--ls-info-soft); }
+.ls-pill[data-tone="off"]  { color: var(--ls-ink-soft); }
+.ls-pill[data-dot="no"]::before { display: none; }
+
+/* Wo etwas läuft: Schulnetz oder Internet. Überall gleich gekennzeichnet. */
+.ls-where { display: inline-flex; align-items: center; gap: .3rem; font-size: var(--ls-text-xs); font-weight: var(--ls-w-semibold); border-radius: var(--ls-r-full); padding: .12rem .55rem; white-space: nowrap; }
+.ls-where > svg { width: .95rem; height: .95rem; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.ls-where[data-where="school"]   { background: var(--ls-surface-2); color: var(--ls-ink-soft); }
+.ls-where[data-where="internet"] { background: var(--ls-warn-soft); color: var(--ls-warn); }
+
+/* ── Gruppierte Liste (wie Einstellungen am Tablet) ─────────── */
+.ls-list { background: var(--ls-surface); border-radius: var(--ls-r-m); box-shadow: var(--ls-shadow-1); overflow: hidden; }
+.ls-list + .ls-list { margin-top: var(--ls-space-2); }
+.ls-list-label { display: block; font-size: var(--ls-text-xs); font-weight: var(--ls-w-semibold); color: var(--ls-ink-soft); margin: var(--ls-space-6) .9rem .4rem; }
+.ls-list-label:first-child { margin-top: 0; }
+.ls-list-hint { font-size: var(--ls-text-s); color: var(--ls-ink-soft); margin: .45rem .9rem 0; max-width: 62ch; }
+.ls-row {
+  position: relative; display: flex; align-items: center; gap: .85rem;
+  width: 100%; min-height: 3rem; padding: .6rem 1rem;
+  background: none; color: var(--ls-ink); text-align: left; text-decoration: none;
+  font: inherit; font-weight: var(--ls-w-regular); border: 0; border-radius: 0; white-space: normal; justify-content: flex-start;
+}
+.ls-row + .ls-row::before, details + .ls-row::before, .ls-row + details::before { content: ""; position: absolute; top: 0; left: 1rem; right: 0; height: 1px; background: var(--ls-line); }
+.ls-list > details { position: relative; }
+:is(a, button, label, summary).ls-row { cursor: pointer; transition: background-color var(--ls-dur-1); }
+:is(a, button, label, summary).ls-row:hover { background: var(--ls-surface-2); text-decoration: none; filter: none; }
+:is(a, button, label, summary).ls-row:active { transform: none; }
+.ls-row[aria-current]:not([aria-current="false"]) { background: var(--ls-accent-soft); }
+.ls-row[aria-current]:not([aria-current="false"]) .ls-row-label { font-weight: var(--ls-w-semibold); }
+.ls-row-label { flex: 1; min-width: 0; }
+.ls-row-label small { display: block; color: var(--ls-ink-soft); font-size: var(--ls-text-s); font-weight: var(--ls-w-regular); }
+.ls-row-value { color: var(--ls-ink-soft); text-align: right; font-variant-numeric: tabular-nums; }
+.ls-row-chevron { color: var(--ls-ink-faint); }
+@media (max-width: 40rem) {
+  /* In Zeilen, die weiterführen, rutscht der Wert unter die Beschriftung */
+  .ls-row:has(> .ls-row-chevron):has(> .ls-row-value) { flex-wrap: wrap; row-gap: 0; }
+  .ls-row:has(> .ls-row-chevron) > .ls-row-value { order: 10; flex-basis: 100%; text-align: left; font-size: var(--ls-text-s); }
+}
+summary.ls-row::after { border-color: var(--ls-ink-faint); }
+.ls-row[data-tone="danger"] .ls-row-label { color: var(--ls-bad); font-weight: var(--ls-w-medium); }
+.ls-row > .ls-meter { flex: 1; }
+.ls-meter { height: .5rem; border-radius: var(--ls-r-full); background: var(--ls-surface-2); overflow: hidden; }
+.ls-meter > i { display: block; height: 100%; border-radius: inherit; background: var(--ls-accent); }
+
+/* Feld: Beschriftung, Eingabe, Hinweis, Fehler */
+.ls-field { display: grid; gap: .35rem; padding: .75rem 1rem; }
+.ls-list > .ls-field + .ls-field { border-top: 1px solid var(--ls-line); }
+.ls-field > label { font-size: var(--ls-text-xs); font-weight: var(--ls-w-semibold); color: var(--ls-ink-soft); }
+.ls-field-hint { font-size: var(--ls-text-s); color: var(--ls-ink-soft); }
+.ls-field-error { font-size: var(--ls-text-s); color: var(--ls-bad); font-weight: var(--ls-w-medium); display: none; gap: .3rem; align-items: center; }
+.ls-field:has([aria-invalid="true"]) .ls-field-error { display: flex; }
+
+/* ── Bedienelemente ───────────────────────────────────────── */
+.ls-seg { display: inline-flex; background: var(--ls-surface); border-radius: var(--ls-r-full); padding: 3px; box-shadow: var(--ls-shadow-1); }
+.ls-seg > button { background: none; color: var(--ls-ink-soft); font-size: var(--ls-text-xs); padding: .32rem .75rem; min-height: 0; }
+.ls-seg > button:hover { filter: none; color: var(--ls-ink); }
+.ls-seg > button[aria-pressed="true"] { background: var(--ls-ink); color: var(--ls-surface); }
+
+.ls-search { display: flex; align-items: center; gap: .5rem; background: var(--ls-surface); border-radius: var(--ls-r-full); padding: .3rem .4rem .3rem .9rem; box-shadow: var(--ls-shadow-1); color: var(--ls-ink-soft); min-width: 0; cursor: text; }
+.ls-search > input { border: 0; background: none; padding: .2rem 0; min-height: 0; box-shadow: none; flex: 1; min-width: 0; }
+.ls-search > input:focus-visible { box-shadow: none; }
+.ls-search:focus-within { box-shadow: var(--ls-shadow-1), 0 0 0 3px var(--ls-accent-line); }
+
+.ls-iconbtn { width: 2.1rem; height: 2.1rem; min-height: 0; padding: 0; border-radius: 50%; background: var(--ls-surface); color: var(--ls-ink-soft); box-shadow: var(--ls-shadow-1); }
+.ls-iconbtn:hover { filter: none; color: var(--ls-ink); }
+
+.ls-avatar { width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--ls-surface); color: var(--ls-ink); font-size: var(--ls-text-xs); font-weight: var(--ls-w-bold); box-shadow: var(--ls-shadow-1); }
+
+.ls-chip { display: inline-flex; align-items: center; gap: .4rem; font-size: var(--ls-text-s); background: var(--ls-surface-2); color: var(--ls-ink-soft); border-radius: var(--ls-r-full); padding: .2rem .7rem .2rem .25rem; }
+.ls-chip > .ls-tile { --size: 1.45rem; border-radius: 7px; }
+
+.ls-legend { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; justify-content: center; font-size: var(--ls-text-s); color: var(--ls-ink-soft); }
+.ls-legend > span { display: inline-flex; align-items: center; gap: .5rem; }
+.ls-legend .ls-badge { position: static; box-shadow: none; width: 1.15rem; height: 1.15rem; }
+.ls-legend .ls-badge > svg { width: .7rem; height: .7rem; }
+
+.ls-empty { text-align: center; color: var(--ls-ink-soft); padding: var(--ls-space-10) var(--ls-space-4); display: grid; justify-items: center; gap: .5rem; }
+.ls-empty > svg { width: 2rem; height: 2rem; color: var(--ls-ink-faint); }
+.ls-empty strong { color: var(--ls-ink); }
+
+/* ── Blatt und Dialog (natives <dialog>) ─────────────────────
+   Das Blatt trägt jede Detailtiefe: von rechts, am Handy von unten. */
+dialog.ls-sheet, dialog.ls-dialog { border: 0; padding: 0; color: var(--ls-ink); max-width: none; max-height: none; }
+dialog.ls-sheet {
+  position: fixed; margin: 0; inset: .75rem .75rem .75rem auto; height: auto;
+  width: min(30rem, calc(100vw - 1.5rem)); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--ls-bg); border-radius: var(--ls-r-xl); box-shadow: var(--ls-shadow-3);
+  padding: var(--ls-space-4) var(--ls-space-4) var(--ls-space-8);
+  transform: translateX(calc(100% + 2rem));
+  transition: transform var(--ls-dur-3) var(--ls-ease), overlay var(--ls-dur-3) allow-discrete, display var(--ls-dur-3) allow-discrete;
+}
+dialog.ls-sheet[open] { transform: none; }
+@starting-style { dialog.ls-sheet[open] { transform: translateX(calc(100% + 2rem)); } }
+dialog.ls-sheet::backdrop, dialog.ls-dialog::backdrop {
+  background: rgb(10 12 14 / .34); opacity: 0;
+  transition: opacity var(--ls-dur-3) var(--ls-ease), overlay var(--ls-dur-3) allow-discrete, display var(--ls-dur-3) allow-discrete;
+}
+dialog.ls-sheet[open]::backdrop, dialog.ls-dialog[open]::backdrop { opacity: 1; }
+@starting-style { dialog.ls-sheet[open]::backdrop, dialog.ls-dialog[open]::backdrop { opacity: 0; } }
+.ls-sheet-bar { display: flex; justify-content: flex-end; position: sticky; top: 0; z-index: 1; }
+.ls-sheet-hero { display: grid; justify-items: center; text-align: center; gap: .4rem; margin: -.5rem 0 var(--ls-space-4); }
+.ls-sheet-hero .ls-tile { --size: 5rem; }
+.ls-sheet-hero h2 { margin-top: .35rem; }
+.ls-sheet-hero p { color: var(--ls-ink-soft); }
+.ls-sheet-hero .ls-actions { justify-content: center; margin-top: .5rem; }
+.ls-sheet-foot { display: flex; justify-content: flex-end; gap: .5rem; margin-top: var(--ls-space-5); }
+
+dialog.ls-dialog {
+  width: min(28rem, calc(100vw - 2rem)); background: var(--ls-surface); border-radius: var(--ls-r-l); box-shadow: var(--ls-shadow-3);
+  padding: var(--ls-space-6); opacity: 0; transform: scale(.97);
+  transition: opacity var(--ls-dur-2) var(--ls-ease), transform var(--ls-dur-2) var(--ls-ease), overlay var(--ls-dur-2) allow-discrete, display var(--ls-dur-2) allow-discrete;
+}
+dialog.ls-dialog[open] { opacity: 1; transform: none; }
+@starting-style { dialog.ls-dialog[open] { opacity: 0; transform: scale(.97); } }
+dialog.ls-dialog h2 { font-size: var(--ls-text-l); }
+dialog.ls-dialog p { color: var(--ls-ink-soft); margin-top: .5rem; }
+dialog.ls-dialog .ls-actions { justify-content: flex-end; margin-top: var(--ls-space-6); }
+
+@media (max-width: 40rem) {
+  dialog.ls-sheet { inset: auto 0 0 0; width: 100%; max-height: 90dvh; border-radius: var(--ls-r-xl) var(--ls-r-xl) 0 0; transform: translateY(100%); padding-top: var(--ls-space-2); touch-action: pan-y; }
+  @starting-style { dialog.ls-sheet[open] { transform: translateY(100%); } }
+  /* Griff: zeigt, dass sich das Blatt nach unten wegziehen lässt */
+  .ls-sheet-bar { justify-content: center; padding: .35rem 0 .5rem; cursor: grab; }
+  .ls-sheet-hero { margin-top: 0; }
+  .ls-sheet-bar::before { content: ""; width: 2.5rem; height: 5px; border-radius: var(--ls-r-full); background: var(--ls-line-input); opacity: .6; }
+  .ls-sheet-bar .ls-iconbtn { position: absolute; right: 0; top: .1rem; }
+}
+
+/* ── Code und Ausgabe (eigene Apps) ──────────────────────────
+   Syntaxfarben folgen dem Farbton der App. */
+.ls-code { margin: 0; padding: var(--ls-space-4) 0; font: var(--ls-text-base)/1.7 var(--ls-font-mono); counter-reset: ls-line; overflow-x: auto; background: var(--ls-surface); }
+.ls-code > span { display: block; min-height: 1.7em; padding: 0 1rem 0 3.5rem; position: relative; white-space: pre; }
+.ls-code > span::before { counter-increment: ls-line; content: counter(ls-line); position: absolute; left: 0; width: 2.5rem; text-align: right; color: var(--ls-ink-soft); }
+.ls-code > span[aria-current] { background: var(--ls-accent-soft); }
+.tok-kw  { color: light-dark(oklch(.5 .15 calc(var(--ls-hue) + 40)), oklch(.8 .12 calc(var(--ls-hue) + 40))); font-weight: var(--ls-w-semibold); }
+.tok-fn  { color: var(--ls-accent); }
+.tok-str { color: light-dark(#2f7d32, #8bd48f); }
+.tok-num { color: light-dark(#a35404, #f5b54a); }
+.tok-com { color: var(--ls-ink-soft); font-style: italic; }
+.ls-output { background: light-dark(#f6f7f9, #15181b); border-top: 1px solid var(--ls-line); padding: .75rem 1rem; font: var(--ls-text-s)/1.6 var(--ls-font-mono); }
+.ls-output [data-tone="ok"] { color: var(--ls-ok); }
+.ls-output :is(button, .ls-btn) { font-family: var(--ls-font); }
+.ls-output [data-tone="bad"] { color: var(--ls-bad); }

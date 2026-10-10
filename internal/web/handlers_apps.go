@@ -5,9 +5,12 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/compose"
@@ -21,32 +24,185 @@ import (
 	"github.com/lngstck/stackctl/internal/public"
 )
 
-// appsData is the template context for apps.html.tmpl.
-type appsData struct {
-	PageData
-	All       []appListEntry
-	Installed []appListEntry
-	Available []appListEntry
-	Message   string
-	IsError   bool
-	// CatalogMissing is true when the catalog index has not been synced yet.
-	// It is a notice of its own, so it never displaces Message.
-	CatalogMissing bool
+// appSheet is everything the sheet of an installed app shows. The start
+// screen renders one per app; /apps/{id} opens it.
+type appSheet struct {
+	ID          string
+	Name        string
+	ShortName   string // for the basic services: "Datenbank", "Anmeldung", …
+	Description string
+	Category    string
+	Tile        appTile
+	Running     bool
+	IsInfra     bool
+	IsMandatory bool
+
+	Version        string
+	UpdateTo       string
+	UpdateBreaking bool
+	AutoUpdate     bool
+
+	OpenURL       string // where "Öffnen" leads; empty for background services
+	Where         string // "school" | "internet"
+	PublicEnabled bool
+	PublicHost    string
+	CanPublish    bool // the app has a web port the proxy can route to
+
+	Port          int
+	ServerDomain  string
+	ContainerName string
+	DataDir       string
+	InstalledAt   string
+
+	HasOIDC         bool
+	OIDCClientID    string
+	OIDCRedirectURI string
+
+	AdminLogin    string
+	AdminPassword string
+	AdminNotes    template.HTML
+
+	Homepage string
+	Docs     string
 }
 
-// appListEntry holds one entry in the app catalog list.
+// appSheet builds the sheet of an installed app from its state and the
+// cached catalog definition.
+func (s *Server) appSheet(id string, cs *config.ContainerState) appSheet {
+	name := cs.Name
+	if name == "" {
+		name = id
+	}
+	port := 0
+	if len(cs.Ports) > 0 {
+		port = cs.Ports[0]
+	}
+	sh := appSheet{
+		ID:            id,
+		Name:          name,
+		ShortName:     infraShortNames[id],
+		Running:       appRunning(id),
+		IsMandatory:   isMandatoryApp(id),
+		Version:       cs.VersionInstalled,
+		AutoUpdate:    !cs.AutoUpdateDisabled,
+		Where:         "school",
+		PublicEnabled: cs.PublicEnabled,
+		PublicHost:    cs.PublicHost,
+		Port:          port,
+		ServerDomain:  s.cfg.School.ServerDomain,
+		ContainerName: "ls-" + id,
+		DataDir:       filepath.Join(paths.LearningstackDir(), id),
+		InstalledAt:   formatDay(cs.InstalledAt),
+	}
+	if sh.ShortName == "" {
+		sh.ShortName = name
+	}
+
+	def, err := catalog.LoadDefinition(id)
+	if err == nil {
+		sh.Description = def.Description
+		sh.Category = def.Category
+		if catalog.HasUpdate(cs.VersionInstalled, def.Version) {
+			sh.UpdateTo = def.Version
+			sh.UpdateBreaking = def.Breaking
+		}
+		if def.OIDC != nil {
+			sh.HasOIDC = true
+			sh.OIDCClientID = def.OIDC.ClientID
+			sh.OIDCRedirectURI = dex.BuildRedirectURI(s.cfg, id, def.OIDC.RedirectPath, port, cs.PublicEnabled)
+		}
+		if def.Links != nil {
+			sh.Homepage = def.Links.Homepage
+			sh.Docs = def.Links.Docs
+		}
+		if def.AdminInfo != nil {
+			sh.AdminLogin = expandAdminPlaceholders(def.AdminInfo.Login, s.cfg, id)
+			sh.AdminPassword = expandAdminPlaceholders(def.AdminInfo.PasswordHint, s.cfg, id)
+			sh.AdminNotes = linkifyAdminNotes(expandAdminPlaceholders(def.AdminInfo.Notes, s.cfg, id))
+		}
+	}
+	sh.IsInfra = isInfrastructure(id, sh.Category)
+	sh.CanPublish = !sh.IsMandatory && s.publishApp(id, cs).ContainerPort != 0
+
+	if s.cfg.Public.Transport == config.TransportDirect && cs.PublicEnabled {
+		sh.Where = "internet"
+	}
+	if !sh.IsInfra {
+		switch {
+		case cs.PublicEnabled && cs.PublicHost != "":
+			sh.OpenURL = "https://" + cs.PublicHost
+		case port > 0 && sh.ServerDomain != "":
+			sh.OpenURL = fmt.Sprintf("http://%s:%d", sh.ServerDomain, port)
+		}
+	}
+	sh.Tile = appTile{
+		Face:     faceFor(id, name),
+		Off:      !sh.Running,
+		Update:   sh.UpdateTo != "",
+		Internet: sh.Where == "internet",
+	}
+	return sh
+}
+
+// formatDay renders an RFC3339 timestamp as a German date.
+func formatDay(rfc3339 string) string {
+	t, err := time.Parse(time.RFC3339, rfc3339)
+	if err != nil {
+		return rfc3339
+	}
+	return t.Local().Format("02.01.2006")
+}
+
+// catalogData is the template context for apps.html.tmpl, the catalog:
+// every app the catalog offers, on shelves by category. An app opens its
+// sheet; for one not yet installed the sheet is the install form.
+type catalogData struct {
+	PageData
+	Flash   flash
+	Shelves []catalogShelf
+	// CatalogMissing is true when the catalog index has not been synced yet.
+	// It is a notice of its own, so it never displaces the flash.
+	CatalogMissing bool
+	Available      int
+	Apps           []catalogApp // every app, for the sheets
+}
+
+type catalogShelf struct {
+	Title string
+	Apps  []catalogApp
+}
+
+// catalogApp is one app in the catalog with what its install sheet needs.
+type catalogApp struct {
+	ID          string
+	Name        string
+	Label       string // under the tile: short names for the basic services
+	Category    string
+	Description string
+	Version     string
+	Tile        appTile
+	Installed   bool
+	IsMandatory bool
+
+	// Install form (only for apps not yet installed).
+	Missing     []string // names of apps it needs first
+	Prompts     []catalog.Prompt
+	Secrets     []catalog.SecretSpec
+	UsesAdminPw bool
+	HasOIDC     bool
+	AutoAddress bool // the app gets its address during install (autoPublish)
+	Error       string
+	Values      map[string]string
+}
+
+// appListEntry is one app in the catalog index merged with its state.
 type appListEntry struct {
-	ID              string
-	Name            string
-	Category        string
-	Description     string
-	Version         string
-	IsInstalled     bool
-	IsMandatory     bool
-	Status          string // "running" | "stopped" | "unknown" | "" (not installed)
-	UpdateAvailable bool
-	UpdateTo        string
-	UpdateBreaking  bool
+	ID          string
+	Name        string
+	Category    string
+	Description string
+	IsInstalled bool
+	IsMandatory bool
 }
 
 // pinMandatoryFirst zieht noch nicht installierte Pflicht-Dienste an den
@@ -58,55 +214,6 @@ func pinMandatoryFirst(entries []appListEntry) {
 		pj := entries[j].IsMandatory && !entries[j].IsInstalled
 		return pi && !pj
 	})
-}
-
-// appDetailData is the template context for app_detail.html.tmpl.
-type appDetailData struct {
-	PageData
-	ID                 string
-	Name               string
-	Category           string
-	Description        string
-	Version            string
-	Status             string
-	Port               int
-	ServerDomain       string
-	PublicEnabled      bool
-	PublicHost         string
-	ContainerName      string
-	InstalledAt        string
-	HasOIDC            bool
-	OIDCClientID       string
-	OIDCRedirectURI    string
-	Homepage           string
-	Docs               string
-	IsMandatory        bool
-	AdminLogin         string
-	AdminPassword      string
-	AdminNotes         template.HTML
-	UpdateAvailable    bool
-	UpdateTo           string
-	UpdateBreaking     bool
-	AutoUpdateDisabled bool
-}
-
-// appInstallData is the template context for app_install.html.tmpl.
-type appInstallData struct {
-	PageData
-	ID          string
-	Name        string
-	Category    string
-	Description string
-	Version     string
-	HasOIDC     bool
-	Prompts     []catalog.Prompt
-	Secrets     []catalog.SecretSpec
-	UsesAdminPw bool
-	// AutoAddress is true when the app gets its address during install
-	// (see autoPublish), so the page need not ask for a second step.
-	AutoAddress bool
-	Error       string
-	Values      map[string]string
 }
 
 // expandAdminPlaceholders replaces {school_slug}, {server_domain}, {app_id}
@@ -167,14 +274,19 @@ func usesAdminPassword(def *catalog.Definition) bool {
 }
 
 func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
-	data := appsData{
+	s.renderCatalog(w, r, "", nil)
+}
+
+// renderCatalog renders the catalog. With openApp it opens that app's
+// sheet; form carries the values and error of a rejected install.
+func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, openApp string, form *catalogApp) {
+	data := catalogData{
 		PageData: s.pageData("apps"),
+		Flash:    flashFrom(r),
 	}
+	data.Search = true
 
 	// Without the index only the offer is missing, not what is installed.
-	// Bailing out here used to hide every installed app — and the ?msg= of
-	// the action that just redirected here — so the admin landed on an empty
-	// page right after "Zu den Apps" from a dashboard alarm.
 	idx, err := catalog.LoadIndex()
 	if err != nil {
 		data.CatalogMissing = true
@@ -182,12 +294,20 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	st := s.snapState()
+	installed := make(map[string]bool, len(st.Containers))
+	for _, id := range st.InstalledIDs() {
+		installed[id] = true
+	}
+
+	var entries []appListEntry
 	listed := make(map[string]bool, len(idx.Apps))
 	for _, app := range idx.Apps {
 		listed[app.ID] = true
-		data.add(s.appEntry(app, st.Containers[app.ID]))
+		entries = append(entries, appListEntry{
+			ID: app.ID, Name: app.Name, Category: app.Category, Description: app.Description,
+			IsInstalled: installed[app.ID], IsMandatory: isMandatoryApp(app.ID),
+		})
 	}
-
 	// Installed apps the index does not list — no index at all, or an app
 	// that has since left the catalog — still belong on the page. The cached
 	// definition fills in what state.yaml does not know.
@@ -195,182 +315,143 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 		if listed[id] {
 			continue
 		}
-		cs := st.Containers[id]
-		summary := catalog.AppSummary{ID: id, Name: cs.Name}
+		e := appListEntry{ID: id, Name: st.Containers[id].Name, IsInstalled: true, IsMandatory: isMandatoryApp(id)}
 		if def, err := catalog.LoadDefinition(id); err == nil {
-			summary.Category = def.Category
-			summary.Description = def.Description
-			if summary.Name == "" {
-				summary.Name = def.Name
+			e.Category = def.Category
+			e.Description = def.Description
+			if e.Name == "" {
+				e.Name = def.Name
 			}
 		}
-		if summary.Name == "" {
-			summary.Name = id
+		if e.Name == "" {
+			e.Name = id
 		}
-		data.add(s.appEntry(summary, cs))
+		entries = append(entries, e)
+	}
+	pinMandatoryFirst(entries)
+
+	shelves := map[string]*catalogShelf{}
+	var order []string
+	for _, e := range entries {
+		app := s.catalogApp(e, installed)
+		if form != nil && form.ID == app.ID {
+			app.Error = form.Error
+			app.Values = form.Values
+		}
+		if !app.Installed {
+			data.Available++
+		}
+		data.Apps = append(data.Apps, app)
+
+		title := categoryLabel(e.Category)
+		if shelves[title] == nil {
+			shelves[title] = &catalogShelf{Title: title}
+			order = append(order, title)
+		}
+		shelves[title].Apps = append(shelves[title].Apps, app)
 	}
 
-	pinMandatoryFirst(data.All)
-	pinMandatoryFirst(data.Available)
-
-	if msg := r.URL.Query().Get("msg"); msg != "" {
-		data.Message = msg
-		data.IsError = r.URL.Query().Get("err") == "1"
+	// Grundversorgung steht vorn, solange etwas davon fehlt — sonst hinten,
+	// nach dem, wofür man den Katalog eigentlich öffnet.
+	infraMissing := false
+	for _, id := range mandatoryAppIDs() {
+		if !installed[id] {
+			infraMissing = true
+		}
+	}
+	rank := func(t string) int {
+		if t == categoryLabels["infrastructure"] {
+			if infraMissing {
+				return -1
+			}
+			return len(categoryOrder) + 1
+		}
+		for i, c := range categoryOrder {
+			if c == t {
+				return i
+			}
+		}
+		return len(categoryOrder)
+	}
+	sort.SliceStable(order, func(i, j int) bool { return rank(order[i]) < rank(order[j]) })
+	for _, t := range order {
+		data.Shelves = append(data.Shelves, *shelves[t])
 	}
 
+	if openApp != "" {
+		data.OpenSheet = "app-" + openApp
+	}
 	s.render(w, "apps.html.tmpl", data)
 }
 
-// appEntry builds one card for the apps page. cs is nil for an app that is
-// not installed.
-func (s *Server) appEntry(app catalog.AppSummary, cs *config.ContainerState) appListEntry {
-	entry := appListEntry{
-		ID:          app.ID,
-		Name:        app.Name,
-		Category:    app.Category,
-		Description: app.Description,
-		IsInstalled: cs != nil,
-		IsMandatory: isMandatoryApp(app.ID),
+// catalogApp builds one catalog entry. For an app not yet installed it loads
+// the cached definition, which carries the install form.
+func (s *Server) catalogApp(e appListEntry, installed map[string]bool) catalogApp {
+	app := catalogApp{
+		ID:          e.ID,
+		Name:        e.Name,
+		Category:    e.Category,
+		Description: e.Description,
+		Installed:   e.IsInstalled,
+		IsMandatory: e.IsMandatory,
+		Tile:        appTile{Face: faceFor(e.ID, e.Name)},
+		Values:      map[string]string{},
 	}
-	if cs == nil {
-		return entry
+	app.Label = infraShortNames[e.ID]
+	if app.Label == "" {
+		app.Label = e.Name
 	}
-
-	entry.Version = cs.VersionInstalled
-	if docker.IsRunning("ls-" + app.ID) {
-		entry.Status = "running"
-	} else {
-		entry.Status = "stopped"
+	if app.Installed {
+		return app
 	}
-	// Update-Verfuegbarkeit aus gecachter Definition ableiten.
-	if def, err := catalog.LoadDefinition(app.ID); err == nil {
-		if catalog.HasUpdate(cs.VersionInstalled, def.Version) {
-			entry.UpdateAvailable = true
-			entry.UpdateTo = def.Version
-			entry.UpdateBreaking = def.Breaking
-		}
+	def, err := catalog.LoadDefinition(e.ID)
+	if err != nil {
+		return app
 	}
-	return entry
+	app.Version = def.Version
+	app.Prompts = def.Prompts
+	app.Secrets = def.Secrets
+	app.UsesAdminPw = usesAdminPassword(def)
+	app.HasOIDC = def.OIDC != nil
+	app.AutoAddress = s.cfg.Public.Transport == config.TransportLocal
+	for _, dep := range catalog.MissingDependencies(def, installed) {
+		app.Missing = append(app.Missing, appName(dep))
+	}
+	return app
 }
 
-// add files an entry under "Alle" and under its tab.
-func (d *appsData) add(e appListEntry) {
-	if e.IsInstalled {
-		d.Installed = append(d.Installed, e)
-	} else {
-		d.Available = append(d.Available, e)
+// appName is the display name of an app from the cached catalog, its id
+// when the catalog does not know it.
+func appName(id string) string {
+	if def, err := catalog.LoadDefinition(id); err == nil && def.Name != "" {
+		return def.Name
 	}
-	d.All = append(d.All, e)
+	return id
 }
 
+// handleAppDetail opens an installed app's sheet on the start screen. An app
+// that is not installed has no sheet there; its place is the catalog.
 func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
-	if appID == "" {
+	if _, ok := s.snapState().Containers[appID]; !ok {
 		http.Redirect(w, r, "/apps", http.StatusSeeOther)
 		return
 	}
-
-	cs, ok := s.snapState().Containers[appID]
-	if !ok {
-		http.Redirect(w, r, "/apps", http.StatusSeeOther)
-		return
-	}
-
-	status := "stopped"
-	if docker.IsRunning("ls-" + appID) {
-		status = "running"
-	}
-
-	port := 0
-	if len(cs.Ports) > 0 {
-		port = cs.Ports[0]
-	}
-
-	data := appDetailData{
-		PageData:           s.pageData("apps"),
-		ID:                 appID,
-		Name:               cs.Name,
-		Version:            cs.VersionInstalled,
-		Status:             status,
-		Port:               port,
-		ServerDomain:       s.cfg.School.ServerDomain,
-		PublicEnabled:      cs.PublicEnabled,
-		PublicHost:         cs.PublicHost,
-		ContainerName:      "ls-" + appID,
-		InstalledAt:        cs.InstalledAt,
-		IsMandatory:        isMandatoryApp(appID),
-		AutoUpdateDisabled: cs.AutoUpdateDisabled,
-	}
-
-	// Load definition for extra info (OIDC, links, category, description).
-	def, err := catalog.LoadDefinition(appID)
-	if err == nil {
-		data.Category = def.Category
-		data.Description = def.Description
-		if catalog.HasUpdate(cs.VersionInstalled, def.Version) {
-			data.UpdateAvailable = true
-			data.UpdateTo = def.Version
-			data.UpdateBreaking = def.Breaking
-		}
-		if def.OIDC != nil {
-			data.HasOIDC = true
-			data.OIDCClientID = def.OIDC.ClientID
-			data.OIDCRedirectURI = dex.BuildRedirectURI(
-				s.cfg, appID, def.OIDC.RedirectPath, port, cs.PublicEnabled,
-			)
-		}
-		if def.Links != nil {
-			data.Homepage = def.Links.Homepage
-			data.Docs = def.Links.Docs
-		}
-		if def.AdminInfo != nil {
-			data.AdminLogin = expandAdminPlaceholders(def.AdminInfo.Login, s.cfg, appID)
-			data.AdminPassword = expandAdminPlaceholders(def.AdminInfo.PasswordHint, s.cfg, appID)
-			data.AdminNotes = linkifyAdminNotes(expandAdminPlaceholders(def.AdminInfo.Notes, s.cfg, appID))
-		}
-	}
-
-	s.render(w, "app_detail.html.tmpl", data)
+	s.renderStart(w, r, appID)
 }
 
+// handleAppInstallForm opens the install sheet in the catalog.
 func (s *Server) handleAppInstallForm(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
-
-	def, err := catalog.GetOrFetch(s.cfg.Catalog.URL, appID)
-	if err != nil {
+	if _, err := catalog.GetOrFetch(s.cfg.Catalog.URL, appID); err != nil {
 		http.Redirect(w, r, "/apps?msg=App+nicht+gefunden&err=1", http.StatusSeeOther)
 		return
 	}
-
-	// Check dependencies.
-	idSlice := s.snapState().InstalledIDs()
-	installedIDs := make(map[string]bool, len(idSlice))
-	for _, id := range idSlice {
-		installedIDs[id] = true
-	}
-	missing := catalog.MissingDependencies(def, installedIDs)
-	if len(missing) > 0 {
-		msg := fmt.Sprintf("Fehlende Abhaengigkeiten: %s", strings.Join(missing, ", "))
-		http.Redirect(w, r, "/apps?msg="+msg+"&err=1", http.StatusSeeOther)
+	if s.snapState().IsInstalled(appID) {
+		http.Redirect(w, r, "/apps/"+appID, http.StatusSeeOther)
 		return
 	}
-
-	data := appInstallData{
-		PageData:    s.pageData("apps"),
-		ID:          def.ID,
-		Name:        def.Name,
-		Category:    def.Category,
-		Description: def.Description,
-		Version:     def.Version,
-		HasOIDC:     def.OIDC != nil,
-		Prompts:     def.Prompts,
-		Secrets:     def.Secrets,
-		UsesAdminPw: usesAdminPassword(def),
-		AutoAddress: s.cfg.Public.Transport == config.TransportLocal,
-		Values:      make(map[string]string),
-	}
-
-	s.render(w, "app_install.html.tmpl", data)
+	s.renderCatalog(w, r, appID, nil)
 }
 
 func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
@@ -393,25 +474,15 @@ func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
 		promptValues[p.Key] = r.FormValue(p.Key)
 	}
 
-	// Validate required prompts.
+	// Validate required prompts. A rejected form goes back to its sheet in
+	// the catalog, with what was typed.
 	for _, p := range def.Prompts {
 		if p.Required && promptValues[p.Key] == "" {
-			data := appInstallData{
-				PageData:    s.pageData("apps"),
-				ID:          def.ID,
-				Name:        def.Name,
-				Category:    def.Category,
-				Description: def.Description,
-				Version:     def.Version,
-				HasOIDC:     def.OIDC != nil,
-				Prompts:     def.Prompts,
-				Secrets:     def.Secrets,
-				UsesAdminPw: usesAdminPassword(def),
-				AutoAddress: s.cfg.Public.Transport == config.TransportLocal,
-				Error:       fmt.Sprintf("%s ist erforderlich.", p.Question),
-				Values:      promptValues,
-			}
-			s.render(w, "app_install.html.tmpl", data)
+			s.renderCatalog(w, r, appID, &catalogApp{
+				ID:     appID,
+				Error:  fmt.Sprintf("%s ist erforderlich.", p.Question),
+				Values: promptValues,
+			})
 			return
 		}
 	}
@@ -566,7 +637,9 @@ func (s *Server) handleAppAutoUpdateToggle(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
 		return
 	}
-	cs.AutoUpdateDisabled = r.FormValue("disabled") == "on"
+	// The switch in the sheet reads "update automatically"; unchecked it
+	// sends nothing.
+	cs.AutoUpdateDisabled = r.FormValue("auto") != "on"
 	if err := s.commitState(working); err != nil {
 		log.Printf("web: save state after autoupdate toggle: %v", err)
 	}
@@ -617,7 +690,7 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: save state after remove: %v", err)
 	}
 
-	http.Redirect(w, r, "/apps?msg="+appID+"+entfernt", http.StatusSeeOther)
+	http.Redirect(w, r, "/?msg="+url.QueryEscape(appName(appID)+" ist entfernt."), http.StatusSeeOther)
 }
 
 func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {

@@ -1,130 +1,105 @@
+{{define "title"}}Sicherung{{end}}
 {{define "page"}}
 {{template "head" .}}
-{{template "sidebar-layout-start" .PageData}}
+{{template "shell-start" .PageData}}
 
-<h2 class="mb-1">Sicherung &amp; Wiederherstellung</h2>
-<p class="sub mb-2">
-  Ein Backup enthält die komplette Datenbank (alle Nutzerdaten), die
-  Konfiguration mit allen Zugängen und die Daten aller installierten Apps.
-  Bewahre Backups sicher auf — sie enthalten Passwörter und personenbezogene Daten.
-</p>
+<div class="ls-pagehead">
+  <span class="ls-tile" data-size="m">{{template "dock-icon" "archive"}}</span>
+  <div>
+    <h1>Sicherung</h1>
+    <p>{{with .Backups}}{{len .}} {{if eq (len .) 1}}Sicherung{{else}}Sicherungen{{end}} · die letzte vom {{(index . 0).CreatedAt}}{{else}}Noch keine Sicherung{{end}}</p>
+  </div>
+  <div class="ls-actions"><button type="button" data-ls-open="backup-new">{{template "icon" "plus"}}Jetzt sichern</button></div>
+</div>
 
-{{if .Message}}
-<div role="alert" data-variant="{{if .IsError}}danger{{else}}success{{end}}" class="mb-2">{{.Message}}</div>
+{{if .Message}}<p class="sc-flash" data-tone="{{if .IsError}}bad{{else}}ok{{end}}" role="{{if .IsError}}alert{{else}}status{{end}}">{{template "icon" (or (and .IsError "alert") "check-circle")}}<span>{{.Message}}</span></p>{{end}}
+
+<div class="sc-narrow">
+  <span class="ls-list-label">Auf diesem Server</span>
+  <div class="ls-list">
+    {{range $i, $b := .Backups}}
+    <button type="button" class="ls-row" data-ls-open="bk-{{$i}}">
+      <span class="ls-row-label">{{$b.CreatedAt}}<small>{{$b.Size}} · {{$b.AppCount}} {{if eq $b.AppCount 1}}App{{else}}Apps{{end}}{{if $b.Version}} · stackctl {{$b.Version}}{{end}}</small></span>
+      {{if $b.Encrypted}}<span class="ls-pill" data-dot="no">{{template "icon" "lock"}}verschlüsselt</span>{{end}}
+      {{template "icon" "chevron-right"}}
+    </button>
+    {{else}}
+    <div class="ls-row"><span class="ls-row-label">Noch keine Sicherung<small>Eine Sicherung braucht ein paar Minuten. Danach lässt sie sich herunterladen.</small></span></div>
+    {{end}}
+  </div>
+  <p class="ls-list-hint">Eine Sicherung enthält die Datenbank mit allen Nutzerdaten, die Einstellungen mit allen Zugängen und die Daten aller Apps. Sie gehört deshalb nur an sichere Orte.</p>
+
+  <div class="ls-list sc-gap-l">
+    <button type="button" class="ls-row" data-ls-open="backup-upload">{{template "icon" "upload"}}<span class="ls-row-label">Sicherung hochladen<small>Eine heruntergeladene Datei zurück auf den Server bringen.</small></span>{{template "icon" "chevron-right"}}</button>
+  </div>
+</div>
+
+<dialog class="ls-sheet" id="backup-new" aria-labelledby="backup-new-t">
+  <form method="dialog" class="ls-sheet-bar"><button class="ls-iconbtn" aria-label="Schließen">{{template "icon" "x"}}</button></form>
+  <div class="ls-sheet-hero">
+    <span class="ls-tile">{{template "dock-icon" "archive"}}</span>
+    <h2 id="backup-new-t">Jetzt sichern</h2>
+    <p>Dauert je nach Datenmenge ein paar Minuten. Die Apps laufen dabei weiter.</p>
+  </div>
+  <form method="post" action="/backups/create" class="sc-encrypt">
+    {{csrfField .CSRFToken}}
+    <div class="ls-list">
+      <label class="ls-row"><span class="ls-row-label">Mit Passphrase verschlüsseln<small>Empfohlen, wenn die Sicherung den Server verlässt, etwa auf einen USB-Stick.</small></span><input type="checkbox" role="switch" name="encrypt"></label>
+      <div class="ls-field sc-encrypt-pass"><label for="bk-pass">Passphrase</label><input id="bk-pass" type="password" name="passphrase" minlength="8" autocomplete="new-password"><span class="ls-field-hint">Mindestens 8 Zeichen. Ohne sie lässt sich die Sicherung nie wieder öffnen.</span></div>
+    </div>
+    <div class="ls-sheet-foot"><button type="submit" data-size="l" data-busy>Sicherung anlegen</button></div>
+  </form>
+</dialog>
+
+<dialog class="ls-sheet" id="backup-upload" aria-labelledby="backup-upload-t">
+  <form method="dialog" class="ls-sheet-bar"><button class="ls-iconbtn" aria-label="Schließen">{{template "icon" "x"}}</button></form>
+  <div class="ls-sheet-hero">
+    <span class="ls-tile">{{template "dock-icon" "upload"}}</span>
+    <h2 id="backup-upload-t">Sicherung hochladen</h2>
+    <p>Danach steht sie in der Liste und lässt sich wiederherstellen.</p>
+  </div>
+  <form method="post" action="/backups/upload" enctype="multipart/form-data">
+    {{csrfField .CSRFToken}}
+    <div class="ls-list"><div class="ls-field"><label for="bk-file">Datei</label><input id="bk-file" type="file" name="archive" accept=".gz,.age" required><span class="ls-field-hint"><code>backup-….tar.gz</code> oder <code>….tar.gz.age</code></span></div></div>
+    <div class="ls-sheet-foot"><button type="submit" data-size="l" data-busy>Hochladen</button></div>
+  </form>
+</dialog>
+
+{{range $i, $b := .Backups}}
+<dialog class="ls-sheet" id="bk-{{$i}}" aria-labelledby="bk-{{$i}}-t">
+  <form method="dialog" class="ls-sheet-bar"><button class="ls-iconbtn" aria-label="Schließen">{{template "icon" "x"}}</button></form>
+  <div class="ls-sheet-hero">
+    <span class="ls-tile">{{template "dock-icon" "archive"}}</span>
+    <h2 id="bk-{{$i}}-t">Sicherung vom {{$b.CreatedAt}}</h2>
+    <p>{{$b.Size}} · {{$b.AppCount}} {{if eq $b.AppCount 1}}App{{else}}Apps{{end}}{{if $b.Encrypted}} · verschlüsselt{{end}}</p>
+    <div class="ls-actions"><a class="ls-btn" href="/backups/{{$b.File}}/download">{{template "icon" "download"}}Herunterladen</a></div>
+  </div>
+
+  <span class="ls-list-label">Wiederherstellen</span>
+  <form method="post" action="/backups/{{$b.File}}/restore">
+    {{csrfField $.CSRFToken}}
+    <p class="sc-sheet-note" data-tone="bad">{{template "icon" "alert"}}<span>Überschreibt Datenbank, Einstellungen und alle App-Daten mit diesem Stand. Alle Dienste starten dabei neu, danach auch stackctl. Das lässt sich nicht rückgängig machen.</span></p>
+    <div class="ls-list">
+      {{if $b.Encrypted}}<div class="ls-field"><label for="bk-{{$i}}-pass">Passphrase dieser Sicherung</label><input id="bk-{{$i}}-pass" type="password" name="passphrase" required autocomplete="off"></div>{{end}}
+      <div class="ls-field"><label for="bk-{{$i}}-slug">Zur Bestätigung <code>{{$.SchoolSlug}}</code> eintippen</label><input id="bk-{{$i}}-slug" name="confirm_slug" required autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+      <label class="ls-row"><input type="checkbox" name="understand" required><span class="ls-row-label">Mir ist klar, dass alle aktuellen Daten überschrieben werden.</span></label>
+    </div>
+    <div class="ls-sheet-foot"><button type="submit" data-variant="danger" data-busy>Wiederherstellen</button></div>
+  </form>
+
+  <div class="ls-list sc-danger-zone"><button type="button" class="ls-row" data-tone="danger" data-ls-open="bk-{{$i}}-del"><span class="ls-row-label">Sicherung löschen …</span></button></div>
+</dialog>
+
+<dialog class="ls-dialog" id="bk-{{$i}}-del" aria-labelledby="bk-{{$i}}-del-t">
+  <form method="post" action="/backups/{{$b.File}}/delete">
+    {{csrfField $.CSRFToken}}
+    <h2 id="bk-{{$i}}-del-t">Sicherung löschen?</h2>
+    <p>Die Sicherung vom {{$b.CreatedAt}} verschwindet vom Server. Heruntergeladene Kopien bleiben.</p>
+    <div class="ls-actions"><button type="button" data-variant="ghost" data-close>Abbrechen</button><button type="submit" data-variant="danger" data-busy>Löschen</button></div>
+  </form>
+</dialog>
 {{end}}
 
-<article class="card mb-2">
-  <h3 class="mb-1">Backup jetzt erstellen</h3>
-  <p class="sub mb-2" style="font-size:0.9rem;">
-    Je nach Datenmenge kann das einige Minuten dauern. Der Fortschritt wird live angezeigt.
-  </p>
-  <form method="post" action="/backups/create" data-loading-msg="Backup wird erstellt…">
-    {{csrfField $.CSRFToken}}
-    <label data-field class="mb-1">
-      <input type="checkbox" name="encrypt" id="bk-encrypt" onchange="document.getElementById('bk-pass-wrap').style.display = this.checked ? '' : 'none';">
-      Mit Passphrase verschlüsseln
-      <span class="hint">Empfohlen, wenn du das Backup herunterlädst (USB-Stick, anderer Rechner). <strong>Ohne diese Passphrase ist das Backup unwiederbringlich.</strong></span>
-    </label>
-    <div id="bk-pass-wrap" style="display:none;">
-      <label data-field class="mb-2">
-        Passphrase
-        <input type="password" name="passphrase" minlength="8" autocomplete="new-password" placeholder="mind. 8 Zeichen">
-      </label>
-    </div>
-    <button type="submit" class="mt-1">Backup erstellen</button>
-  </form>
-</article>
-
-<article class="card">
-  <h3 class="mb-2">Vorhandene Backups</h3>
-  {{if .Backups}}
-  <table style="width:100%;">
-    <thead>
-      <tr>
-        <th>Erstellt</th>
-        <th>Größe</th>
-        <th>Apps</th>
-        <th>Version</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Backups}}
-      <tr>
-        <td>
-          {{.CreatedAt}}
-          {{if .Encrypted}}<span class="badge" title="verschlüsselt" style="margin-left:0.4rem;">🔒</span>{{end}}
-        </td>
-        <td>{{.Size}}</td>
-        <td>{{.AppCount}}</td>
-        <td class="sub">{{.Version}}</td>
-        <td style="text-align:right; white-space:nowrap;">
-          <a href="/backups/{{.File}}/download" class="button ghost small">Download</a>
-          <form method="post" action="/backups/{{.File}}/delete" style="display:inline;"
-                onsubmit="return confirm('Dieses Backup wirklich löschen?');">
-            {{csrfField $.CSRFToken}}
-            <button type="submit" class="ghost small" style="color:var(--danger);">Löschen</button>
-          </form>
-        </td>
-      </tr>
-      <tr>
-        <td colspan="5" style="padding-top:0;">
-          <details>
-            <summary class="sub" style="cursor:pointer;">Aus diesem Backup wiederherstellen…</summary>
-            <div role="alert" data-variant="danger" class="mt-1 mb-1">
-              <strong>Achtung:</strong> Die Wiederherstellung überschreibt die aktuelle
-              Datenbank, Konfiguration und alle App-Daten mit dem Stand dieses Backups.
-              Alle Dienste werden dabei kurz gestoppt und neu gestartet, anschließend
-              startet stackctl selbst neu. Dieser Schritt kann nicht rückgängig gemacht
-              werden.
-            </div>
-            <form method="post" action="/backups/{{.File}}/restore"
-                  data-loading-msg="Wiederherstellung wird gestartet…"
-                  onsubmit="return confirm('Wiederherstellung jetzt starten? Aktuelle Daten werden überschrieben.');">
-              {{csrfField $.CSRFToken}}
-              {{if .Encrypted}}
-              <label data-field class="mb-1">
-                Passphrase
-                <input type="password" name="passphrase" required autocomplete="off" placeholder="Passphrase dieses Backups">
-                <span class="hint">Dieses Backup ist verschlüsselt.</span>
-              </label>
-              {{end}}
-              <label data-field class="mb-1">
-                Zur Bestätigung den Schul-Slug eingeben: <code>{{$.SchoolSlug}}</code>
-                <input type="text" name="confirm_slug" required autocomplete="off" placeholder="{{$.SchoolSlug}}">
-              </label>
-              <label data-field class="mb-1">
-                <input type="checkbox" name="understand" required>
-                Mir ist bewusst, dass alle aktuellen Daten überschrieben werden.
-              </label>
-              <button type="submit" class="small" style="background:var(--danger);">Wiederherstellen</button>
-            </form>
-          </details>
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-  {{else}}
-  <p class="sub">Noch keine Backups vorhanden.</p>
-  {{end}}
-</article>
-
-<article class="card mt-2">
-  <h3 class="mb-1">Backup hochladen</h3>
-  <p class="sub mb-2" style="font-size:0.9rem;">
-    Eine zuvor heruntergeladene Sicherungsdatei (<code>backup-…tar.gz</code> oder
-    <code>.tar.gz.age</code>) hochladen, um sie hier wiederherstellen zu können.
-  </p>
-  <form method="post" action="/backups/upload" enctype="multipart/form-data" data-loading-msg="Wird hochgeladen…">
-    {{csrfField $.CSRFToken}}
-    <label data-field class="mb-2">
-      <input type="file" name="archive" accept=".gz,.age" required>
-    </label>
-    <button type="submit" class="small">Hochladen</button>
-  </form>
-</article>
-
-{{template "sidebar-layout-end" .PageData}}
+{{template "shell-end" .PageData}}
 {{template "foot" .}}
 {{end}}

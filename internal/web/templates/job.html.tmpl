@@ -1,34 +1,28 @@
+{{define "title"}}{{.Job.Title}}{{end}}
 {{define "page"}}
 {{template "head" .}}
-{{template "sidebar-layout-start" .PageData}}
+{{template "shell-start" .PageData}}
 
-<style>
-  .job-steps { list-style:none; padding:0; margin:0 0 1rem; }
-  .job-steps li { display:flex; align-items:center; gap:0.6rem; padding:0.35rem 0; font-size:0.95rem; }
-  .job-ic { width:1.3rem; text-align:center; flex:0 0 auto; }
-  .job-ic.done { color:var(--success); }
-  .job-ic.failed { color:var(--danger); }
-  .job-ic.pending { color:var(--muted-foreground); }
-  .job-ic.running { color:var(--primary); display:inline-block; animation:jobspin 1s linear infinite; }
-  @keyframes jobspin { to { transform:rotate(360deg); } }
-  .job-step.pending { color:var(--muted-foreground); }
-  .job-elapsed { color:var(--muted-foreground); font-variant-numeric:tabular-nums; }
-  .job-log { margin:0.5rem 0 1rem; }
-  .job-log pre { max-height:18rem; overflow:auto; background:var(--faint); padding:0.6rem 0.8rem; border-radius:var(--radius-medium); font-size:0.8rem; line-height:1.35; white-space:pre-wrap; word-break:break-all; }
-</style>
+<div class="sc-job">
+  <div class="ls-pagehead">
+    <span class="ls-notice-icon sc-job-icon" data-tone="info" id="job-tile">{{template "dock-icon" "refresh"}}</span>
+    <div>
+      <h1 id="job-title">{{.Job.Title}}</h1>
+      <p><span class="ls-pill" data-tone="info" id="job-status">läuft</span> <span class="ls-num" id="job-elapsed">0:00</span></p>
+    </div>
+  </div>
 
-<h2 class="mb-1" id="job-title">{{.Job.Title}}</h2>
-<p class="sub mb-2">Status: <span id="job-status">läuft…</span> · <span class="job-elapsed" id="job-elapsed">0:00</span></p>
+  <div class="ls-list" id="job-steps" aria-live="polite"></div>
 
-<ul class="job-steps" id="job-steps"></ul>
+  <details class="ls-list sc-job-log" id="job-log-wrap" hidden>
+    <summary class="ls-row"><span class="ls-row-label">Protokoll</span></summary>
+    <pre id="job-log"></pre>
+  </details>
 
-<details class="job-log" id="job-log-wrap" style="display:none;">
-  <summary>Details anzeigen</summary>
-  <pre id="job-log"></pre>
-</details>
+  <div id="job-result" class="sc-job-result" aria-live="polite"></div>
+</div>
 
-<div id="job-result"></div>
-
+{{template "shell-end" .PageData}}
 <script>
 (function () {
   // jsString escapes the value but does NOT add quotes, so wrap each in '…' —
@@ -43,35 +37,40 @@
   var bootBaseline = '{{.BootID | jsString}}';
   var pollTimer = null;
 
-  var ICON = { done: '✓', failed: '✗', running: '↻', pending: '○' };
+  var ICON = { done: 'check-circle', failed: 'alert', running: 'refresh', pending: 'chevron-right' };
+  var SPRITE = '/static/ls/icons/icons.svg#';
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-
+  function icon(name) {
+    return '<svg class="ls-icon" aria-hidden="true"><use href="' + SPRITE + name + '"/></svg>';
+  }
   function fmtElapsed(sec) {
     var m = Math.floor(sec / 60), s = sec % 60;
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
+  function setStatus(tone, word) {
+    var p = document.getElementById('job-status');
+    p.dataset.tone = tone; p.textContent = word;
+  }
 
   function renderSteps(steps) {
-    var ul = document.getElementById('job-steps');
-    ul.innerHTML = '';
-    (steps || []).forEach(function (st) {
-      var li = document.createElement('li');
-      var cls = st.status;
-      li.innerHTML = '<span class="job-ic ' + cls + '">' + ICON[cls] + '</span>' +
-                     '<span class="job-step ' + cls + '">' + esc(st.name) + '</span>';
-      ul.appendChild(li);
-    });
+    var list = document.getElementById('job-steps');
+    list.hidden = !(steps && steps.length);
+    list.innerHTML = (steps || []).map(function (st) {
+      return '<div class="ls-row sc-step" data-state="' + esc(st.status) + '">' +
+             icon(ICON[st.status] || 'chevron-right') +
+             '<span class="ls-row-label">' + esc(st.name) + '</span></div>';
+    }).join('');
   }
 
   function renderLog(lines) {
     var wrap = document.getElementById('job-log-wrap');
-    if (!lines || !lines.length) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
+    if (!lines || !lines.length) { wrap.hidden = true; return; }
+    wrap.hidden = false;
     var pre = document.getElementById('job-log');
     var atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
     pre.textContent = lines.join('\n');
@@ -79,39 +78,31 @@
   }
 
   function renderResult(job) {
-    var el = document.getElementById('job-result');
     var html = '';
     if (job.success) {
-      html += '<div role="alert" data-variant="success" class="mb-2">Fertig.</div>';
+      html += '<p class="sc-flash" data-tone="ok" role="status">' + icon('check-circle') + '<span>Fertig.</span></p>';
     } else {
-      html += '<div role="alert" data-variant="danger" class="mb-2">Fehlgeschlagen: ' + esc(job.error || 'Unbekannter Fehler') + '</div>';
+      html += '<p class="sc-flash" data-tone="bad" role="alert">' + icon('alert') + '<span>Hat nicht geklappt: ' + esc(job.error || 'unbekannter Fehler') + '</span></p>';
     }
     if (job.messages && job.messages.length) {
-      html += '<article class="card mb-2"><h4 class="mb-1">Hinweise</h4><ul>';
-      job.messages.forEach(function (m) { html += '<li>' + esc(m) + '</li>'; });
-      html += '</ul></article>';
+      html += '<span class="ls-list-label">Hinweise</span><div class="ls-list">';
+      job.messages.forEach(function (m) { html += '<div class="ls-row"><span class="ls-row-label sc-pre">' + esc(m) + '</span></div>'; });
+      html += '</div>';
     }
     if (job.secrets_to_show) {
       var keys = Object.keys(job.secrets_to_show);
       if (keys.length) {
-        html += '<article class="card mb-2"><h4 class="mb-1">Generierte Secrets</h4>' +
-                '<p class="sub mb-1" style="font-size:0.85rem;">Diese Werte werden nur einmal angezeigt. Bitte jetzt kopieren und sicher aufbewahren.</p><table><tbody>';
+        html += '<span class="ls-list-label">Zugangsdaten</span><div class="ls-list">';
         keys.forEach(function (k) {
           var v = job.secrets_to_show[k];
-          html += '<tr><td class="sub">' + esc(k) + '</td><td><code style="word-break:break-all;">' + esc(v) + '</code>' +
-                  '<button type="button" class="ghost small" data-copy="' + esc(v) + '" style="margin-left:0.5rem;font-size:0.75rem;">Kopieren</button></td></tr>';
+          html += '<div class="ls-row"><span class="ls-row-label">' + esc(k) + '<small class="sc-break"><code>' + esc(v) + '</code></small></span>' +
+                  '<button type="button" class="sc-copy" data-copy="' + esc(v) + '" aria-label="Kopieren">' + icon('copy') + '</button></div>';
         });
-        html += '</tbody></table></article>';
+        html += '</div><p class="ls-list-hint">Werden nur jetzt angezeigt. Bitte kopieren und sicher aufbewahren.</p>';
       }
     }
-    var actions = '<a href="' + esc(backURL || '/apps') + '" class="button">Weiter</a>';
-    // "Zum Katalog" only makes sense for app installs/updates; a backup, restore
-    // or self-update has nothing to do with the app catalog.
-    if (jobKind === 'install' || jobKind === 'update') {
-      actions += '<a href="/apps" class="button ghost">Zum Katalog</a>';
-    }
-    html += '<div style="display:flex;gap:0.5rem;">' + actions + '</div>';
-    el.innerHTML = html;
+    html += '<div class="ls-actions sc-job-actions"><a class="ls-btn" href="' + esc(backURL || '/') + '">Weiter</a></div>';
+    document.getElementById('job-result').innerHTML = html;
   }
 
   // After a self-update the server exits and systemd restarts it with the new
@@ -134,11 +125,11 @@
   // at once.
   function waitForRestart(alreadyUp) {
     var msg = jobKind === 'restore'
-      ? 'Wiederherstellung abgeschlossen. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…'
-      : 'Update installiert. stackctl startet neu — diese Seite wechselt automatisch, sobald der Dienst wieder erreichbar ist…';
-    document.getElementById('job-status').textContent = 'Neustart läuft…';
+      ? 'Wiederherstellung abgeschlossen. stackctl startet neu, die Seite wechselt gleich von selbst.'
+      : 'Update installiert. stackctl startet neu, die Seite wechselt gleich von selbst.';
+    setStatus('info', 'startet neu');
     document.getElementById('job-result').innerHTML =
-      '<div role="alert" data-variant="success" class="mb-2">' + msg + '</div>';
+      '<p class="sc-flash" data-tone="ok" role="status">' + icon('refresh') + '<span>' + msg + '</span></p>';
     if (alreadyUp) { window.location = restartDone(); return; }
     var tries = 0, wasDown = false;
     (function ping() {
@@ -163,13 +154,12 @@
     document.getElementById('job-elapsed').textContent = fmtElapsed(job.elapsed_sec || 0);
     renderSteps(job.steps);
     renderLog(job.log);
-    if (!job.done) {
-      document.getElementById('job-status').textContent = 'läuft…';
-      return false;
-    }
-    // Done.
+    if (!job.done) { setStatus('info', 'läuft'); return false; }
     if (job.restarting) { waitForRestart(false); return true; }
-    document.getElementById('job-status').textContent = job.success ? 'fertig' : 'fehlgeschlagen';
+    setStatus(job.success ? 'ok' : 'bad', job.success ? 'fertig' : 'fehlgeschlagen');
+    var tile = document.getElementById('job-tile');
+    tile.dataset.tone = job.success ? 'ok' : 'bad';
+    tile.innerHTML = '<svg aria-hidden="true"><use href="' + SPRITE + (job.success ? 'check' : 'alert') + '"/></svg>';
     renderResult(job);
     return true;
   }
@@ -201,7 +191,5 @@
   pollTimer = setInterval(poll, 1200);
 })();
 </script>
-
-{{template "sidebar-layout-end" .PageData}}
 {{template "foot" .}}
 {{end}}
