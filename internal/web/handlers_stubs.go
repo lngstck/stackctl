@@ -160,6 +160,12 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 
 	var newPassword string
 	if password != "" || passwordConfirm != "" {
+		// Wer nur eine Sitzung erbeutet hat, etwa an einem offen gelassenen
+		// Rechner, soll den Admin damit nicht aussperren können.
+		if !secrets.VerifyPassword(s.cfg.Admin.PasswordHash, r.FormValue("current_password")) {
+			s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Das aktuelle Passwort stimmt nicht."), r))
+			return
+		}
 		if password != passwordConfirm {
 			s.render(w, "settings.html.tmpl", s.withSystemFlash(s.settingsData("", "Die Passwörter stimmen nicht überein."), r))
 			return

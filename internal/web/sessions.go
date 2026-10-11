@@ -99,25 +99,29 @@ func (s *sessionStore) destroy() {
 	s.current = nil
 }
 
-// setSessionCookie writes the session cookie on the response.
-func setSessionCookie(w http.ResponseWriter, token string) {
+// setSessionCookie writes the session cookie on the response. Over https
+// it is Secure: the browser then never sends it over plain http, not even
+// the one request that Caddy answers with the redirect to https.
+func setSessionCookie(w http.ResponseWriter, r *http.Request, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   viaHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(sessionLifetime.Seconds()),
 	})
 }
 
 // clearSessionCookie deletes the session cookie.
-func clearSessionCookie(w http.ResponseWriter) {
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   viaHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
