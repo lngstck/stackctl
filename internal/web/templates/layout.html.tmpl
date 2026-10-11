@@ -147,11 +147,11 @@
     {{if $a.PublicEnabled}}
     <a class="ls-row" href="https://{{$a.PublicHost}}" target="_blank" rel="noopener"><span class="ls-row-label">{{$a.PublicHost}}<small>{{if eq .Mode "direct"}}Von überall erreichbar, für alle mit Schulkonto.{{else}}Im Schulnetz, für alle mit Schulkonto.{{end}}</small></span>{{template "where" $a.Where}}</a>
     {{else}}
-    <div class="ls-row"><span class="ls-row-label">Keine Adresse<small>Erreichbar nur über {{$a.ServerDomain}}:{{$a.Port}}{{if $a.HasOIDC}}. Die Anmeldung mit Schulkonto braucht eine Adresse.{{end}}</small></span></div>
+    <div class="ls-row"><span class="ls-row-label">Keine Adresse<small>So erreicht niemand die App.</small></span></div>
     {{end}}
     <form method="post" action="/apps/{{$a.ID}}/public/{{if $a.PublicEnabled}}disable{{else}}enable{{end}}" class="ls-row sc-row-form">
       {{csrfField $csrf}}<input type="hidden" name="return" value="{{$back}}">
-      <span class="ls-row-label">Adresse {{if $a.PublicEnabled}}abschalten{{else}}einschalten{{end}}{{if and $a.PublicEnabled $a.HasOIDC}}<small>Danach funktioniert die Anmeldung in der App nicht mehr.</small>{{end}}</span>
+      <span class="ls-row-label">Adresse {{if $a.PublicEnabled}}abschalten{{else}}einschalten{{end}}{{if $a.PublicEnabled}}<small>Danach erreicht niemand mehr die App.</small>{{end}}</span>
       <button type="submit" data-size="s" data-variant="{{if $a.PublicEnabled}}ghost{{end}}" data-busy>{{if $a.PublicEnabled}}Abschalten{{else}}Einschalten{{end}}</button>
     </form>
   </div>

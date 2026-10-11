@@ -49,7 +49,6 @@ type appSheet struct {
 	CanPublish    bool // the app has a web port the proxy can route to
 
 	Port          int
-	ServerDomain  string
 	ContainerName string
 	DataDir       string
 	InstalledAt   string
@@ -89,7 +88,6 @@ func (s *Server) appSheet(id string, cs *config.ContainerState) appSheet {
 		PublicEnabled: cs.PublicEnabled,
 		PublicHost:    cs.PublicHost,
 		Port:          port,
-		ServerDomain:  s.cfg.School.ServerDomain,
 		ContainerName: "ls-" + id,
 		DataDir:       filepath.Join(paths.LearningstackDir(), id),
 		InstalledAt:   formatDay(cs.InstalledAt),
@@ -109,7 +107,9 @@ func (s *Server) appSheet(id string, cs *config.ContainerState) appSheet {
 		if def.OIDC != nil {
 			sh.HasOIDC = true
 			sh.OIDCClientID = def.OIDC.ClientID
-			sh.OIDCRedirectURI = dex.BuildRedirectURI(s.cfg, id, def.OIDC.RedirectPath, port, cs.PublicEnabled)
+			// Dex kennt nur die Adresse unter der Domain (so legt die
+			// Installation den Client an), auch solange sie aus ist.
+			sh.OIDCRedirectURI = dex.BuildRedirectURI(s.cfg, id, def.OIDC.RedirectPath, port, true)
 		}
 		if def.Links != nil {
 			sh.Homepage = def.Links.Homepage
@@ -127,13 +127,10 @@ func (s *Server) appSheet(id string, cs *config.ContainerState) appSheet {
 	if s.cfg.Public.Transport == config.TransportDirect && cs.PublicEnabled {
 		sh.Where = "internet"
 	}
-	if !sh.IsInfra {
-		switch {
-		case cs.PublicEnabled && cs.PublicHost != "":
-			sh.OpenURL = "https://" + cs.PublicHost
-		case port > 0 && sh.ServerDomain != "":
-			sh.OpenURL = fmt.Sprintf("http://%s:%d", sh.ServerDomain, port)
-		}
+	// Ohne Adresse gibt es nichts zu öffnen: Der Port der App ist nur auf
+	// dem Server selbst erreichbar (compose.Options.BindLocalhost).
+	if !sh.IsInfra && cs.PublicEnabled && cs.PublicHost != "" {
+		sh.OpenURL = "https://" + cs.PublicHost
 	}
 	sh.Tile = appTile{
 		Face:     faceFor(id, name),

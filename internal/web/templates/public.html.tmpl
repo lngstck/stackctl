@@ -58,8 +58,8 @@
       {{range .Apps}}
       <div class="ls-row">
         {{template "tile" .Tile}}
-        <span class="ls-row-label">{{.Name}}<small>{{if .Published}}<a href="https://{{.PublicHost}}" target="_blank" rel="noopener">{{.PublicHost}}</a>{{else}}keine Adresse{{if .HasOIDC}}, Anmeldung geht so nicht{{end}}{{end}}</small></span>
-        {{if .Published}}{{template "route-pill" .PublishState}}{{else}}<span class="ls-pill" data-tone="{{if .HasOIDC}}warn{{else}}off{{end}}">aus</span>{{end}}
+        <span class="ls-row-label">{{.Name}}<small>{{if .Published}}<a href="https://{{.PublicHost}}" target="_blank" rel="noopener">{{.PublicHost}}</a>{{else}}keine Adresse, nicht erreichbar{{end}}</small></span>
+        {{if .Published}}{{template "route-pill" .PublishState}}{{else}}<span class="ls-pill" data-tone="off">aus</span>{{end}}
         {{if .Published}}
         <form method="post" action="/apps/{{.ID}}/public/disable">{{csrfField $.CSRFToken}}<input type="hidden" name="return" value="/public"><button type="submit" data-size="s" data-variant="ghost" data-busy>Abschalten</button></form>
         {{else}}

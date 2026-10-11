@@ -912,11 +912,17 @@ func runScript(step catalog.ScriptStep) error {
 }
 
 // composeOptions derives the compose rendering options from the install's
-// transport. See compose.Options.BindLocalhost for why this is not a catalog
-// concern: the same app definition is correct on a school LAN server and on a
-// public VM, but the port binding is not.
+// transport. Both transports put Caddy in front, and Caddy reaches every app
+// over the docker network, so an app's published port is only a way around
+// TLS and around the address switch. See compose.Options.BindLocalhost for
+// why this is not a catalog concern.
 func composeOptions(cfg *config.Config) compose.Options {
-	return compose.Options{
-		BindLocalhost: cfg != nil && cfg.Public.Transport == config.TransportDirect,
+	if cfg == nil {
+		return compose.Options{}
 	}
+	switch cfg.Public.Transport {
+	case config.TransportLocal, config.TransportDirect:
+		return compose.Options{BindLocalhost: true}
+	}
+	return compose.Options{}
 }
