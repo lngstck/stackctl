@@ -154,22 +154,28 @@ func formatDay(rfc3339 string) string {
 }
 
 // catalogData is the template context for apps.html.tmpl, the catalog:
-// every app the catalog offers, on shelves by category. An app opens its
-// sheet; for one not yet installed the sheet is the install form.
+// every app the catalog offers, installed or not, on shelves by category.
+// An installed app opens the same sheet as on the start screen; for one not
+// yet installed the sheet is the install form.
 type catalogData struct {
 	PageData
 	Flash   flash
+	Mode    string // config.TransportLocal | config.TransportDirect
 	Shelves []catalogShelf
 	// CatalogMissing is true when the catalog index has not been synced yet.
 	// It is a notice of its own, so it never displaces the flash.
 	CatalogMissing bool
 	Available      int
-	Apps           []catalogApp // every app, for the sheets
+	Installed      int
+	Apps           []catalogApp // apps not yet installed, for the install sheets
+	Sheets         []appSheet   // installed apps, for their sheets
 }
 
 type catalogShelf struct {
 	Title string
 	Apps  []catalogApp
+	// Counts for the filter: all, not yet installed, installed.
+	New, Installed int
 }
 
 // catalogApp is one app in the catalog with what its install sheet needs.
@@ -273,8 +279,35 @@ func usesAdminPassword(def *catalog.Definition) bool {
 	return false
 }
 
+// handleApps renders the catalog. ?app=<id> opens that app's sheet, the way
+// an action in a sheet comes back to it (see returnTo).
 func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
-	s.renderCatalog(w, r, "", nil)
+	s.renderCatalog(w, r, r.URL.Query().Get("app"), nil)
+}
+
+// returnTo is where an action in an app sheet sends the browser afterwards.
+// The same sheet opens on the start screen, in the catalog and as a row on
+// "Zugang"; the form says where it stood ("return"), so the admin stays
+// there. Only paths inside stackctl count, anything else is the fallback.
+func returnTo(r *http.Request, fallback string) string {
+	t := r.FormValue("return")
+	if t == "" || t[0] != '/' || strings.HasPrefix(t, "//") || strings.ContainsRune(t, '\\') {
+		return fallback
+	}
+	return t
+}
+
+// withMsg adds a flash message to a path from returnTo.
+func withMsg(path, msg string, isErr bool) string {
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	path += sep + "msg=" + url.QueryEscape(msg)
+	if isErr {
+		path += "&err=1"
+	}
+	return path
 }
 
 // renderCatalog renders the catalog. With openApp it opens that app's
@@ -283,6 +316,7 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, openApp s
 	data := catalogData{
 		PageData: s.pageData("apps"),
 		Flash:    flashFrom(r),
+		Mode:     s.cfg.Public.Transport,
 	}
 	data.Search = true
 
@@ -338,17 +372,23 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, openApp s
 			app.Error = form.Error
 			app.Values = form.Values
 		}
-		if !app.Installed {
-			data.Available++
-		}
-		data.Apps = append(data.Apps, app)
-
 		title := categoryLabel(e.Category)
 		if shelves[title] == nil {
 			shelves[title] = &catalogShelf{Title: title}
 			order = append(order, title)
 		}
-		shelves[title].Apps = append(shelves[title].Apps, app)
+		shelf := shelves[title]
+		shelf.Apps = append(shelf.Apps, app)
+
+		if app.Installed {
+			data.Installed++
+			shelf.Installed++
+			data.Sheets = append(data.Sheets, s.appSheet(e.ID, st.Containers[e.ID]))
+		} else {
+			data.Available++
+			shelf.New++
+			data.Apps = append(data.Apps, app)
+		}
 	}
 
 	// Grundversorgung steht vorn, solange etwas davon fehlt — sonst hinten,
@@ -394,7 +434,7 @@ func (s *Server) catalogApp(e appListEntry, installed map[string]bool) catalogAp
 		Description: e.Description,
 		Installed:   e.IsInstalled,
 		IsMandatory: e.IsMandatory,
-		Tile:        appTile{Face: faceFor(e.ID, e.Name)},
+		Tile:        appTile{Face: faceFor(e.ID, e.Name), Installed: e.IsInstalled},
 		Values:      map[string]string{},
 	}
 	app.Label = infraShortNames[e.ID]
@@ -646,7 +686,7 @@ func (s *Server) handleAppAutoUpdateToggle(w http.ResponseWriter, r *http.Reques
 	if err := s.commitState(working); err != nil {
 		log.Printf("web: save state after autoupdate toggle: %v", err)
 	}
-	http.Redirect(w, r, fmt.Sprintf("/apps/%s", appID), http.StatusSeeOther)
+	http.Redirect(w, r, returnTo(r, "/apps/"+appID), http.StatusSeeOther)
 }
 
 func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
@@ -703,20 +743,20 @@ func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {
 	if code != 0 {
 		log.Printf("web: start %s: %s", appID, out)
 	}
-	referrer := r.Header.Get("Referer")
-	if referrer == "" {
-		referrer = "/"
-	}
-	http.Redirect(w, r, referrer, http.StatusSeeOther)
+	http.Redirect(w, r, returnTo(r, referrerOr(r, "/")), http.StatusSeeOther)
 }
 
 func (s *Server) handleAppStop(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	svcName := compose.ServiceName(appID)
 	docker.ComposeStop(paths.ComposeFile(), svcName)
-	referrer := r.Header.Get("Referer")
-	if referrer == "" {
-		referrer = "/"
+	http.Redirect(w, r, returnTo(r, referrerOr(r, "/")), http.StatusSeeOther)
+}
+
+// referrerOr is the page the request came from, for forms without "return".
+func referrerOr(r *http.Request, fallback string) string {
+	if ref := r.Header.Get("Referer"); ref != "" {
+		return ref
 	}
-	http.Redirect(w, r, referrer, http.StatusSeeOther)
+	return fallback
 }

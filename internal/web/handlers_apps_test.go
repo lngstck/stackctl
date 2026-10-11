@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -228,4 +229,55 @@ func TestAutoUpdateSwitch(t *testing.T) {
 		t.Error("eingeschaltet: AutoUpdateDisabled bleibt true")
 	}
 	_ = st
+}
+
+// Im Katalog öffnet eine installierte App dasselbe Blatt wie auf Start, und
+// seine Schalter führen zurück in den Katalog.
+func TestCatalogShowsFullSheetForInstalledApp(t *testing.T) {
+	s, st := testServerWithPublisher(t, &fakePublisher{})
+	st.Containers["sponsorenlauf"] = &config.ContainerState{ID: "sponsorenlauf", Name: "Sponsorenlauf"}
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loadTemplates: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	s.handleApps(rec, httptest.NewRequest(http.MethodGet, "/apps?app=sponsorenlauf", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`data-open="app-sponsorenlauf"`,
+		"Automatisch aktualisieren",
+		"Sponsorenlauf entfernen",
+		`name="return" value="/apps?app=sponsorenlauf"`,
+		`data-kind="installed"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Katalog enthält %q nicht", want)
+		}
+	}
+	if strings.Contains(body, "Auf Start ansehen") {
+		t.Error("Katalog verweist für Details noch auf Start")
+	}
+}
+
+func TestReturnTo(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                     "/fallback",
+		"/apps?app=pylearn":    "/apps?app=pylearn",
+		"/public":              "/public",
+		"//evil.example":       "/fallback",
+		"https://evil.example": "/fallback",
+		`/\evil.example`:       "/fallback",
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(url.Values{"return": {in}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if got := returnTo(req, "/fallback"); got != want {
+			t.Errorf("returnTo(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := withMsg("/apps?app=pylearn", "Adresse aus", true); got != "/apps?app=pylearn&msg=Adresse+aus&err=1" {
+		t.Errorf("withMsg = %q", got)
+	}
 }

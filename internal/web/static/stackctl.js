@@ -6,6 +6,7 @@
 // form[data-autosubmit]    sendet ab, sobald sich ein Schalter darin ändert
 // [data-copy="text"]       kopiert den Text, auch ohne HTTPS
 // .ls-split[data-panels]   zeigt nur den Bereich aus dem Anker (#konten)
+// #katalog                 „Keine App gefunden“ auch bei Suche plus Filter
 
 (() => {
   // Blatt beim Laden öffnen, etwa nach einer Aktion in diesem Blatt.
@@ -92,4 +93,16 @@
 
   const ready = () => { panels(); openOnLoad(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
+
+  // Katalog: Der Filter blendet per CSS aus, die Suche per hidden. Ob noch
+  // etwas zu sehen ist, sagt deshalb nur das Layout.
+  const katalog = document.getElementById('katalog');
+  if (katalog) {
+    const empty = katalog.querySelector('[data-ls-empty]');
+    const sync = () => {
+      empty.hidden = [...katalog.querySelectorAll('.ls-app')].some(a => a.getClientRects().length > 0);
+    };
+    document.addEventListener('input', e => { if (e.target.closest('input[data-ls-filter]')) sync(); });
+    katalog.addEventListener('click', e => { if (e.target.closest('.ls-seg > button')) setTimeout(sync); });
+  }
 })();

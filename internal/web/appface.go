@@ -26,6 +26,9 @@ type appTile struct {
 	Alert    bool
 	Update   bool
 	Internet bool
+	// Installed marks an installed app in the catalog, where installed and
+	// not yet installed apps stand side by side.
+	Installed bool
 }
 
 // ownApps have a hue and an icon in the design system (css/tokens.css).

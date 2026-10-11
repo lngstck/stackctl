@@ -61,9 +61,9 @@
         <span class="ls-row-label">{{.Name}}<small>{{if .Published}}<a href="https://{{.PublicHost}}" target="_blank" rel="noopener">{{.PublicHost}}</a>{{else}}keine Adresse{{if .HasOIDC}}, Anmeldung geht so nicht{{end}}{{end}}</small></span>
         {{if .Published}}{{template "route-pill" .PublishState}}{{else}}<span class="ls-pill" data-tone="{{if .HasOIDC}}warn{{else}}off{{end}}">aus</span>{{end}}
         {{if .Published}}
-        <form method="post" action="/apps/{{.ID}}/public/disable">{{csrfField $.CSRFToken}}<button type="submit" data-size="s" data-variant="ghost" data-busy>Abschalten</button></form>
+        <form method="post" action="/apps/{{.ID}}/public/disable">{{csrfField $.CSRFToken}}<input type="hidden" name="return" value="/public"><button type="submit" data-size="s" data-variant="ghost" data-busy>Abschalten</button></form>
         {{else}}
-        <form method="post" action="/apps/{{.ID}}/public/enable">{{csrfField $.CSRFToken}}<button type="submit" data-size="s" data-busy>Einschalten</button></form>
+        <form method="post" action="/apps/{{.ID}}/public/enable">{{csrfField $.CSRFToken}}<input type="hidden" name="return" value="/public"><button type="submit" data-size="s" data-busy>Einschalten</button></form>
         {{end}}
       </div>
       {{else}}

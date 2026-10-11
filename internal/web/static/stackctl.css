@@ -46,6 +46,19 @@ button.ls-chip[data-tone="bad"] { color: var(--ls-bad); background: var(--ls-bad
 .ls-empty.ls-card { padding: var(--ls-space-10) var(--ls-space-4); }
 .ls-empty .ls-btn { margin-top: var(--ls-space-3); }
 
+/* ── Katalog: installiert und neu nebeneinander ───────────── */
+/* Haken unten rechts, gegenüber dem Internet-Abzeichen. */
+.ls-badge[data-kind="installed"] { right: -.35rem; bottom: -.35rem; background: var(--ls-ok); color: light-dark(#fff, #052e16); }
+.sc-seg-count { opacity: .65; font-variant-numeric: tabular-nums; }
+#katalog[data-view="new"] .ls-app[data-state="installed"],
+#katalog[data-view="installed"] .ls-app[data-state="new"],
+#katalog[data-view="new"] .ls-shelf:not(:has(.ls-app[data-state="new"])),
+#katalog[data-view="installed"] .ls-shelf:not(:has(.ls-app[data-state="installed"])) { display: none; }
+#katalog .ls-shelf > h3 > [data-for] { display: none; }
+#katalog[data-view="all"] .ls-shelf > h3 > [data-for="all"],
+#katalog[data-view="new"] .ls-shelf > h3 > [data-for="new"],
+#katalog[data-view="installed"] .ls-shelf > h3 > [data-for="installed"] { display: inline; }
+
 /* ── Blatt ─────────────────────────────────────────────────── */
 .sc-sheet-note { display: flex; gap: .5rem; align-items: flex-start; margin: 0 0 var(--ls-space-4); padding: .7rem .9rem; border-radius: var(--ls-r-m); background: var(--ls-info-soft); color: var(--ls-info); font-size: var(--ls-text-s); }
 .sc-sheet-note > .ls-icon { margin-top: .1rem; }

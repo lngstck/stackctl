@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -276,6 +277,10 @@ type sheetCtx struct {
 	App       appSheet
 	CSRFToken string
 	Mode      string
+	// Back is where the sheet's actions return to, with the sheet open
+	// again: "/apps/<id>" on the start screen, "/apps?app=<id>" in the
+	// catalog.
+	Back string
 }
 
 // templateFuncs returns the shared FuncMap for all templates.
@@ -311,9 +316,14 @@ func templateFuncs() template.FuncMap {
 			return llmModelCtx{Prefix: prefix, Provider: provider, UpstreamID: upstream, Prompt: prompt, Providers: providers}
 		},
 		"join": strings.Join,
-		// sheetCtx hands an app sheet what it needs from the page around it.
-		"sheetCtx": func(a appSheet, csrf, mode string) sheetCtx {
-			return sheetCtx{App: a, CSRFToken: csrf, Mode: mode}
+		// sheetCtx hands an app sheet what it needs from the page around it;
+		// page is "start" or "catalog".
+		"sheetCtx": func(a appSheet, csrf, mode, page string) sheetCtx {
+			back := "/apps/" + a.ID
+			if page == "catalog" {
+				back = "/apps?app=" + url.QueryEscape(a.ID)
+			}
+			return sheetCtx{App: a, CSRFToken: csrf, Mode: mode, Back: back}
 		},
 		"jsString": func(s string) template.JS {
 			// Escape for safe embedding inside a JS string literal.

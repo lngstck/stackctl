@@ -7,7 +7,7 @@
   <span class="ls-tile" data-size="m">{{template "dock-icon" "bag"}}</span>
   <div>
     <h1>Katalog</h1>
-    <p>{{if .CatalogMissing}}Noch nicht geladen{{else if eq .Available 0}}Alles installiert{{else if eq .Available 1}}1 App zum Installieren{{else}}{{.Available}} Apps zum Installieren{{end}}</p>
+    <p>{{if .CatalogMissing}}Noch nicht geladen{{else if eq .Available 0}}Alles installiert{{else if eq .Installed 0}}{{.Available}} Apps zum Installieren{{else}}{{.Available}} zum Installieren · {{.Installed}} installiert{{end}}</p>
   </div>
   <form method="post" action="/system/catalog/sync" class="ls-actions">
     {{csrfField .CSRFToken}}
@@ -21,12 +21,24 @@
 <p class="sc-flash" data-tone="bad" role="status">{{template "icon" "alert"}}<span>Der Katalog ist noch nicht geladen. Installierte Apps stehen trotzdem hier; für neue Apps oben „Katalog aktualisieren“.</span></p>
 {{end}}
 
+<div id="katalog" data-view="all">
+{{if and .Available .Installed}}
+<div class="ls-bar">
+  <h2 class="ls-sr">Apps</h2>
+  <div class="ls-seg" data-ls-switch="#katalog" role="group" aria-label="Anzeigen">
+    <button type="button" value="all" aria-pressed="true">Alle</button>
+    <button type="button" value="new" aria-pressed="false">Zum Installieren <span class="sc-seg-count">{{.Available}}</span></button>
+    <button type="button" value="installed" aria-pressed="false">{{template "icon" "check"}}Installiert <span class="sc-seg-count">{{.Installed}}</span></button>
+  </div>
+</div>
+{{end}}
+
 {{range .Shelves}}
 <section class="ls-shelf">
-  <h3>{{.Title}} <span>{{len .Apps}}</span></h3>
+  <h3>{{.Title}} <span data-for="all">{{len .Apps}}</span><span data-for="new">{{.New}}</span><span data-for="installed">{{.Installed}}</span></h3>
   <div class="ls-launcher" data-size="l">
     {{range .Apps}}
-    <button type="button" class="ls-app" data-ls-item="{{.Name}} {{.Category}} {{.Description}}" data-ls-open="app-{{.ID}}">
+    <button type="button" class="ls-app" data-state="{{if .Installed}}installed{{else}}new{{end}}" data-ls-item="{{.Name}} {{.Category}} {{.Description}}" data-ls-open="app-{{.ID}}">
       {{template "tile" .Tile}}
       <span class="ls-app-name">{{.Label}}</span>
       {{if .Installed}}<span class="ls-app-state">installiert</span>{{else if .IsMandatory}}<span class="ls-app-state" data-tone="bad">zuerst installieren</span>{{end}}
@@ -36,6 +48,9 @@
 </section>
 {{end}}
 <div class="ls-empty" data-ls-empty hidden>{{template "dock-icon" "search"}}<strong>Keine App gefunden.</strong><span>Der Katalog wächst. Was fehlt dir?</span></div>
+</div>
+
+{{range .Sheets}}{{template "app-sheet" (sheetCtx . $.CSRFToken $.Mode "catalog")}}{{end}}
 
 {{range .Apps}}
 <dialog class="ls-sheet" id="app-{{.ID}}" aria-labelledby="app-{{.ID}}-title">
@@ -44,15 +59,9 @@
     {{template "tile" (tileSize .Tile "")}}
     <h2 id="app-{{.ID}}-title">{{.Name}}</h2>
     {{if .Description}}<p>{{.Description}}</p>{{end}}
-    {{if .Installed}}
-    <span class="ls-pill" data-tone="ok">installiert</span>
-    <div class="ls-actions"><a class="ls-btn" href="/apps/{{.ID}}">Auf Start ansehen</a></div>
-    {{else if .Version}}
-    <span class="ls-pill" data-dot="no">Version {{.Version}}</span>
-    {{end}}
+    {{if .Version}}<span class="ls-pill" data-dot="no">Version {{.Version}}</span>{{end}}
   </div>
 
-  {{if not .Installed}}
   {{if .IsMandatory}}<p class="sc-sheet-note" data-tone="warn">{{template "icon" "info"}}<span>Pflicht-Dienst — zuerst installieren. Andere Apps bauen darauf auf.</span></p>{{end}}
   {{if .Error}}<p class="sc-flash" data-tone="bad" role="alert">{{template "icon" "alert"}}<span>{{.Error}}</span></p>{{end}}
 
@@ -96,7 +105,6 @@
       <button type="submit" data-size="l" data-busy>{{template "icon" "download"}}Installieren</button>
     </div>
   </form>
-  {{end}}
   {{end}}
 </dialog>
 {{end}}
