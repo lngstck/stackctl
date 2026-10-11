@@ -49,6 +49,7 @@ type publicAppEntry struct {
 	PublicHost   string
 	PublishState string // "running" | "stopped" | "error"
 	HasOIDC      bool
+	Tile         appTile
 }
 
 func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +90,10 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 			Published:    cs.PublicEnabled,
 			PublicHost:   cs.PublicHost,
 			PublishState: publish.StatusStopped,
+			Tile:         appTile{Face: faceFor(id, cs.Name), Size: "s"},
+		}
+		if entry.Name == "" {
+			entry.Name = id
 		}
 		if s.publisher != nil {
 			entry.PublishState = s.publisher.Status(id)
@@ -238,7 +243,7 @@ func (s *Server) handleAdminPublishStop(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleAppPublishEnable(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	if s.publisher == nil {
-		http.Redirect(w, r, "/apps/"+appID+"?msg=Kein+Publisher+verfuegbar&err=1", http.StatusSeeOther)
+		http.Redirect(w, r, withMsg(returnTo(r, "/apps/"+appID), "Kein Publisher verfügbar", true), http.StatusSeeOther)
 		return
 	}
 
@@ -252,7 +257,7 @@ func (s *Server) handleAppPublishEnable(w http.ResponseWriter, r *http.Request) 
 	host, err := s.publisher.Enable(s.publishApp(appID, cs))
 	if err != nil {
 		log.Printf("web: publish %s: %v", appID, err)
-		http.Redirect(w, r, "/apps/"+appID+"?msg=Oeffentlicher+Zugang+fehlgeschlagen&err=1", http.StatusSeeOther)
+		http.Redirect(w, r, withMsg(returnTo(r, "/apps/"+appID), "Adresse konnte nicht eingeschaltet werden", true), http.StatusSeeOther)
 		return
 	}
 
@@ -261,14 +266,14 @@ func (s *Server) handleAppPublishEnable(w http.ResponseWriter, r *http.Request) 
 	if err := s.commitState(working); err != nil {
 		log.Printf("web: save state after publish %s: %v", appID, err)
 	}
-	http.Redirect(w, r, "/apps/"+appID, http.StatusSeeOther)
+	http.Redirect(w, r, returnTo(r, "/apps/"+appID), http.StatusSeeOther)
 }
 
 // handleAppPublishDisable withdraws an app's route.
 func (s *Server) handleAppPublishDisable(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	if s.publisher == nil {
-		http.Redirect(w, r, "/apps/"+appID+"?msg=Kein+Publisher+verfuegbar&err=1", http.StatusSeeOther)
+		http.Redirect(w, r, withMsg(returnTo(r, "/apps/"+appID), "Kein Publisher verfügbar", true), http.StatusSeeOther)
 		return
 	}
 
@@ -281,7 +286,7 @@ func (s *Server) handleAppPublishDisable(w http.ResponseWriter, r *http.Request)
 
 	if err := s.publisher.Disable(appID); err != nil {
 		log.Printf("web: unpublish %s: %v", appID, err)
-		http.Redirect(w, r, "/apps/"+appID+"?msg=Zugang+konnte+nicht+beendet+werden&err=1", http.StatusSeeOther)
+		http.Redirect(w, r, withMsg(returnTo(r, "/apps/"+appID), "Adresse konnte nicht abgeschaltet werden", true), http.StatusSeeOther)
 		return
 	}
 
@@ -290,7 +295,7 @@ func (s *Server) handleAppPublishDisable(w http.ResponseWriter, r *http.Request)
 	if err := s.commitState(working); err != nil {
 		log.Printf("web: save state after unpublish %s: %v", appID, err)
 	}
-	http.Redirect(w, r, "/apps/"+appID, http.StatusSeeOther)
+	http.Redirect(w, r, returnTo(r, "/apps/"+appID), http.StatusSeeOther)
 }
 
 // publishApp builds the publish.App for an installed container. The container

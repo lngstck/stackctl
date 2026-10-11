@@ -1,307 +1,194 @@
+{{define "title"}}Einstellungen{{end}}
 {{define "page"}}
 {{template "head" .}}
-{{template "sidebar-layout-start" .}}
+{{template "shell-start" .PageData}}
 
-<h2 class="mb-2">Einstellungen</h2>
-
-{{if .Error}}
-<div role="alert" data-variant="danger" class="mb-2">{{.Error}}</div>
-{{end}}
-{{if .Message}}
-<div role="alert" data-variant="success" class="mb-2">{{.Message}}</div>
-{{end}}
-
-<ot-tabs>
-  <div role="tablist">
-    <button role="tab" {{if not .SystemTabActive}}aria-selected="true"{{end}}>Allgemein</button>
-    <button role="tab" {{if .SystemTabActive}}aria-selected="true"{{end}}>System</button>
+<div class="ls-pagehead">
+  <span class="ls-tile" data-size="m">{{template "dock-icon" "gear"}}</span>
+  <div>
+    <h1>Einstellungen</h1>
+    <p>{{.SchoolName}} · stackctl {{.CurrentVersion}}</p>
   </div>
+</div>
 
-  <!-- Tab: Allgemein -->
-  <div role="tabpanel">
-    <article class="card mt-2">
-      <form method="post" action="/settings">
-        {{csrfField $.CSRFToken}}
-        <h3 class="mb-2">Schule</h3>
-
-        <label data-field class="mb-1">
-          Schulname
-          <input type="text" name="school_name" value="{{.SchoolName}}" required>
-        </label>
-
-        <label data-field class="mb-1">
-          Schul-Slug
-          <input type="text" value="{{.SchoolSlug}}" disabled>
-          <span class="hint">Der Slug ist nach der Einrichtung nicht mehr aenderbar. Apps nutzen ihn als interne Kennung der Schule.</span>
-        </label>
-
-        <label data-field class="mb-1">
-          Server-IP / Hostname
-          <input type="text" name="server_domain" value="{{.ServerDomain}}">
-          <span class="hint">LAN-Adresse dieses Servers (fuer lokale App-Links).</span>
-        </label>
-
-        <label data-field class="mb-2">
-          Kontakt-E-Mail
-          <input type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="admin@schule.de">
-        </label>
-
-        <label data-field class="mb-2">
-          Domain
-          <input type="text" value="{{.PublicBaseDomain}}" disabled>
-          <span class="hint">Unter dieser Domain sind die Apps erreichbar: <code>app.<strong>{{.PublicBaseDomain}}</strong></code>. Sie steckt in allen App-Adressen und im Login und laesst sich deshalb nach der Einrichtung nicht aendern.</span>
-        </label>
-
-        {{if .IsLocal}}
-        <h3 class="mb-2">Zertifikat</h3>
-        <p class="sub mb-1" style="font-size:0.85rem;">
-          Das Zertifikat kommt über deSEC (DNS-01). Änderungen gehen sofort an den Reverse-Proxy.
-          {{if not .ChallengeDomain}}Den Eintrag <code>*.{{.PublicBaseDomain}}</code> hält stackctl bei deSEC auf der Server-IP von oben.{{end}}
-        </p>
-
-        <label data-field class="mb-1">
-          deSEC-Token
-          <input type="password" name="dns_token" autocomplete="off" placeholder="{{if .HasDNSToken}}gespeichert — leer lassen, um ihn zu behalten{{else}}fehlt{{end}}">
-          <span class="hint">Nur ausfüllen, um den Token zu ersetzen.</span>
-        </label>
-
-        <label data-field class="mb-2">
-          Ziel bei deSEC
-          <input type="text" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="leer: deSEC verwaltet {{.PublicBaseDomain}}">
-          <span class="hint">Nur für den Fall, dass der DNS-Anbieter keine NS-Einträge erlaubt: CNAME-Ziel von <code>_acme-challenge.{{.PublicBaseDomain}}</code>. Im Normalfall leer.</span>
-        </label>
-        {{end}}
-
-        <h3 class="mb-2">Admin-Passwort aendern <span class="sub" style="font-size:0.85rem;">(optional)</span></h3>
-
-        <label data-field class="mb-1">
-          Neues Passwort
-          <input type="password" name="password" minlength="8" autocomplete="new-password">
-          <span class="hint">Leer lassen, um das aktuelle Passwort zu behalten. Neues Passwort meldet alle anderen Sessions ab.</span>
-        </label>
-
-        <label data-field class="mb-2">
-          Passwort wiederholen
-          <input type="password" name="password_confirm" minlength="8" autocomplete="new-password">
-        </label>
-
-        <h3 class="mb-2">Automatische Updates</h3>
-        <label data-field class="mb-2">
-          <input type="checkbox" name="auto_update" {{if .AutoUpdate}}checked{{end}}>
-          Naechtliche Auto-Updates aktivieren
-          <span class="hint">stackctl prueft jede Nacht den Katalog und installiert nicht-kritische Updates automatisch. Apps mit Breaking-Marker und manuell deaktivierte Apps bleiben unangetastet.</span>
-        </label>
-
-        <button type="submit" class="mt-1">Speichern</button>
-      </form>
-    </article>
-
-    {{/* Eigene Karte, kein Teil des Formulars oben: jedes Konto hat seine
-         eigenen Knöpfe, und Formulare lassen sich nicht verschachteln. */}}
-    <article class="card mt-2" id="konten">
-      <h3 class="mb-1">Anmeldung für Lehrkräfte und Schüler:innen</h3>
-      <p class="sub mb-2" style="font-size:0.85rem;">
-        Noch ist kein Anmeldedienst der Schule angebunden. Bis dahin melden
-        sich Lehrkräfte und Schüler:innen mit Testkonten an — zum Ausprobieren,
-        nicht für den Unterricht. Die Anmeldeseite liegt unter
-        <code>{{.DexAuthURL}}</code>.
-      </p>
-
-      {{if .AccountsNotice}}
-      <div role="alert" data-variant="{{if .AccountsNoticeErr}}danger{{else}}success{{end}}" class="mb-2">{{.AccountsNotice}}</div>
-      {{end}}
-
-      {{if .Accounts}}
-      <table style="width:100%;" class="mb-2">
-        <thead>
-          <tr><th>Name</th><th>Rolle</th><th>Anmelden mit</th><th></th></tr>
-        </thead>
-        <tbody>
-          {{range .Accounts}}
-          <tr>
-            <td>{{.Name}}</td>
-            <td>{{.RoleLabel}}</td>
-            <td><code>{{.Login}}</code> {{template "copy-btn" .Login}}</td>
-            <td style="text-align:right;">
-              <form method="post" action="/settings/accounts/{{.ID}}/delete" style="display:inline;"
-                    onsubmit="return confirm('Konto {{.Name}} löschen? Die Person kann sich danach nicht mehr anmelden.');">
-                {{csrfField $.CSRFToken}}
-                <button type="submit" class="ghost small" style="color:var(--danger);">Löschen</button>
-              </form>
-            </td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-      {{else}}
-      <p class="mb-2">Noch keine Konten — bisher kann sich niemand in den Apps anmelden.</p>
-      {{end}}
-
-      <h4 class="mb-1">Konto anlegen</h4>
-      <form method="post" action="/settings/accounts">
-        {{csrfField $.CSRFToken}}
-        <label data-field class="mb-1">
-          Name
-          <input type="text" name="name" required maxlength="100" placeholder="z.B. Frau Müller oder Mia S.">
-          <span class="hint">So erscheint die Person in den Apps.</span>
-        </label>
-
-        <label data-field class="mb-1">
-          Anmeldename
-          <div style="display:flex;gap:0.5rem;align-items:center;">
-            <input type="text" name="login_name" required maxlength="40" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="z.B. mueller" style="flex:1;">
-            <span class="sub">@{{.PublicBaseDomain}}</span>
-          </div>
-          <span class="hint">Damit meldet sich die Person an. Die Anmeldeseite fragt nach einer E-Mail-Adresse — gemeint ist genau diese.</span>
-        </label>
-
-        <label data-field class="mb-1">
-          Rolle
-          <select name="role" required>
-            {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
-          </select>
-        </label>
-
-        <label data-field class="mb-2">
-          Passwort
-          <input type="password" name="password" required minlength="8" autocomplete="new-password">
-          <span class="hint">Mindestens 8 Zeichen. stackctl speichert nur den Hash — das Passwort selbst bitte notieren und weitergeben.</span>
-        </label>
-
-        <button type="submit">Konto anlegen</button>
-      </form>
-    </article>
-  </div>
-
-  <!-- Tab: System (ehemals /system, Issue #4) -->
-  <div role="tabpanel">
-    {{if .SyncResult}}
-      <div role="alert" data-variant="success" class="mt-2 mb-2">{{.SyncResult}}</div>
-    {{end}}
-    {{if .SyncError}}
-      <div role="alert" data-variant="danger" class="mt-2 mb-2">{{.SyncError}}</div>
-    {{end}}
-    {{if .UpdateResult}}
-      <div role="alert" data-variant="success" class="mt-2 mb-2">
-        {{.UpdateResult}}
-        {{if .Restarting}}<br><span class="sub">Die Seite lädt automatisch neu, sobald der Dienst wieder erreichbar ist…</span>{{end}}
-      </div>
-    {{end}}
-    {{if .UpdateError}}
-      <div role="alert" data-variant="danger" class="mt-2 mb-2">{{.UpdateError}}</div>
-    {{end}}
-
-    {{if .Restarting}}
-    <script>
-    // Nach dem Self-Update beendet sich der Prozess (os.Exit) und systemd
-    // bringt ihn mit dem neuen Binary wieder hoch. Wir pollen /healthz und
-    // laden neu, sobald der Dienst NACH einem Ausfall wieder antwortet — so
-    // sieht der Admin direkt die neue Version statt auf "Neustart..." kleben
-    // zu bleiben. wasDown verhindert ein zu fruehes Reload, solange der alte
-    // Prozess noch antwortet.
-    (function() {
-      var wasDown = false, start = Date.now();
-      var done = '/settings?update=' + encodeURIComponent('Aktualisierung abgeschlossen.');
-      function poll() {
-        if (Date.now() - start > 60000) { window.location.href = done; return; }
-        fetch('/healthz', { cache: 'no-store' })
-          .then(function(r) {
-            if (r.ok && wasDown) { window.location.href = done; return; }
-            if (!r.ok) wasDown = true;
-            setTimeout(poll, 1000);
-          })
-          .catch(function() { wasDown = true; setTimeout(poll, 1000); });
-      }
-      setTimeout(poll, 1500);
-    })();
-    </script>
-    {{end}}
-
-    <style>
-      /* --muted is oat's surface colour (near-white in light mode); the
-         readable secondary-text colour is --muted-foreground. Use the same
-         foreground-mix as .sub so the values stay legible in both themes. */
-      .sysmeter { background:var(--muted); border-radius:0.4rem; height:0.7rem; overflow:hidden; }
-      .sysmeter > span { display:block; height:100%; border-radius:0.4rem; transition:width .3s ease; }
-      .sysmeter > span.ok { background:var(--success); }
-      .sysmeter > span.warn { background:var(--warning); }
-      .sysmeter > span.crit { background:var(--danger); }
-      .sysrow { margin-bottom:1rem; }
-      .sysrow:last-child { margin-bottom:0; }
-      .sysrow .lbl { display:flex; justify-content:space-between; align-items:baseline; font-size:0.92rem; margin-bottom:0.3rem; }
-      .sysrow .lbl .val { font-variant-numeric:tabular-nums; color:var(--muted-foreground); font-size:0.85rem; }
-      .sysrow .free { font-size:0.8rem; color:var(--muted-foreground); margin-top:0.25rem; }
-    </style>
-
-    <article class="card mt-2">
-      <h4 class="mb-2">System-Auslastung</h4>
-      {{if .Sys.Available}}
-        {{if .Sys.RAMOK}}
-        <div class="sysrow">
-          <div class="lbl"><span>Arbeitsspeicher</span><span class="val">{{.Sys.RAMUsed}} / {{.Sys.RAMTotal}} · {{.Sys.RAMPercent}}%</span></div>
-          <div class="sysmeter"><span class="{{.Sys.RAMLevel}}" style="width:{{.Sys.RAMPercent}}%"></span></div>
-          <div class="free">{{.Sys.RAMFree}} frei</div>
-        </div>
-        {{end}}
-        {{if .Sys.DiskOK}}
-        <div class="sysrow">
-          <div class="lbl"><span>Speicherplatz</span><span class="val">{{.Sys.DiskUsed}} / {{.Sys.DiskTotal}} · {{.Sys.DiskPercent}}%</span></div>
-          <div class="sysmeter"><span class="{{.Sys.DiskLevel}}" style="width:{{.Sys.DiskPercent}}%"></span></div>
-          <div class="free">{{.Sys.DiskFree}} frei{{if .Sys.DiskPath}} · {{.Sys.DiskPath}}{{end}}</div>
-        </div>
-        {{end}}
-        {{if or .Sys.CPUCount .Sys.LoadOK}}
-        <p class="free" style="margin-top:0.8rem;">
-          {{if .Sys.CPUCount}}{{.Sys.CPUCount}} CPU-Kerne{{end}}{{if .Sys.LoadOK}} · Auslastung (1 min): {{.Sys.Load1}}{{end}}
-        </p>
-        {{end}}
-      {{else}}
-        <p class="sub" style="margin:0;">Systeminformationen sind auf dieser Plattform nicht verfügbar.</p>
-      {{end}}
-    </article>
-
-    <div class="mt-2">
-      <article class="card">
-        <h4 class="mb-1">stackctl</h4>
-        <table style="width:100%;" class="mb-2">
-          <tr>
-            <td class="sub">Installierte Version</td>
-            <td><strong>{{.CurrentVersion}}</strong></td>
-          </tr>
-          {{if .LatestVersion}}
-          <tr>
-            <td class="sub">Neueste Version</td>
-            <td>
-              {{.LatestVersion}}
-              {{if .UpdateAvailable}}
-                <span class="badge" style="margin-left:0.5rem;">Update verfuegbar</span>
-              {{end}}
-            </td>
-          </tr>
-          {{end}}
-          {{if .CheckError}}
-          <tr>
-            <td class="sub">Update-Check</td>
-            <td style="color:var(--danger);">{{.CheckError}}</td>
-          </tr>
-          {{end}}
-        </table>
-
-        {{if .UpdateAvailable}}
-          <form method="POST" action="/system/update"
-                data-loading-msg="Aktualisiere… (Download + Restart)"
-                onsubmit="return confirm('Update auf {{.LatestVersion}} installieren? stackctl wird kurz neu gestartet.');">
-        {{csrfField $.CSRFToken}}
-            <button type="submit">Update installieren</button>
-          </form>
-        {{else if not .CheckError}}
-          <p class="sub" style="font-size:0.85rem;">stackctl ist aktuell.</p>
-        {{end}}
-      </article>
+<div class="ls-split" data-panels{{if .SystemTabActive}} data-default="system"{{end}}>
+  <nav aria-label="Bereiche der Einstellungen">
+    <div class="ls-list">
+      <a class="ls-row" href="#schule"><span class="ls-row-label">Schule</span>{{template "icon" "chevron-right"}}</a>
+      <a class="ls-row" href="#konten"><span class="ls-row-label">Anmeldung</span><span class="ls-split-count">{{len .Accounts}}</span>{{template "icon" "chevron-right"}}</a>
+      {{if .IsLocal}}<a class="ls-row" href="#zertifikat"><span class="ls-row-label">Zertifikat</span>{{template "icon" "chevron-right"}}</a>{{end}}
+      <a class="ls-row" href="#passwort"><span class="ls-row-label">Admin-Passwort</span>{{template "icon" "chevron-right"}}</a>
+      <a class="ls-row" href="#updates"><span class="ls-row-label">Updates</span>{{template "icon" "chevron-right"}}</a>
+      <a class="ls-row" href="#system"><span class="ls-row-label">System</span>{{if .UpdateAvailable}}<span class="ls-pill" data-tone="warn" data-dot="no">neu</span>{{end}}{{template "icon" "chevron-right"}}</a>
     </div>
-  </div>
-</ot-tabs>
+  </nav>
 
-{{template "sidebar-layout-end" .}}
+  <div>
+    {{if .Error}}<p class="sc-flash" data-tone="bad" role="alert">{{template "icon" "alert"}}<span>{{.Error}}</span></p>{{end}}
+    {{if .Message}}<p class="sc-flash" data-tone="ok" role="status">{{template "icon" "check-circle"}}<span>{{.Message}}</span></p>{{end}}
+
+    {{/* Ein Formular für Schule, Zertifikat, Passwort und Updates: der
+         Server speichert sie zusammen. Jeder Bereich hat seinen eigenen
+         Knopf, der nach dem Speichern wieder in diesem Bereich landet. */}}
+    <form method="post" action="/settings">
+      {{csrfField .CSRFToken}}
+
+      <section class="ls-panel" id="schule" aria-labelledby="h-schule">
+        <h2 id="h-schule">Schule</h2>
+        <p>Wie die Schule heißt und wo dieser Server im Schulnetz steht.</p>
+        <div class="ls-list sc-gap">
+          <div class="ls-field"><label for="school_name">Schulname</label><input id="school_name" name="school_name" value="{{.SchoolName}}" required></div>
+          <div class="ls-field"><label for="server_domain">Adresse dieses Servers im Schulnetz</label><input id="server_domain" name="server_domain" value="{{.ServerDomain}}" inputmode="decimal"><span class="ls-field-hint">IP-Adresse, etwa 192.168.1.20.{{if .IsLocal}} Ändert sie sich, zieht stackctl den Eintrag bei deSEC nach.{{end}}</span></div>
+          <div class="ls-field"><label for="contact_email">E-Mail für Rückfragen</label><input id="contact_email" type="email" name="contact_email" value="{{.ContactEmail}}" placeholder="it@schule.de"></div>
+        </div>
+        <span class="ls-list-label">Fest seit der Einrichtung</span>
+        <div class="ls-list">
+          <div class="ls-row"><span class="ls-row-label">Domain<small>Steckt in jeder App-Adresse und im Login, etwa <code>app.{{.PublicBaseDomain}}</code>.</small></span><span class="ls-row-value">{{.PublicBaseDomain}}</span></div>
+          <div class="ls-row"><span class="ls-row-label">Kennung der Schule</span><span class="ls-row-value"><code>{{.SchoolSlug}}</code></span></div>
+        </div>
+        <div class="ls-sheet-foot"><button type="submit" formaction="/settings#schule" data-busy>Speichern</button></div>
+      </section>
+
+      {{if .IsLocal}}
+      <section class="ls-panel" id="zertifikat" aria-labelledby="h-zertifikat">
+        <h2 id="h-zertifikat">Zertifikat</h2>
+        <p>Das Zertifikat für alle Adressen kommt über deSEC.{{if not .ChallengeDomain}} Den Eintrag <code>*.{{.PublicBaseDomain}}</code> hält stackctl dort auf der Adresse dieses Servers.{{end}} Änderungen gehen sofort an den Webzugang.</p>
+        <div class="ls-list sc-gap">
+          <div class="ls-field"><label for="dns_token">deSEC-Token</label><input id="dns_token" type="password" name="dns_token" autocomplete="off" placeholder="{{if .HasDNSToken}}gespeichert{{else}}fehlt{{end}}"><span class="ls-field-hint">{{if .HasDNSToken}}Leer lassen, um den gespeicherten zu behalten.{{else}}Ohne Token gibt es kein Zertifikat.{{end}}</span></div>
+        </div>
+        <details class="ls-list sc-gap-s"{{if .ChallengeDomain}} open{{end}}>
+          <summary class="ls-row"><span class="ls-row-label">Der DNS-Anbieter erlaubt keine NS-Einträge?</span></summary>
+          <div class="ls-field"><label for="challenge_domain">Ziel bei deSEC</label><input id="challenge_domain" name="challenge_domain" value="{{.ChallengeDomain}}" placeholder="leer: deSEC verwaltet {{.PublicBaseDomain}}"><span class="ls-field-hint">CNAME-Ziel von <code>_acme-challenge.{{.PublicBaseDomain}}</code>. Im Normalfall leer.</span></div>
+        </details>
+        <div class="ls-sheet-foot"><button type="submit" formaction="/settings#zertifikat" data-busy>Speichern</button></div>
+      </section>
+      {{end}}
+
+      <section class="ls-panel" id="passwort" aria-labelledby="h-passwort">
+        <h2 id="h-passwort">Admin-Passwort</h2>
+        <p>Das Passwort für diese Verwaltung. Ein neues meldet alle anderen Sitzungen ab.</p>
+        <div class="ls-list sc-gap">
+          <div class="ls-field"><label for="password">Neues Passwort</label><input id="password" type="password" name="password" minlength="8" autocomplete="new-password"><span class="ls-field-hint">Mindestens 8 Zeichen.</span></div>
+          <div class="ls-field"><label for="password_confirm">Noch einmal</label><input id="password_confirm" type="password" name="password_confirm" minlength="8" autocomplete="new-password"></div>
+        </div>
+        <div class="ls-sheet-foot"><button type="submit" formaction="/settings#passwort" data-busy>Passwort ändern</button></div>
+      </section>
+
+      <section class="ls-panel" id="updates" aria-labelledby="h-updates">
+        <h2 id="h-updates">Updates</h2>
+        <p>stackctl prüft jede Nacht den Katalog. Größere Updates und Apps, bei denen du es ausgeschaltet hast, bleiben stehen.</p>
+        <div class="ls-list sc-gap">
+          <label class="ls-row"><span class="ls-row-label">Apps nachts aktualisieren</span><input type="checkbox" role="switch" name="auto_update"{{if .AutoUpdate}} checked{{end}}></label>
+        </div>
+        <div class="ls-sheet-foot"><button type="submit" formaction="/settings#updates" data-busy>Speichern</button></div>
+      </section>
+    </form>
+
+    {{/* Eigene Formulare: jedes Konto hat seine eigenen Knöpfe, und
+         Formulare lassen sich nicht verschachteln. */}}
+    <section class="ls-panel" id="konten" aria-labelledby="h-konten">
+      <h2 id="h-konten">Anmeldung für Lehrkräfte und Schüler:innen</h2>
+      <p>Noch ist kein Anmeldedienst der Schule angebunden. Bis dahin melden sich alle mit Testkonten an, zum Ausprobieren, nicht für den Unterricht. Die Anmeldeseite: <code>{{.DexAuthURL}}</code></p>
+
+      {{if .AccountsNotice}}<p class="sc-flash" data-tone="{{if .AccountsNoticeErr}}bad{{else}}ok{{end}}" role="{{if .AccountsNoticeErr}}alert{{else}}status{{end}}">{{template "icon" (or (and .AccountsNoticeErr "alert") "check-circle")}}<span>{{.AccountsNotice}}</span></p>{{end}}
+
+      <span class="ls-list-label">Testkonten</span>
+      <div class="ls-list">
+        {{range .Accounts}}
+        <div class="ls-row">
+          <span class="ls-row-label">{{.Name}}<small>{{.RoleLabel}} · <code>{{.Login}}</code></small></span>
+          {{template "copy-btn" .Login}}
+          <button type="button" data-size="s" data-variant="danger" data-ls-open="del-{{.ID}}">Löschen</button>
+        </div>
+        {{else}}
+        <div class="ls-row"><span class="ls-row-label">Noch keine Konten<small>Bisher kann sich niemand in den Apps anmelden.</small></span></div>
+        {{end}}
+      </div>
+
+{{range .Accounts}}
+        <dialog class="ls-dialog" id="del-{{.ID}}" aria-labelledby="del-{{.ID}}-t">
+          <form method="post" action="/settings/accounts/{{.ID}}/delete">
+            {{csrfField $.CSRFToken}}
+            <h2 id="del-{{.ID}}-t">{{.Name}} löschen?</h2>
+            <p>Die Person kann sich danach nicht mehr anmelden.</p>
+            <div class="ls-actions"><button type="button" data-variant="ghost" data-close>Abbrechen</button><button type="submit" data-variant="danger" data-busy>Löschen</button></div>
+          </form>
+        </dialog>
+      {{end}}
+
+      <span class="ls-list-label">Konto anlegen</span>
+      <form method="post" action="/settings/accounts" class="ls-list">
+        {{csrfField .CSRFToken}}
+        <div class="ls-field"><label for="acc-name">Name</label><input id="acc-name" name="name" required maxlength="100" placeholder="Frau Müller oder Mia S."><span class="ls-field-hint">So erscheint die Person in den Apps.</span></div>
+        <div class="ls-field"><label for="acc-login">Anmeldename</label>
+          <div class="sc-suffix"><input id="acc-login" name="login_name" required maxlength="40" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="mueller"><span>@{{.PublicBaseDomain}}</span></div>
+          <span class="ls-field-hint">Die Anmeldeseite fragt nach einer E-Mail-Adresse. Gemeint ist genau diese.</span></div>
+        <div class="ls-field"><label for="acc-role">Rolle</label><select id="acc-role" name="role" required>{{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select></div>
+        <div class="ls-field"><label for="acc-pass">Passwort</label><input id="acc-pass" type="password" name="password" required minlength="8" autocomplete="new-password"><span class="ls-field-hint">Mindestens 8 Zeichen. stackctl speichert es nicht lesbar, also bitte notieren und weitergeben.</span></div>
+        <div class="ls-field"><button type="submit" data-busy>{{template "icon" "plus"}}Konto anlegen</button></div>
+      </form>
+    </section>
+
+    <section class="ls-panel" id="system" aria-labelledby="h-system">
+      <h2 id="h-system">System</h2>
+      <p>Version von stackctl und wie voll der Server ist.</p>
+
+      {{if .SyncResult}}<p class="sc-flash" data-tone="ok" role="status">{{template "icon" "check-circle"}}<span>{{.SyncResult}}</span></p>{{end}}
+      {{if .SyncError}}<p class="sc-flash" data-tone="bad" role="alert">{{template "icon" "alert"}}<span>{{.SyncError}}</span></p>{{end}}
+      {{if .UpdateResult}}<p class="sc-flash" data-tone="ok" role="status">{{template "icon" "check-circle"}}<span>{{.UpdateResult}}{{if .Restarting}} Die Seite lädt neu, sobald stackctl wieder da ist.{{end}}</span></p>{{end}}
+      {{if .UpdateError}}<p class="sc-flash" data-tone="bad" role="alert">{{template "icon" "alert"}}<span>{{.UpdateError}}</span></p>{{end}}
+
+      <span class="ls-list-label">stackctl</span>
+      <div class="ls-list">
+        <div class="ls-row"><span class="ls-row-label">Installiert</span><span class="ls-row-value"><code>{{.CurrentVersion}}</code></span></div>
+        {{if .LatestVersion}}<div class="ls-row"><span class="ls-row-label">Neueste</span><span class="ls-row-value"><code>{{.LatestVersion}}</code></span></div>{{end}}
+        {{if .CheckError}}<div class="ls-row"><span class="ls-row-label">Prüfung auf Updates<small class="sc-warn">{{.CheckError}}</small></span></div>{{end}}
+        {{if .UpdateAvailable}}
+        <form method="post" action="/system/update" class="ls-row sc-row-form">
+          {{csrfField .CSRFToken}}
+          <span class="ls-row-label">Auf {{.LatestVersion}} aktualisieren<small>stackctl startet dabei kurz neu. Die Apps laufen weiter.</small></span>
+          <button type="submit" data-size="s" data-busy>Aktualisieren</button>
+        </form>
+        {{else if not .CheckError}}
+        <div class="ls-row"><span class="ls-row-label">stackctl ist aktuell</span>{{template "icon" "check-circle"}}</div>
+        {{end}}
+      </div>
+
+      <span class="ls-list-label">Auslastung</span>
+      <div class="ls-list">
+        {{if .Sys.RAMOK}}<div class="ls-row"><span class="ls-row-label">Arbeitsspeicher<small>{{.Sys.RAMUsed}} von {{.Sys.RAMTotal}} · {{.Sys.RAMFree}} frei</small></span><meter class="sc-meter" min="0" max="100" value="{{.Sys.RAMPercent}}" low="75" high="90" optimum="0"></meter><span class="ls-row-value">{{.Sys.RAMPercent}} %</span></div>{{end}}
+        {{if .Sys.DiskOK}}<div class="ls-row"><span class="ls-row-label">Speicherplatz<small>{{.Sys.DiskUsed}} von {{.Sys.DiskTotal}} · {{.Sys.DiskFree}} frei{{if .Sys.DiskPath}} · {{.Sys.DiskPath}}{{end}}</small></span><meter class="sc-meter" min="0" max="100" value="{{.Sys.DiskPercent}}" low="75" high="90" optimum="0"></meter><span class="ls-row-value">{{.Sys.DiskPercent}} %</span></div>{{end}}
+        {{if or .Sys.CPUCount .Sys.LoadOK}}<div class="ls-row"><span class="ls-row-label">Prozessor</span><span class="ls-row-value">{{if .Sys.CPUCount}}{{.Sys.CPUCount}} Kerne{{end}}{{if .Sys.LoadOK}} · Last {{.Sys.Load1}}{{end}}</span></div>{{end}}
+        {{if not .Sys.Available}}<div class="ls-row"><span class="ls-row-label">Auf diesem System nicht messbar</span></div>{{end}}
+      </div>
+    </section>
+  </div>
+</div>
+
+{{template "shell-end" .PageData}}
+{{if .Restarting}}
+<script>
+// Nach dem Self-Update beendet sich der Prozess (os.Exit) und systemd
+// bringt ihn mit dem neuen Binary wieder hoch. Wir pollen /healthz und
+// laden neu, sobald der Dienst NACH einem Ausfall wieder antwortet — so
+// sieht der Admin direkt die neue Version. wasDown verhindert ein zu
+// fruehes Reload, solange der alte Prozess noch antwortet.
+(function() {
+  var wasDown = false, start = Date.now();
+  var done = '/settings?update=' + encodeURIComponent('Aktualisierung abgeschlossen.');
+  function poll() {
+    if (Date.now() - start > 60000) { window.location.href = done; return; }
+    fetch('/healthz', { cache: 'no-store' })
+      .then(function(r) {
+        if (r.ok && wasDown) { window.location.href = done; return; }
+        if (!r.ok) wasDown = true;
+        setTimeout(poll, 1000);
+      })
+      .catch(function() { wasDown = true; setTimeout(poll, 1000); });
+  }
+  setTimeout(poll, 1500);
+})();
+</script>
+{{end}}
 {{template "foot" .}}
 {{end}}

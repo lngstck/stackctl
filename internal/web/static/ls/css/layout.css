@@ -1,0 +1,141 @@
+/* learningstack · Layout
+   Zwei Rahmen: die Plattform (stackctl, Portal) mit Dock und die
+   App-Hülle für eigene Apps. Dazu ein paar Ordnungshilfen. */
+
+/* ── Plattform-Rahmen ──────────────────────────────────────────
+   <body class="ls-shell"> <nav class="ls-dock"> … <div class="ls-page"> */
+.ls-page { min-width: 0; }
+.ls-top { display: flex; align-items: center; gap: var(--ls-space-4); padding: var(--ls-space-3) var(--ls-gutter); }
+.ls-top .ls-search { flex: 1; max-width: 26rem; margin-inline: auto; }
+.ls-top-end { display: flex; align-items: center; gap: .6rem; color: var(--ls-ink-soft); font-size: var(--ls-text-s); white-space: nowrap; margin-left: auto; }
+.ls-top .ls-search + .ls-top-end { margin-left: 0; }
+.ls-main { max-width: var(--ls-content); margin: 0 auto; padding: var(--ls-space-2) var(--ls-gutter) var(--ls-space-16); }
+
+/* Dock: unten auf schmalen Bildschirmen, senkrecht links ab 64rem */
+.ls-dock {
+  position: fixed; z-index: 10; left: 50%; bottom: 1.1rem; translate: -50% 0;
+  display: flex; gap: .2rem; padding: .4rem; border-radius: 22px;
+  background: light-dark(rgb(255 255 255 / .82), rgb(30 33 38 / .82));
+  backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: var(--ls-shadow-2);
+}
+.ls-dock a {
+  display: grid; justify-items: center; gap: .15rem; min-width: 4.3rem;
+  padding: .45rem .6rem; border-radius: 14px;
+  color: var(--ls-ink-soft); font-size: .6875rem; font-weight: var(--ls-w-semibold); text-decoration: none; text-align: center; line-height: 1.15;
+  transition: background-color var(--ls-dur-1), color var(--ls-dur-1);
+}
+.ls-dock a > svg { width: 1.35rem; height: 1.35rem; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.ls-dock a:hover { color: var(--ls-ink); text-decoration: none; }
+.ls-dock a[aria-current="page"] { color: var(--ls-ink); background: var(--ls-surface-2); }
+.ls-dock a[aria-current="page"] > svg { color: var(--ls-accent); }
+.ls-shell .ls-main { padding-bottom: 8rem; }
+
+@media (min-width: 64rem) {
+  .ls-shell { padding-left: calc(var(--ls-rail) + 1.5rem); }
+  .ls-dock { left: 1rem; top: 50%; bottom: auto; translate: 0 -50%; flex-direction: column; padding: .45rem; }
+  .ls-dock a { min-width: 0; width: calc(var(--ls-rail) - .9rem); padding: .55rem .25rem; }
+  .ls-shell .ls-main { padding-bottom: var(--ls-space-16); }
+  .ls-shell .ls-top { padding-left: var(--ls-space-4); }
+}
+@media (max-width: 40rem) {
+  .ls-dock { left: .6rem; right: .6rem; translate: none; justify-content: space-between; overflow-x: auto; scrollbar-width: none; }
+  .ls-dock a { flex: 1 1 auto; min-width: 0; padding: .45rem .2rem; font-size: .625rem; }
+  .ls-top { gap: .6rem; }
+  .ls-top-end .ls-hide-s, .ls-top kbd { display: none; }
+}
+
+/* ── Raster der Startseite ─────────────────────────────────── */
+.ls-attention { display: grid; grid-template-columns: repeat(auto-fit, minmax(16.5rem, 1fr)); gap: var(--ls-space-3); margin-bottom: var(--ls-space-5); }
+.ls-widgets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ls-space-3); margin-bottom: var(--ls-space-10); }
+.ls-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--ls-space-4); margin: 0 .25rem var(--ls-space-5); flex-wrap: wrap; }
+.ls-bar h2 { font-size: var(--ls-text-l); }
+@media (max-width: 60rem) { .ls-widgets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 40rem) {
+  /* Am Handy: alle Hinweise als eine Liste, Werte als kompakter Block,
+     damit die ersten Apps im ersten Bildschirm stehen. */
+  .ls-attention { gap: 0; background: var(--ls-surface); border-radius: var(--ls-r-m); box-shadow: var(--ls-shadow-1); overflow: hidden; margin-bottom: var(--ls-space-3); }
+  .ls-attention > .ls-notice { position: relative; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: .75rem; padding: .7rem .9rem; border-radius: 0; box-shadow: none; }
+  .ls-attention > .ls-notice + .ls-notice::before { content: ""; position: absolute; top: 0; left: .9rem; right: 0; height: 1px; background: var(--ls-line); }
+  .ls-attention > .ls-notice > .ls-tile, .ls-attention > .ls-notice > .ls-notice-icon { --size: var(--ls-tile-s); width: var(--ls-tile-s); height: var(--ls-tile-s); grid-row: 1 / 3; align-self: center; }
+  .ls-attention > .ls-notice p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .ls-attention > .ls-notice .ls-actions { grid-column: 3; grid-row: 1 / 3; margin: 0; }
+  .ls-attention > .ls-notice[data-tone="bad"] h3 { color: var(--ls-bad); }
+  .ls-widgets { gap: 0; background: var(--ls-surface); border-radius: var(--ls-r-m); box-shadow: var(--ls-shadow-1); overflow: hidden; margin-bottom: var(--ls-space-8); }
+  .ls-widgets > .ls-widget { border-radius: 0; box-shadow: none; padding: .65rem .9rem; gap: .15rem; }
+  .ls-widgets > .ls-widget:nth-child(even) { box-shadow: inset 1px 0 0 var(--ls-line); }
+  .ls-widgets > .ls-widget:nth-child(n+3) { border-top: 1px solid var(--ls-line); }
+  .ls-widgets .ls-widget-value { font-size: var(--ls-text-m); }
+  .ls-widgets .ls-widget > p, .ls-widgets meter { display: none; }
+  .ls-widgets { margin-bottom: var(--ls-space-5); }
+  .ls-attention { margin-bottom: var(--ls-space-2); }
+  .ls-bar { margin-bottom: var(--ls-space-3); }
+  .ls-hello { margin: var(--ls-space-2) 0 var(--ls-space-4); }
+  .ls-hello p { font-size: var(--ls-text-base); }
+  /* Vier Spalten wie auf dem Handy-Homescreen */
+  .ls-launcher:not([data-size]) { grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr)); gap: var(--ls-space-4) .25rem; }
+  .ls-launcher:not([data-size]) .ls-tile { --size: 3.5rem; }
+  .ls-launcher:not([data-size]) .ls-app-name { font-size: var(--ls-text-xs); }
+}
+
+/* Liste statt Raster: data-view="list" am Container */
+[data-view="list"] .ls-shelves { display: none; }
+[data-view="grid"] .ls-applist { display: none; }
+.ls-applist > .ls-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 8.5rem 8rem 7.5rem 6.5rem; }
+.ls-applist .ls-row-meta { color: var(--ls-ink-soft); font-size: var(--ls-text-s); }
+.ls-applist .ls-pill, .ls-applist .ls-where { justify-self: start; }
+@media (max-width: 52rem) {
+  .ls-applist > .ls-row { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .ls-applist .ls-row-meta { display: none; }
+}
+@media (max-width: 40rem) {
+  .ls-applist > .ls-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ls-applist .ls-where { display: none; }
+}
+
+/* ── Seitenkopf für Unterseiten ────────────────────────────── */
+.ls-pagehead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ls-space-4); margin: var(--ls-space-4) 0 var(--ls-space-6); }
+.ls-pagehead h1 { font-size: var(--ls-text-2xl); }
+.ls-pagehead p { color: var(--ls-ink-soft); display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-top: .2rem; }
+.ls-pagehead > .ls-actions { margin-left: auto; }
+
+/* ── Geteilte Ansicht: höchstens zwei Ebenen ─────────────────
+   Links Bereiche (eine .ls-list als nav), rechts der Inhalt. */
+.ls-split { display: grid; grid-template-columns: 16rem minmax(0, 1fr); gap: var(--ls-space-6); align-items: start; }
+.ls-split > * { min-width: 0; }
+.ls-split > nav { position: sticky; top: var(--ls-space-4); }
+.ls-split-count { color: var(--ls-ink-soft); font-size: var(--ls-text-s); font-variant-numeric: tabular-nums; }
+.ls-panel > h2 { margin-bottom: .3rem; }
+.ls-panel > p { color: var(--ls-ink-soft); max-width: 64ch; }
+@media (max-width: 60rem) {
+  .ls-split { grid-template-columns: 1fr; gap: var(--ls-space-5); }
+  .ls-split > nav { position: static; }
+  .ls-split > nav .ls-list { display: flex; overflow-x: auto; border-radius: var(--ls-r-full); padding: 3px; scrollbar-width: none; }
+  .ls-split > nav .ls-list:not(.is-end) { mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); }
+  .ls-split > nav .ls-row { width: auto; min-height: 0; padding: .4rem .85rem; border-radius: var(--ls-r-full); white-space: nowrap; flex: none; }
+  .ls-split > nav .ls-row::before, .ls-split > nav .ls-row-chevron { display: none; }
+}
+
+/* ── App-Hülle für eigene Apps ─────────────────────────────────
+   <html data-app="pylearn"> … <header class="ls-appbar"> */
+.ls-appbar { display: flex; align-items: center; gap: var(--ls-space-3); padding: .65rem var(--ls-gutter); background: var(--ls-surface); border-bottom: 1px solid var(--ls-line); position: sticky; top: 0; z-index: 5; }
+.ls-homepill { display: inline-flex; align-items: center; gap: .35rem; font-size: var(--ls-text-s); font-weight: var(--ls-w-semibold); color: var(--ls-ink-soft); background: var(--ls-surface-2); border-radius: var(--ls-r-full); padding: .3rem .75rem .3rem .45rem; text-decoration: none; white-space: nowrap; }
+.ls-homepill:hover { color: var(--ls-ink); text-decoration: none; }
+.ls-homepill > svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ls-appbar-title { display: flex; align-items: center; gap: .6rem; font-weight: var(--ls-w-bold); }
+.ls-appbar-crumb { color: var(--ls-ink-soft); font-size: var(--ls-text-s); }
+.ls-appbar .ls-top-end { margin-left: auto; }
+.ls-work { display: grid; grid-template-columns: 22rem minmax(0, 1fr); gap: var(--ls-space-4); padding: var(--ls-space-4) var(--ls-gutter); align-items: start; }
+.ls-work[data-cols="3"] { grid-template-columns: 15rem minmax(0, 1fr) 17rem; }
+.ls-work > * { min-width: 0; }
+@media (max-width: 60rem) { .ls-work, .ls-work[data-cols="3"] { grid-template-columns: 1fr; } }
+@media (max-width: 40rem) { .ls-appbar-crumb { display: none; } }
+
+/* ── Ordnungshilfen ────────────────────────────────────────── */
+.ls-stack { display: grid; gap: var(--ls-space-3); align-content: start; }
+.ls-stack[data-gap="l"] { gap: var(--ls-space-6); }
+.ls-cluster { display: flex; flex-wrap: wrap; gap: var(--ls-space-2); align-items: center; }
+.ls-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--min, 14rem), 1fr)); gap: var(--ls-space-3); }
+.ls-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ls-skip { position: absolute; left: -999px; top: .5rem; z-index: 50; background: var(--ls-surface); padding: .5rem 1rem; border-radius: var(--ls-r-s); box-shadow: var(--ls-shadow-2); }
+.ls-skip:focus { left: .5rem; }

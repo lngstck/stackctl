@@ -1,133 +1,145 @@
+{{define "title"}}Start{{end}}
 {{define "page"}}
 {{template "head" .}}
+{{template "shell-start" .PageData}}
 
-{{template "sidebar-layout-start" .PageData}}
-
-<h2 class="mb-2">Dashboard</h2>
-
-{{if not .HasApps}}
-<div role="alert" class="mb-2">
-  Noch keine Apps installiert. <a href="/apps">Zum App-Katalog</a>
+<div class="ls-hello">
+  <h1>{{.Headline}}</h1>
+  <p>{{.Summary}}</p>
 </div>
 
-{{/* Auch ohne installierte Apps muss der Handlungsbedarf sichtbar sein —
-     genau dann fehlen die Pflicht-Dienste und der Admin braucht den
-     Einstieg. Nur die "Alles in Ordnung"-Box ergibt hier keinen Sinn. */}}
-{{if .Issues}}
-<section class="dash-section">
-  <h3 class="mb-2">Handlungsbedarf</h3>
-  {{template "issue-list" .Issues}}
+{{template "flash" .Flash}}
+
+{{if .Notices}}
+<h2 class="ls-sr">Braucht dich</h2>
+<section class="ls-attention" aria-label="Braucht dich">
+  {{range .Notices}}{{template "notice" .}}{{end}}
 </section>
 {{end}}
 
-{{else}}
+<section class="ls-widgets" aria-label="Server">
+  <div class="ls-card ls-widget">
+    <header>{{template "icon" "server"}}Arbeitsspeicher</header>
+    {{if .Sys.RAMOK}}
+    <div class="ls-widget-value">{{.Sys.RAMUsedShort}} <small>von {{.Sys.RAMTotalShort}}</small></div>
+    <meter min="0" max="100" value="{{.Sys.RAMPercent}}" low="75" high="90" optimum="0" aria-label="Arbeitsspeicher belegt"></meter>
+    <p>{{.Sys.RAMFreeShort}} frei</p>
+    {{else}}
+    <div class="ls-widget-value">–</div><p>Auf diesem System nicht messbar</p>
+    {{end}}
+  </div>
+  <div class="ls-card ls-widget">
+    <header>{{template "icon" "database"}}Speicherplatz</header>
+    {{if .Sys.DiskOK}}
+    <div class="ls-widget-value">{{.Sys.DiskUsedShort}} <small>von {{.Sys.DiskTotalShort}}</small></div>
+    <meter min="0" max="100" value="{{.Sys.DiskPercent}}" low="75" high="90" optimum="0" aria-label="Speicherplatz belegt"></meter>
+    <p>{{.Sys.DiskFreeShort}} frei</p>
+    {{else}}
+    <div class="ls-widget-value">–</div><p>Auf diesem System nicht messbar</p>
+    {{end}}
+  </div>
+  <a class="ls-card ls-widget sc-widget-link" href="/backups">
+    <header>{{template "icon" "archive"}}Sicherung</header>
+    {{if .LastBackup}}
+    <div class="ls-widget-value">{{.LastBackup}}</div>
+    <p>{{.Backups}} {{if eq .Backups 1}}Sicherung{{else}}Sicherungen{{end}} auf dem Server</p>
+    {{else}}
+    <div class="ls-widget-value">Keine</div>
+    <p>Noch nie gesichert</p>
+    {{end}}
+  </a>
+  <a class="ls-card ls-widget sc-widget-link" href="/public">
+    <header>{{template "icon" (or (and (eq .Mode "direct") "globe") "school")}}Zugang</header>
+    {{if eq .Mode "direct"}}
+    <div class="ls-widget-value">Internet</div>
+    <p>Apps mit Adresse sind von überall erreichbar</p>
+    {{else}}
+    <div class="ls-widget-value">Schulnetz</div>
+    <p>Alles bleibt im Schulnetz</p>
+    {{end}}
+  </a>
+</section>
 
-{{/* ── Handlungsbedarf ─────────────────────────────────────────── */}}
-<section class="dash-section">
-  {{if .Issues}}
-  <h3 class="mb-2">Handlungsbedarf</h3>
-  {{template "issue-list" .Issues}}
+<div id="apps" data-view="grid">
+  <div class="ls-bar">
+    <h2>Apps</h2>
+    {{if .HasApps}}
+    <div class="ls-seg" data-ls-switch="#apps" role="group" aria-label="Darstellung">
+      <button type="button" value="grid" aria-pressed="true">{{template "icon" "grid"}}Raster</button>
+      <button type="button" value="list" aria-pressed="false">{{template "icon" "list"}}Liste</button>
+    </div>
+    {{end}}
+  </div>
+
+  {{if .HasApps}}
+  <div class="ls-shelves">
+    {{range .Shelves}}
+    <section class="ls-shelf">
+      <h3>{{.Title}} <span>{{len .Apps}}</span></h3>
+      <div class="ls-launcher">
+        {{range .Apps}}
+        <button type="button" class="ls-app" data-ls-item="{{.Category}} {{.Description}}" data-ls-open="app-{{.ID}}">
+          {{template "tile" .Tile}}
+          <span class="ls-app-name">{{.Name}}</span>
+          {{if not .Running}}<span class="ls-app-state" data-tone="bad">aus</span>{{end}}
+          <span class="ls-sr">{{if .Running}}läuft{{else}}aus{{end}}{{if .UpdateTo}}, Update verfügbar{{end}}{{if eq .Where "internet"}}, auch im Internet{{end}}</span>
+        </button>
+        {{end}}
+        {{if .Last}}
+        <a class="ls-app" href="/apps"><span class="ls-tile" data-variant="add">{{template "dock-icon" "plus"}}</span><span class="ls-app-name">App holen</span></a>
+        {{end}}
+      </div>
+    </section>
+    {{end}}
+  </div>
+
+  <div class="ls-applist ls-list">
+    {{range .Apps}}
+    <button type="button" class="ls-row" data-ls-item="{{.Name}} {{.Category}} {{.Description}}" data-ls-open="app-{{.ID}}">
+      {{template "tile" (tileSize .Tile "s")}}
+      <span class="ls-row-label">{{.Name}}{{if .Description}}<small>{{.Description}}</small>{{end}}</span>
+      <span class="ls-row-meta">{{categoryLabel .Category}}</span>
+      <span class="ls-row-meta">{{.Version}}{{if .UpdateTo}} <span class="ls-pill" data-tone="warn" data-dot="no">{{.UpdateTo}}</span>{{end}}</span>
+      {{template "where" .Where}}
+      {{if .Running}}<span class="ls-pill" data-tone="ok">läuft</span>{{else}}<span class="ls-pill" data-tone="off">aus</span>{{end}}
+    </button>
+    {{end}}
+  </div>
+
+  <div class="ls-empty" data-ls-empty hidden>{{template "dock-icon" "search"}}<strong>Keine App gefunden.</strong><span>Vielleicht gibt es sie im <a href="/apps">Katalog</a>.</span></div>
   {{else}}
-  <div class="dash-allgood">
-    <span class="dash-allgood__icon" aria-hidden="true">✓</span>
-    <div>
-      <strong>Alles in Ordnung.</strong>
-      <span class="sub"> Alle Dienste laufen und es liegen keine Warnungen vor.</span>
-    </div>
+  <div class="ls-card ls-empty">
+    {{template "dock-icon" "bag"}}
+    <strong>Noch keine Apps installiert</strong>
+    <span>Im Katalog findest du Apps für den Unterricht.</span>
+    <a class="ls-btn" href="/apps">Zum Katalog</a>
   </div>
   {{end}}
-</section>
+</div>
 
-{{/* ── Kennzahlen: Apps · Updates · System · Aktivität ──────────── */}}
-<div class="dash-grid">
-
-  <article class="card">
-    <div class="card-head">
-      <span class="card-title">Apps</span>
-      <a class="sub" href="/apps">Alle ansehen →</a>
-    </div>
-    <div class="dash-stat">
-      <span class="dash-stat__num">{{.AppsRunning}}</span>
-      <span class="dash-stat__unit">von {{.AppsTotal}} laufen</span>
-    </div>
-  </article>
-
-  <article class="card">
-    <div class="card-head"><span class="card-title">Aktualisierungen</span></div>
-    {{if .Updates}}
-    <ul class="dash-list">
-      {{range .Updates}}
-      <li>
-        <span class="grow">
-          <strong>{{.Name}}</strong>
-          <span class="sub">{{.From}} → {{.To}}</span>
-          {{if .Breaking}}<span class="badge" data-variant="warning">Breaking</span>{{end}}
-        </span>
-        <a class="button ghost small" href="/apps/{{.ID}}">Details</a>
-      </li>
-      {{end}}
-    </ul>
-    {{else}}
-    <p class="dash-empty">Alle Apps sind aktuell.</p>
-    {{end}}
-  </article>
-
-  <article class="card">
-    <div class="card-head"><span class="card-title">System</span></div>
-    {{if .Sys.Available}}
-      {{if .Sys.RAMOK}}
-      <div class="dash-metric">
-        <div class="dash-metric__top"><span>Arbeitsspeicher</span><span class="dash-metric__val">{{.Sys.RAMUsed}} / {{.Sys.RAMTotal}}</span></div>
-        <div class="dash-meter"><span class="{{.Sys.RAMLevel}}" style="width:{{.Sys.RAMPercent}}%"></span></div>
-      </div>
-      {{end}}
-      {{if .Sys.DiskOK}}
-      <div class="dash-metric">
-        <div class="dash-metric__top"><span>Speicherplatz</span><span class="dash-metric__val">{{.Sys.DiskUsed}} / {{.Sys.DiskTotal}}</span></div>
-        <div class="dash-meter"><span class="{{.Sys.DiskLevel}}" style="width:{{.Sys.DiskPercent}}%"></span></div>
-      </div>
-      {{end}}
-      {{if .Sys.LoadOK}}
-      <div class="dash-metric__top"><span>Last (1 min)</span><span class="dash-metric__val">{{.Sys.Load1}}{{if .Sys.CPUCount}} · {{.Sys.CPUCount}} CPU{{end}}</span></div>
-      {{end}}
-    {{else}}
-    <p class="dash-empty">Systeminformationen sind auf dieser Plattform nicht verfügbar.</p>
-    {{end}}
-  </article>
-
-  {{if .Activity}}
-  <article class="card">
-    <div class="card-head"><span class="card-title">Letzte Aktivität</span></div>
-    <ul class="dash-list">
-      {{range .Activity}}
-      <li>
-        <span class="status-dot status-dot--{{.State}}"></span>
-        <span class="grow">{{.Title}}</span>
-        <span class="sub">{{.Ago}}</span>
-      </li>
-      {{end}}
-    </ul>
-  </article>
+{{if .Infra}}
+<div class="ls-card ls-cluster sc-infra">
+  {{if .InfraDown}}
+  <strong class="ls-cluster sc-infra-state" data-tone="bad">{{template "icon" "alert"}}Grundversorgung: {{join .InfraDown ", "}} {{if eq (len .InfraDown) 1}}läuft{{else}}laufen{{end}} nicht</strong>
+  {{else}}
+  <strong class="ls-cluster sc-infra-state" data-tone="ok">{{template "icon" "check-circle"}}Grundversorgung läuft</strong>
   {{end}}
-
+  {{range .Infra}}
+  <button type="button" class="ls-chip" data-ls-open="app-{{.ID}}"{{if not .Running}} data-tone="bad"{{end}}>{{template "tile" .Tile}}{{.ShortName}}</button>
+  {{end}}
 </div>
 {{end}}
 
-{{template "sidebar-layout-end" .PageData}}
+{{if or .Internet .Updates .Alerts}}
+<p class="ls-legend sc-legend">
+  {{if .Internet}}<span><span class="ls-badge" data-kind="internet">{{template "dock-icon" "globe"}}</span>auch im Internet</span>{{end}}
+  {{if .Updates}}<span><span class="ls-badge" data-kind="update">{{template "dock-icon" "update"}}</span>Update da</span>{{end}}
+  {{if .Alerts}}<span><span class="ls-badge" data-kind="alert">{{template "dock-icon" "alert"}}</span>braucht dich</span>{{end}}
+</p>
+{{end}}
+
+{{range .Sheets}}{{template "app-sheet" (sheetCtx . $.CSRFToken $.Mode "start")}}{{end}}
+
+{{template "shell-end" .PageData}}
 {{template "foot" .}}
-{{end}}
-
-{{define "issue-list"}}
-<div class="issue-list">
-  {{range .}}
-  <div class="issue issue--{{.Level}}">
-    <span class="issue__icon" aria-hidden="true">{{.Icon}}</span>
-    <div class="issue__body">
-      <div class="issue__title">{{.Title}}</div>
-      <div class="issue__detail">{{.Detail}}</div>
-    </div>
-    {{if .Action}}<a class="button ghost small issue__action" href="{{.Action}}">{{.ActionLabel}}</a>{{end}}
-  </div>
-  {{end}}
-</div>
 {{end}}

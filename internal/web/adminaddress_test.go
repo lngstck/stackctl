@@ -128,3 +128,24 @@ func TestLoginShowsSecureAddress(t *testing.T) {
 		t.Errorf("Anmeldeseite ohne Hinweis:\n%s", rec.Body.String())
 	}
 }
+
+// Auf Start ist die verschlüsselte Adresse eine Empfehlung, kein Problem:
+// Info-Ton mit Schloss statt Warnung.
+func TestSecureAddressNoticeIsInfo(t *testing.T) {
+	fake := &fakePublisher{adminStatus: publish.StatusRunning}
+	s, _ := testServerWithPublisher(t, fake)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Host = "192.168.1.10:8090"
+
+	issues := s.adminAddressIssues(r)
+	if len(issues) != 1 {
+		t.Fatalf("Hinweise: %d, erwartet 1", len(issues))
+	}
+	n := noticeFor(issues[0], nil, "tok")
+	if n.Tone != "info" || n.Icon != "lock" {
+		t.Errorf("Ton %q, Symbol %q; erwartet info, lock", n.Tone, n.Icon)
+	}
+	if n.Href != "https://admin.ls.gym-phoenix.de" {
+		t.Errorf("Ziel %q", n.Href)
+	}
+}

@@ -1,0 +1,10 @@
+/* learningstack · Einstieg
+   Eine Datei einbinden, fertig:
+     <link rel="stylesheet" href="/static/ls/learningstack.css">
+   Die Ebenen stehen vor jeder eigenen CSS der App. Was eine App ohne
+   @layer schreibt, gewinnt deshalb immer. */
+@layer ls.tokens, ls.base, ls.components, ls.layout;
+@import url("css/tokens.css") layer(ls.tokens);
+@import url("css/base.css") layer(ls.base);
+@import url("css/components.css") layer(ls.components);
+@import url("css/layout.css") layer(ls.layout);
