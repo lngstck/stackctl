@@ -352,3 +352,21 @@ func TestCheckRedirectURIsIgnoresAppsWithoutOIDC(t *testing.T) {
 		t.Errorf("App ohne OIDC abgelehnt: %v", err)
 	}
 }
+
+// Mit Caddy davor sind die Ports der Apps nur auf dem Server selbst
+// erreichbar, im Schulnetz wie im direkten Betrieb.
+func TestComposeOptionsBindLocalhost(t *testing.T) {
+	for transport, want := range map[string]bool{
+		config.TransportLocal:  true,
+		config.TransportDirect: true,
+		"":                     false,
+	} {
+		cfg := &config.Config{Public: config.Public{Transport: transport}}
+		if got := composeOptions(cfg).BindLocalhost; got != want {
+			t.Errorf("Transport %q: BindLocalhost = %v, want %v", transport, got, want)
+		}
+	}
+	if composeOptions(nil).BindLocalhost {
+		t.Error("ohne Konfiguration: BindLocalhost = true")
+	}
+}

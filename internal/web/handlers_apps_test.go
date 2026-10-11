@@ -281,3 +281,19 @@ func TestReturnTo(t *testing.T) {
 		t.Errorf("withMsg = %q", got)
 	}
 }
+
+// Ohne Adresse gibt es keinen Weg in die App, also auch keinen Knopf
+// „Öffnen“ auf einen Port im Schulnetz.
+func TestAppSheetOpensOnlyItsAddress(t *testing.T) {
+	s, _ := testServerWithPublisher(t, &fakePublisher{})
+	s.cfg.School.ServerDomain = "192.168.1.10"
+	cs := &config.ContainerState{ID: "pylearn", Name: "PyLearn", Ports: []int{8330}}
+
+	if got := s.appSheet("pylearn", cs).OpenURL; got != "" {
+		t.Errorf("ohne Adresse: OpenURL = %q", got)
+	}
+	cs.PublicEnabled, cs.PublicHost = true, "pylearn.ls.gym-phoenix.de"
+	if got := s.appSheet("pylearn", cs).OpenURL; got != "https://pylearn.ls.gym-phoenix.de" {
+		t.Errorf("mit Adresse: OpenURL = %q", got)
+	}
+}

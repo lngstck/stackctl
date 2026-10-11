@@ -27,6 +27,10 @@ Gemeinsam ist beiden:
     installiert ist; im direkten Betrieb nur, wenn eingeschaltet
 - **Caddy** hält Port 80/443 auf dem Server, terminiert TLS und verteilt die
   Anfragen anhand des Hostnamens an die Apps. Er ist Pflichtdienst.
+- **Nur Caddy ist von außen erreichbar.** Alle übrigen Container binden auf
+  `127.0.0.1`; Caddy erreicht sie über das Docker-Netz. Eine App ohne Adresse
+  ist damit nicht erreichbar, auch nicht unverschlüsselt über ihren Port.
+  stackctl selbst bleibt im Schulnetz unter `<Server-IP>:8090`.
 
 ---
 
@@ -125,8 +129,7 @@ Dauerhafte Voraussetzungen — nicht nur bei der Einrichtung:
 - **Port 443 ist aus dem Internet erreichbar.**
 - Kein anderer Webserver auf 80/443 (mitgelieferter Apache oder nginx).
 
-Alle übrigen Container binden in dieser Betriebsart auf `127.0.0.1`: Nach
-außen sichtbar wird eine App ausschließlich über Caddy, nie über einen
+Nach außen sichtbar wird eine App ausschließlich über Caddy, nie über einen
 offenen Port. Eine App bekommt ihre Adresse erst, wenn die Admin sie
 einschaltet.
 
