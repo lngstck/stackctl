@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/config"
@@ -141,7 +142,21 @@ func New(cfg *config.Config, state *config.State, opts ...Option) (*Server, erro
 func (s *Server) ListenAndServe(host string, port int) error {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	log.Printf("stackctl web UI: http://%s", addr)
-	return http.ListenAndServe(addr, s.mux)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: s.Handler(),
+		// A client that opens connections and never finishes its headers
+		// would otherwise hold them forever. No limit on reading the body
+		// or writing the answer: uploads and downloads of backups are large.
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	return srv.ListenAndServe()
+}
+
+// Handler is the complete HTTP handler: all routes with the security
+// headers around them.
+func (s *Server) Handler() http.Handler {
+	return securityHeaders(s.mux)
 }
 
 // routes registers all HTTP routes.

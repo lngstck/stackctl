@@ -61,12 +61,12 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 
 	s.limiter.recordSuccess(ip)
 	token := s.sessions.create()
-	setSessionCookie(w, token)
+	setSessionCookie(w, r, token)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	s.sessions.destroy()
-	clearSessionCookie(w)
+	clearSessionCookie(w, r)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
