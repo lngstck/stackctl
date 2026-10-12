@@ -86,7 +86,6 @@ apt_install() {
 if ! command -v docker >/dev/null 2>&1; then
     debian_with_docker || die "Docker ist nicht installiert. Bitte zuerst Docker installieren: https://docs.docker.com/engine/install/"
     apt_install docker.io docker-compose
-    systemctl enable --now docker >/dev/null 2>&1 || true
 fi
 
 # stackctl ruft durchgehend 'docker compose ...' (v2-Plugin) auf. Snap-Docker
@@ -101,9 +100,23 @@ docker compose version >/dev/null 2>&1 || die "Docker-Compose-Plugin fehlt ('doc
   Installation: https://docs.docker.com/engine/install/ (docker-ce + docker-compose-plugin)"
 
 # 'docker --version' funktioniert auch ohne laufenden Daemon — erst
-# 'docker info' beweist, dass der Daemon erreichbar ist.
-docker info >/dev/null 2>&1 || die "Docker-Daemon ist nicht erreichbar ('docker info' schlaegt fehl).
-  Starten: systemctl enable --now docker"
+# 'docker info' beweist, dass der Daemon erreichbar ist. Ein installiertes,
+# aber abgeschaltetes Docker (frisch aus apt, oder von Hand deaktiviert)
+# schaltet install.sh einmal selbst ein; scheitert das, zeigt es warum.
+if ! docker info >/dev/null 2>&1; then
+    info "Docker laeuft nicht, schalte es ein..."
+    # Einzeln: Fehlt eine Unit (containerd heisst nicht ueberall so), soll
+    # das die anderen nicht mitreissen.
+    for unit in containerd.service docker.socket docker.service; do
+        systemctl enable --now "$unit" >/dev/null 2>&1 || true
+    done
+    sleep 2
+    if ! docker info >/dev/null 2>&1; then
+        error "Docker-Daemon startet nicht. Letzte Meldungen:"
+        journalctl -u docker.service -n 20 --no-pager >&2 || true
+        die "Bitte die Meldungen oben pruefen, dann install.sh erneut ausfuehren."
+    fi
+fi
 
 info "OS: ${ID:-unknown} | Arch: ${ARCH} (${GOARCH}) | Docker: $(docker --version | head -1) | Compose: $(docker compose version --short 2>/dev/null || echo '?')"
 
