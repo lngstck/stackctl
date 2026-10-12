@@ -27,6 +27,7 @@ type fakePublisher struct {
 	adminStopped int
 	adminErr     error
 	adminStatus  string
+	authStatus   string // "" means running
 
 	refreshed int // Refresh calls
 }
@@ -36,10 +37,15 @@ func (f *fakePublisher) Refresh() error {
 	f.refreshed++
 	return nil
 }
-func (f *fakePublisher) EnsureAuth() error  { return nil }
-func (f *fakePublisher) AuthStatus() string { return publish.StatusRunning }
-func (f *fakePublisher) StartAuth() error   { return nil }
-func (f *fakePublisher) StopAuth() error    { return nil }
+func (f *fakePublisher) EnsureAuth() error { return nil }
+func (f *fakePublisher) AuthStatus() string {
+	if f.authStatus != "" {
+		return f.authStatus
+	}
+	return publish.StatusRunning
+}
+func (f *fakePublisher) StartAuth() error { return nil }
+func (f *fakePublisher) StopAuth() error  { return nil }
 func (f *fakePublisher) StartAdmin(port int) error {
 	if f.adminErr != nil {
 		return f.adminErr

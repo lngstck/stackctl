@@ -19,33 +19,26 @@ func stateWith(ids ...string) *config.State {
 	return st
 }
 
-// Frisches System: alle Pflicht-Dienste fehlen → je eine danger-Karte in
-// Installations-Reihenfolge, mit Direktlink aufs Install-Formular.
+// Fehlende Pflicht-Dienste sind eine Aufgabe mit einem Knopf, nicht eine
+// Karte pro Dienst.
 func TestMissingInfraIssues(t *testing.T) {
 	issues := missingInfraIssues(stateWith())
-	want := []string{"/apps/postgres/install", "/apps/dex/install", "/apps/caddy/install"}
-	if len(issues) != len(want) {
-		t.Fatalf("issues auf leerem State: want %d, got %d", len(want), len(issues))
+	if len(issues) != 1 {
+		t.Fatalf("leerer State: %d Karten, want 1", len(issues))
 	}
-	for i, action := range want {
-		if issues[i].Action != action {
-			t.Errorf("Karte %d: Action = %q, want %q", i, issues[i].Action, action)
-		}
-	}
-	for _, is := range issues {
-		if is.Level != "danger" {
-			t.Errorf("Level: want danger, got %q (%s)", is.Level, is.Title)
-		}
-		if is.ActionLabel == "" || is.Detail == "" {
-			t.Errorf("Karte %q ohne Detail/ActionLabel", is.Title)
-		}
+	if is := issues[0]; is.PostTo != "/system/infra" || is.ActionLabel == "" || is.Level == "danger" {
+		t.Errorf("Karte = %+v", is)
 	}
 
-	if got := missingInfraIssues(stateWith("postgres", "dex")); len(got) != 1 || got[0].Action != "/apps/caddy/install" {
-		t.Errorf("ohne Proxy: want genau die caddy-Karte, got %+v", got)
+	got := missingInfraIssues(stateWith("postgres", "dex"))
+	if len(got) != 1 || !strings.Contains(got[0].Detail, "Webzugang") || strings.Contains(got[0].Detail, "Datenbank") {
+		t.Errorf("ohne Proxy: want eine Karte, die nur den Webzugang nennt, got %+v", got)
 	}
 	if got := missingInfraIssues(stateWith("postgres", "dex", "caddy")); len(got) != 0 {
 		t.Errorf("alle installiert: want keine Karten, got %+v", got)
+	}
+	if ids := missingInfraIDs(stateWith("dex")); strings.Join(ids, ",") != "postgres,caddy" {
+		t.Errorf("missingInfraIDs = %v, want Reihenfolge postgres,caddy", ids)
 	}
 }
 
@@ -117,10 +110,9 @@ func TestRenderDashboardWithMissingInfra(t *testing.T) {
 	// erscheinen, zusammen mit dem "Noch keine Apps"-Hinweis.
 	for _, want := range []string{
 		"Noch keine Apps installiert",
-		"noch nicht installiert",
-		"/apps/postgres/install",
-		"/apps/dex/install",
-		"Jetzt installieren",
+		"Grundversorgung einrichten",
+		`action="/system/infra"`,
+		"Jetzt einrichten",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("rendered dashboard missing %q", want)
