@@ -105,7 +105,7 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+		http.Error(w, "Ungültige Formulardaten", http.StatusBadRequest)
 		return
 	}
 
@@ -155,7 +155,7 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		data.SchoolSlug = schoolSlug
 	}
 	if err := config.ValidateSlug(schoolSlug); err != nil {
-		data.Error = fmt.Sprintf("Slug ungueltig: %v", err)
+		data.Error = fmt.Sprintf("Kennung ungültig: %v", err)
 		s.render(w, "setup.html.tmpl", data)
 		return
 	}
@@ -165,7 +165,7 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if password != passwordConfirm {
-		data.Error = "Passwoerter stimmen nicht ueberein."
+		data.Error = "Die Passwörter stimmen nicht überein."
 		s.render(w, "setup.html.tmpl", data)
 		return
 	}

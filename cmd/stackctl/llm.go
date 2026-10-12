@@ -65,7 +65,7 @@ func llmUsage(w io.Writer) {
 	fmt.Fprintln(w, "  reload                                   SIGHUP llmd")
 	fmt.Fprintln(w, "  provider add|list|rm|show|set-key        Upstream-Provider inkl. API-Keys")
 	fmt.Fprintln(w, "  persona  add|edit|list|rm|show|set       Schul-eigene Personas")
-	fmt.Fprintln(w, "  key      create|list|revoke              API-Keys fuer Clients (Open WebUI etc.)")
+	fmt.Fprintln(w, "  key      create|list|revoke              API-Keys für Clients (Open WebUI etc.)")
 }
 
 // === status / reload =======================================================
@@ -420,7 +420,7 @@ func cmdPersonaAdd(args []string, stdout, stderr io.Writer) int {
 	var prompt string
 	if !*noPrompt {
 		prompt, err = readPrompt(*promptFile, *promptStdin,
-			"# System-Prompt fuer Persona "+*id+"\n# Kommentarzeilen mit # werden entfernt. Leer lassen = Passthrough.\n")
+			"# System-Prompt für Persona "+*id+"\n# Kommentarzeilen mit # werden entfernt. Leer lassen = Passthrough.\n")
 		if err != nil {
 			fmt.Fprintf(stderr, "prompt: %v\n", err)
 			return 1

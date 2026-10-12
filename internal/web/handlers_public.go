@@ -144,7 +144,7 @@ func (s *Server) handlePublicHealth(w http.ResponseWriter, r *http.Request) {
 // recovery from a broken login route would be restarting stackctl.
 func (s *Server) handleAuthPublishStart(w http.ResponseWriter, r *http.Request) {
 	if s.publisher == nil {
-		http.Redirect(w, r, "/public?notice=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice="+url.QueryEscape("Der Webzugang ist nicht eingerichtet."), http.StatusSeeOther)
 		return
 	}
 	if err := s.publisher.StartAuth(); err != nil {
@@ -158,7 +158,7 @@ func (s *Server) handleAuthPublishStart(w http.ResponseWriter, r *http.Request) 
 // until stackctl restarts (EnsureAuth runs at startup).
 func (s *Server) handleAuthPublishStop(w http.ResponseWriter, r *http.Request) {
 	if s.publisher == nil {
-		http.Redirect(w, r, "/public?notice=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice="+url.QueryEscape("Der Webzugang ist nicht eingerichtet."), http.StatusSeeOther)
 		return
 	}
 	if err := s.publisher.StopAuth(); err != nil {
@@ -199,13 +199,13 @@ func (s *Server) adminLocalAddr() string {
 // point until the route has proven itself.
 func (s *Server) handleAdminPublishStart(w http.ResponseWriter, r *http.Request) {
 	if s.publisher == nil {
-		http.Redirect(w, r, "/public?notice=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice="+url.QueryEscape("Der Webzugang ist nicht eingerichtet."), http.StatusSeeOther)
 		return
 	}
 	if err := s.publisher.StartAdmin(s.listenPort); err != nil {
 		log.Printf("web: publish admin UI: %v", err)
 		http.Redirect(w, r, "/public?notice="+url.QueryEscape(
-			fmt.Sprintf("Oeffentlicher Zugang zur Verwaltung fehlgeschlagen: %v", err)), http.StatusSeeOther)
+			fmt.Sprintf("Die Adresse der Verwaltung ließ sich nicht einschalten: %v", err)), http.StatusSeeOther)
 		return
 	}
 
@@ -221,13 +221,13 @@ func (s *Server) handleAdminPublishStart(w http.ResponseWriter, r *http.Request)
 // port was never closed, so this cannot strand the admin.
 func (s *Server) handleAdminPublishStop(w http.ResponseWriter, r *http.Request) {
 	if s.publisher == nil {
-		http.Redirect(w, r, "/public?notice=Kein+Publisher+verfuegbar", http.StatusSeeOther)
+		http.Redirect(w, r, "/public?notice="+url.QueryEscape("Der Webzugang ist nicht eingerichtet."), http.StatusSeeOther)
 		return
 	}
 	if err := s.publisher.StopAdmin(); err != nil {
 		log.Printf("web: unpublish admin UI: %v", err)
 		http.Redirect(w, r, "/public?notice="+url.QueryEscape(
-			fmt.Sprintf("Zuruecknehmen fehlgeschlagen: %v", err)), http.StatusSeeOther)
+			fmt.Sprintf("Die Adresse der Verwaltung ließ sich nicht abschalten: %v", err)), http.StatusSeeOther)
 		return
 	}
 
@@ -248,7 +248,7 @@ func (s *Server) handleAdminPublishStop(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleAppPublishEnable(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	if s.publisher == nil {
-		http.Redirect(w, r, withMsg(returnTo(r, "/apps/"+appID), "Kein Publisher verfügbar", true), http.StatusSeeOther)
+		http.Redirect(w, r, withMsg(returnTo(r, "/apps/"+appID), "Der Webzugang ist nicht eingerichtet.", true), http.StatusSeeOther)
 		return
 	}
 
@@ -278,7 +278,7 @@ func (s *Server) handleAppPublishEnable(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleAppPublishDisable(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	if s.publisher == nil {
-		http.Redirect(w, r, withMsg(returnTo(r, "/apps/"+appID), "Kein Publisher verfügbar", true), http.StatusSeeOther)
+		http.Redirect(w, r, withMsg(returnTo(r, "/apps/"+appID), "Der Webzugang ist nicht eingerichtet.", true), http.StatusSeeOther)
 		return
 	}
 

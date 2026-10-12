@@ -100,7 +100,7 @@ type notice struct {
 var infraDisplayNames = map[string]string{
 	"postgres": "Datenbank (PostgreSQL)",
 	"dex":      "Anmeldung (Dex)",
-	"caddy":    "Reverse-Proxy (Caddy)",
+	"caddy":    "Webzugang (Caddy)",
 }
 
 // mandatoryAppIDs liefert die Pflicht-Dienste in sinnvoller
@@ -228,7 +228,7 @@ func (s *Server) buildStart(r *http.Request) startData {
 				Level:       "danger",
 				Icon:        "key",
 				Title:       "Anmeldung nicht erreichbar",
-				Detail:      "Der Login wird gerade nicht ausgeliefert, niemand kommt in die Apps. Läuft der Reverse-Proxy?",
+				Detail:      "Der Login wird gerade nicht ausgeliefert, niemand kommt in die Apps. Läuft der Webzugang?",
 				Action:      "/public",
 				ActionLabel: "Zugang prüfen",
 			})
@@ -265,7 +265,7 @@ func (s *Server) buildStart(r *http.Request) startData {
 					Level:       "warning",
 					Icon:        "globe",
 					Title:       "Adresse von " + sheet.Name + " nicht erreichbar",
-					Detail:      "Die Adresse ist eingeschaltet, wird aber gerade nicht ausgeliefert. Läuft der Reverse-Proxy?",
+					Detail:      "Die Adresse ist eingeschaltet, wird aber gerade nicht ausgeliefert. Läuft der Webzugang?",
 					AppID:       id,
 					Action:      "/public",
 					ActionLabel: "Zugang prüfen",

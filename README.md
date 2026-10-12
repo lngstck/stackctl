@@ -8,10 +8,11 @@ Control plane für [learningstack](https://learningstack.online) — die selbst-
 
 stackctl ist das einzige Tool, das ein Schul-Admin auf einem frischen Linux-Server installiert, um darauf Docker-basierte Anwendungen für den Unterricht zu betreiben. Es ersetzt "Ich muss wissen, was Docker, OIDC und docker-compose sind" durch eine Web-Oberfläche mit verständlichen Knöpfen.
 
-- **Pflicht-Container**: PostgreSQL, [Dex](https://dexidp.io) (OIDC) und [Caddy](https://caddyserver.com) (HTTPS) werden automatisch eingerichtet.
-- **Apps aus dem Katalog**: Open WebUI, PyLearn, Sponsorenlauf, … ein Klick zur Installation.
+- **Grundversorgung**: Datenbank (PostgreSQL), Anmeldung ([Dex](https://dexidp.io)) und Webzugang ([Caddy](https://caddyserver.com), HTTPS) richtet stackctl direkt nach der Einrichtung ein.
+- **Apps aus dem Katalog**: Open WebUI, PyLearn, Open Roberta Lab, Sponsorenlauf, … ein Klick zur Installation.
+- **KI**: Ein KI-Dienst der Schule verbindet die Apps mit KI-Anbietern, etwa OpenAI oder einem Ollama im Schulnetz. Welche Modelle es gibt und mit welchem System-Prompt, legt die Schule in stackctl fest.
 - **Nur im Schulnetz**: Login und Apps laufen unter der Domain der Schule mit echtem Zertifikat, erreichbar nur im Schulnetz. Keine Schülerdaten verlassen das Schulnetz. Direkter Betrieb am Internet ist als erweiterte Option möglich. Siehe [Betriebsarten](docs/betriebsarten.md).
-- **Single-Sign-On**: Alle Apps authentifizieren gegen den lokalen Dex. Er spricht direkt mit dem Anmeldedienst der Schule (z. B. moin.schule, Wobila), kein Dritter dazwischen.
+- **Single-Sign-On**: Alle Apps melden sich über den lokalen Dex an. Bis der Anmeldedienst der Schule angebunden ist (z. B. moin.schule, Wobila), gibt es Testkonten für Lehrkräfte und Schüler:innen.
 
 ## Installation
 
@@ -40,16 +41,19 @@ Am Ende zeigt das Skript einen Link zur Einrichtung, z. B. `http://192.168.1.10:
 Eine bestimmte Version installieren, etwa einen Vorab-Stand:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo STACKCTL_VERSION=v0.12.0-rc1 bash
+curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo STACKCTL_VERSION=v0.12.0-rc4 bash
 ```
 
 Der Assistent fragt nach der Domain der Schule und nach der Betriebsart. Für den Standard „nur im Schulnetz“ braucht es ein kostenloses Konto bei deSEC und zwei NS-Einträge beim DNS-Anbieter der Schule, die die Domain an deSEC übergeben — die [Betriebsarten](docs/betriebsarten.md) beschreiben, was wann nötig ist. Die Wahl fällt einmalig bei der Einrichtung.
+
+Nach der Einrichtung installiert stackctl die Grundversorgung von selbst, das dauert ein paar Minuten. Im Schulnetz braucht das erste Zertifikat danach meist noch 5 bis 10 Minuten; „Zugang“ zeigt so lange „wird geholt“.
 
 ## Entwicklung
 
 ```bash
 # Lokal auf dem Mac
 make dev              # startet stackctl web --dev auf :8090
+scripts/vorschau.sh   # Oberfläche mit Testdaten ohne Docker auf :8091
 
 # Cross-compile für Linux
 make build-all        # erzeugt dist/stackctl-linux-{amd64,arm64}

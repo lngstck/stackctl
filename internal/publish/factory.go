@@ -32,7 +32,7 @@ func For(cfg *config.Config) Publisher {
 // silently publishing nothing.
 type unsupported struct{ kind string }
 
-var errUnsupported = errors.New("diese Betriebsart wird von dieser stackctl-Version nicht unterstuetzt")
+var errUnsupported = errors.New("diese Betriebsart wird von dieser stackctl-Version nicht unterstützt")
 
 func (u unsupported) Kind() string               { return u.kind }
 func (u unsupported) Refresh() error             { return errUnsupported }

@@ -144,7 +144,7 @@ func TestRenderAppsWithMandatoryBadge(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("render status = %d, want 200; body:\n%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "Pflicht-Dienst — zuerst installieren") {
+	if !strings.Contains(rec.Body.String(), "Gehört zur Grundversorgung") {
 		t.Error("rendered apps page missing mandatory badge")
 	}
 }

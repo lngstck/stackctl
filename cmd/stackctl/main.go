@@ -180,10 +180,10 @@ func cmdSetupCode(stdout, stderr io.Writer) int {
 	data, err := os.ReadFile(paths.SetupCodeFile())
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		fmt.Fprintln(stderr, "Noch kein Einrichtungscode. Laeuft stackctl? systemctl status stackctl")
+		fmt.Fprintln(stderr, "Noch kein Einrichtungscode. Läuft stackctl? systemctl status stackctl")
 		return 1
 	case errors.Is(err, os.ErrPermission):
-		fmt.Fprintln(stderr, "Keine Berechtigung. Bitte mit sudo ausfuehren: sudo stackctl setup-code")
+		fmt.Fprintln(stderr, "Keine Berechtigung. Bitte mit sudo ausführen: sudo stackctl setup-code")
 		return 1
 	case err != nil:
 		fmt.Fprintf(stderr, "stackctl setup-code: %v\n", err)
