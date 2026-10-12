@@ -255,7 +255,16 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	// stackctl restart.
 	s.bootstrapPublisher()
 
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	// Whoever got here had the setup code and just chose the password:
+	// asking for it again on the next page would only be a hurdle. They land
+	// on the job that installs the basic services, which nothing works
+	// without and which needs no further answers.
+	setSessionCookie(w, r, s.sessions.create())
+	if job := s.startInfraAfterSetup(); job != nil {
+		http.Redirect(w, r, "/jobs/"+job.ID, http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // checkSetupCode validates the request's setup_code field. Misses count

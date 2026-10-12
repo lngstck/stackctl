@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/lngstck/stackctl/internal/config"
+	"github.com/lngstck/stackctl/internal/lock"
 	"github.com/lngstck/stackctl/internal/paths"
 	"github.com/lngstck/stackctl/internal/preflight"
 )
@@ -94,8 +95,16 @@ func TestResolvePublicMode(t *testing.T) {
 // Nach dem Setup ist die Installation sofort bereit: kein Paket an einen
 // Betreiber, kein Warten auf eine Freischaltung, kein SSH-Schluessel.
 func TestSetupGoesStraightToReady(t *testing.T) {
-	s, _ := testServerWithPublisher(t, &fakePublisher{})
+	s, st := testServerWithPublisher(t, &fakePublisher{})
 	s.cfg = config.Default()
+	s.jobs = newJobStore()
+	started := make(chan []string, 1)
+	s.infraRunner = func(h *lock.Handle, job *Job, ids []string) {
+		defer h.Release()
+		job.finish(true, "")
+		started <- ids
+	}
+	delete(st.Containers, "pylearn")
 	if err := s.loadTemplates(); err != nil {
 		t.Fatalf("loadTemplates: %v", err)
 	}
@@ -116,8 +125,15 @@ func TestSetupGoesStraightToReady(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.handleSetupPost(rec, req)
 
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
-		t.Fatalf("status = %d, Location = %q; want 303 → /login\n%s", rec.Code, rec.Header().Get("Location"), rec.Body.String())
+	// Gleich angemeldet und mitten in der Einrichtung der Grundversorgung.
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/jobs/") {
+		t.Fatalf("status = %d, Location = %q; want 303 → /jobs/…\n%s", rec.Code, rec.Header().Get("Location"), rec.Body.String())
+	}
+	if c := rec.Result().Cookies(); len(c) != 1 || c[0].Name != sessionCookie || c[0].Value == "" {
+		t.Errorf("keine Sitzung nach dem Setup: %+v", c)
+	}
+	if ids := <-started; strings.Join(ids, ",") != "caddy,postgres,dex" {
+		t.Errorf("Grundversorgung: %v, want caddy,postgres,dex", ids)
 	}
 
 	saved, err := config.Load()

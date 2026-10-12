@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -204,4 +205,38 @@ func findCheck(checks []Check, id string) (Check, bool) {
 		}
 	}
 	return Check{}, false
+}
+
+// In den ersten Minuten nach der Installation hat Caddy noch kein
+// Zertifikat und antwortet mit „tls: internal error“. Das ist Warten, kein
+// Fehler — danach schon.
+func TestLiveCertificatePending(t *testing.T) {
+	noCert := &net.OpError{Op: "remote error", Err: errors.New("tls: internal error")}
+	for _, tt := range []struct {
+		name  string
+		since time.Time
+		err   error
+		want  string
+	}{
+		{"frisch installiert", time.Now().Add(-3 * time.Minute), noCert, StatusWait},
+		{"lange her", time.Now().Add(-2 * time.Hour), noCert, StatusFail},
+		{"unbekannt seit wann", time.Time{}, noCert, StatusFail},
+		{"anderer Fehler", time.Now().Add(-3 * time.Minute), errors.New("connection refused"), StatusFail},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p := liveProber(fakeResolver{}, nil, nil, tt.err)
+			p.HTTPStatus = func(context.Context, string) (int, error) { return 0, tt.err }
+			checks := p.Live(context.Background(), LiveInput{
+				Mode: ModeDirect, AuthHost: "auth.ls.gym-phoenix.de", ProxySince: tt.since,
+			})
+			got, _ := findCheck(checks, "endpoint")
+			if got.Status != tt.want {
+				t.Errorf("endpoint = %q, want %q (%s)", got.Status, tt.want, got.Detail)
+			}
+			cert, _ := findCheck(checks, "certificate")
+			if tt.want == StatusWait && (cert.Status != StatusWait || !strings.Contains(cert.Detail, "seit 3 Min.")) {
+				t.Errorf("certificate = %q (%s)", cert.Status, cert.Detail)
+			}
+		})
+	}
 }

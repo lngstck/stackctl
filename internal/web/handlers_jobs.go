@@ -40,6 +40,8 @@ func navForJobKind(kind string) string {
 		return "backups"
 	case "selfupdate":
 		return "settings"
+	case infraJobKind:
+		return "dashboard"
 	default: // install, update
 		return "apps"
 	}

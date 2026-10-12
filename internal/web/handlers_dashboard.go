@@ -32,15 +32,18 @@ type startData struct {
 	Mode       string // config.TransportLocal | config.TransportDirect
 	BaseDomain string
 
-	Shelves   []shelf
-	Apps      []appSheet // shelf apps, for the list view
-	HasApps   bool
-	Infra     []appSheet
-	InfraDown []string // names of basic services that are not running
-	Sheets    []appSheet
-	Internet  bool // at least one app is reachable from the internet
-	Updates   bool
-	Alerts    bool
+	Shelves []shelf
+	Apps    []appSheet // shelf apps, for the list view
+	HasApps bool
+	// InfraMissing: apps cannot be installed yet, so the empty shelf does
+	// not send the admin to the catalog.
+	InfraMissing bool
+	Infra        []appSheet
+	InfraDown    []string // names of basic services that are not running
+	Sheets       []appSheet
+	Internet     bool // at least one app is reachable from the internet
+	Updates      bool
+	Alerts       bool
 }
 
 // shelf is one category of installed apps on the start screen.
@@ -119,35 +122,31 @@ func isMandatoryApp(id string) bool {
 	return false
 }
 
-// missingInfraDetails erklärt pro Pflicht-Dienst, warum er installiert werden
-// muss — der Admin auf einem frisch eingerichteten System kennt weder
-// "postgres" noch "dex".
-var missingInfraDetails = map[string]string{
-	"postgres": "Fast alle Apps speichern ihre Daten darin. Bitte zuerst installieren.",
-	"dex":      "Ohne sie meldet sich niemand in den Apps an.",
-	"caddy":    "Er holt die Zertifikate und verteilt die Anfragen an die Apps. Ohne ihn ist keine Adresse erreichbar.",
-}
-
-// missingInfraIssues liefert Hinweise für Pflicht-Dienste, die noch gar
-// nicht installiert sind. Ohne sie landet ein frisch eingerichteter Admin
-// auf einem leeren Start und erfährt erst beim Installieren einer App von
-// den Abhängigkeiten.
+// missingInfraIssues liefert den einen Hinweis auf fehlende Pflicht-Dienste.
+// Ein Hinweis, nicht einer pro Dienst: Für den Admin ist es eine Aufgabe mit
+// einem Knopf, der alles Fehlende nacheinander installiert (infra.go). Auf
+// einem frischen System ist das der normale nächste Schritt, keine Störung.
 func missingInfraIssues(st *config.State) []dashIssue {
-	var issues []dashIssue
-	for _, id := range mandatoryAppIDs() {
-		if _, installed := st.Containers[id]; installed {
-			continue
-		}
-		issues = append(issues, dashIssue{
-			Level:       "danger",
-			Icon:        "plus",
-			Title:       infraDisplayNames[id] + " noch nicht installiert",
-			Detail:      missingInfraDetails[id],
-			Action:      "/apps/" + id + "/install",
-			ActionLabel: "Jetzt installieren",
-		})
+	missing := missingInfraIDs(st)
+	if len(missing) == 0 {
+		return nil
 	}
-	return issues
+	names := make([]string, len(missing))
+	for i, id := range missing {
+		names[i] = infraShortNames[id]
+	}
+	detail := "Datenbank, Anmeldung und Webzugang braucht jede App. stackctl installiert sie nacheinander, das dauert ein paar Minuten."
+	if len(missing) < len(mandatoryAppIDs()) {
+		detail = "Es fehlt: " + strings.Join(names, ", ") + ". Ohne das funktionieren Apps nicht."
+	}
+	return []dashIssue{{
+		Level:       "warning",
+		Icon:        "server",
+		Title:       "Grundversorgung einrichten",
+		Detail:      detail,
+		PostTo:      "/system/infra",
+		ActionLabel: "Jetzt einrichten",
+	}}
 }
 
 // accountIssues meldet, wenn Dex läuft, sich aber niemand anmelden kann:
@@ -212,13 +211,18 @@ func (s *Server) buildStart(r *http.Request) startData {
 	// auf einem frisch eingerichteten System das Erste, was der Admin tun
 	// muss.
 	var issues []dashIssue
-	issues = append(issues, missingInfraIssues(st)...)
+	// Läuft die Einrichtung schon, zeigt Start ihren Fortschritt (unten),
+	// nicht noch einmal die Aufforderung.
+	if !s.infraJobRunning() {
+		issues = append(issues, missingInfraIssues(st)...)
+	}
 	issues = append(issues, s.dnsSyncIssues()...)
 	issues = append(issues, accountIssues(st, s.cfg)...)
 
 	// Die Adresse des Logins — die Lebensader für OIDC. Liegt sie, kann sich
-	// niemand mehr mit dem Schulkonto anmelden.
-	if s.publisher != nil {
+	// niemand mehr mit dem Schulkonto anmelden. Fehlen Anmeldung oder
+	// Webzugang noch, ist das nur die Folge davon und kein eigener Hinweis.
+	if s.publisher != nil && st.IsInstalled("dex") && st.IsInstalled("caddy") {
 		if status := s.publisher.AuthStatus(); status != publish.StatusRunning {
 			issues = append(issues, dashIssue{
 				Level:       "danger",
@@ -330,6 +334,7 @@ func (s *Server) buildStart(r *http.Request) startData {
 
 	data.Shelves = shelvesFor(data.Apps)
 	data.HasApps = len(data.Apps) > 0
+	data.InfraMissing = len(missingInfraIDs(st)) > 0
 	data.Headline, data.Summary = startSentence(needs, data.Apps, len(updates))
 
 	if infos, err := backup.List(); err != nil {

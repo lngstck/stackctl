@@ -57,7 +57,10 @@ type Server struct {
 	pages     map[string]*template.Template // page name → compiled template
 	publisher publish.Publisher
 	jobs      *jobStore
-	stateMu   sync.Mutex // guards s.state access against background job commits
+	// infraRunner runs the basic-services job; nil means runInfraJob. Tests
+	// swap it, the real one needs Docker.
+	infraRunner func(h *lock.Handle, job *Job, ids []string)
+	stateMu     sync.Mutex // guards s.state access against background job commits
 	// listenPort is the port this server answers on — needed when publishing
 	// the UI itself, where stackctl is its own upstream.
 	listenPort int
@@ -251,6 +254,7 @@ func (s *Server) routes() {
 	// apps.html.tmpl + die System-Tab in settings.html.tmpl unveraendert
 	// posten koennen. /system selbst gibt jetzt 404.
 	s.mux.HandleFunc("POST /system/update", s.authPost(s.handleSystemUpdate))
+	s.mux.HandleFunc("POST /system/infra", s.authPost(s.handleInfraInstall))
 	s.mux.HandleFunc("POST /system/catalog/sync", s.authPost(s.handleCatalogSync))
 
 	// Job progress (ready + auth). The page polls the status endpoint while a

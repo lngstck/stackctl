@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -21,6 +22,12 @@ import (
 // site up.
 const CertWarnDays = 14
 
+// CertPendingWindow is how long after the proxy was installed a missing
+// certificate counts as "still being fetched" rather than broken. In the
+// school network Caddy waits five minutes for deSEC before Let's Encrypt
+// looks (caddy.dnsPropagationDelay); with one retry twenty minutes is ample.
+const CertPendingWindow = 20 * time.Minute
+
 // LiveInput describes a running install.
 type LiveInput struct {
 	Mode       string
@@ -32,6 +39,10 @@ type LiveInput struct {
 	// install has, whatever else is published, which makes it the natural
 	// probe target.
 	AuthHost string
+	// ProxySince is when the proxy was installed; zero if unknown. Until it
+	// has its first certificate it answers TLS with an internal-error alert,
+	// which is waiting, not breakage (see CertPendingWindow).
+	ProxySince time.Time
 }
 
 // Live runs the checks that matter while the system is in operation.
@@ -62,15 +73,31 @@ func (p *Prober) Live(ctx context.Context, in LiveInput) []Check {
 		checks = append(checks, p.checkPointsHere(resolved, in.BaseDomain))
 	}
 
-	checks = append(checks, p.checkEndpoint(ctx, in.AuthHost))
-	checks = append(checks, p.checkCertificate(ctx, in.AuthHost, in.Mode))
+	checks = append(checks, p.checkEndpoint(ctx, in.AuthHost, in.ProxySince))
+	checks = append(checks, p.checkCertificate(ctx, in.AuthHost, in.Mode, in.ProxySince))
 	return checks
+}
+
+// certPending reports whether err is the proxy saying it has no certificate
+// yet, within CertPendingWindow of being installed. Go reports the remote
+// alert as a net.OpError around an unexported type, hence the text.
+func certPending(err error, since time.Time) bool {
+	if since.IsZero() || time.Since(since) > CertPendingWindow {
+		return false
+	}
+	var op *net.OpError
+	return errors.As(err, &op) && op.Op == "remote error" && op.Err != nil && op.Err.Error() == "tls: internal error"
+}
+
+// pendingDetail says how long the certificate has been on its way.
+func pendingDetail(since time.Time) string {
+	return fmt.Sprintf("Das Zertifikat wird noch geholt, seit %d Min. Nach der Installation des Webzugangs dauert das meist 5 bis 10 Minuten.", int(time.Since(since).Minutes()))
 }
 
 // checkEndpoint asks the public address the same question a browser would.
 // Everything else on this page can look right while this one fails, which is
 // exactly why it is worth having.
-func (p *Prober) checkEndpoint(ctx context.Context, host string) Check {
+func (p *Prober) checkEndpoint(ctx context.Context, host string, proxySince time.Time) Check {
 	const (
 		id    = "endpoint"
 		title = "Login erreichbar"
@@ -80,6 +107,9 @@ func (p *Prober) checkEndpoint(ctx context.Context, host string) Check {
 	}
 
 	status, err := p.httpStatus(ctx, host)
+	if err != nil && certPending(err, proxySince) {
+		return Check{ID: id, Title: title, Status: StatusWait, Detail: pendingDetail(proxySince)}
+	}
 	if err != nil {
 		return Check{ID: id, Title: title, Status: StatusFail,
 			Detail: fmt.Sprintf("%s antwortet nicht: %v", host, err)}
@@ -120,7 +150,7 @@ func (p *Prober) httpStatus(ctx context.Context, host string) (int, error) {
 // checkCertificate reports what a browser would see. Reading Caddy's storage
 // directly would be quicker but would only prove what Caddy believes it has —
 // not what it actually serves.
-func (p *Prober) checkCertificate(ctx context.Context, host, mode string) Check {
+func (p *Prober) checkCertificate(ctx context.Context, host, mode string, proxySince time.Time) Check {
 	const (
 		id    = "certificate"
 		title = "Zertifikat"
@@ -130,6 +160,9 @@ func (p *Prober) checkCertificate(ctx context.Context, host, mode string) Check 
 	}
 
 	cert, err := p.peerCertificate(ctx, host)
+	if err != nil && certPending(err, proxySince) {
+		return Check{ID: id, Title: title, Status: StatusWait, Detail: pendingDetail(proxySince)}
+	}
 	if err != nil {
 		// A failure here is nearly always the endpoint being down, which the
 		// check above already reports in plain words. Repeating it as a

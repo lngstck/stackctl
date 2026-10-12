@@ -111,8 +111,12 @@
   <div class="ls-card ls-empty">
     {{template "dock-icon" "bag"}}
     <strong>Noch keine Apps installiert</strong>
+    {{if .InfraMissing}}
+    <span>Erst die Grundversorgung, dann Apps aus dem Katalog.</span>
+    {{else}}
     <span>Im Katalog findest du Apps für den Unterricht.</span>
     <a class="ls-btn" href="/apps">Zum Katalog</a>
+    {{end}}
   </div>
   {{end}}
 </div>

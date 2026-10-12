@@ -565,18 +565,28 @@ func (s *Server) handleAppUpdate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/jobs/"+job.ID, http.StatusSeeOther)
 }
 
-// runAppJob is the shared worker body for install and update jobs. It loads a
-// fresh env, snapshots state into a private clone, reconstructs the OIDC client
-// list, runs the supplied operation (which reports progress to the job), then
-// persists env, dex config and the mutated state clone — all off the request
-// goroutine. It always releases the op-lock and finishes the job.
-func (s *Server) runAppJob(
-	h *lock.Handle,
-	job *Job,
-	op func(working *config.State, env *envfile.File, allDefs []*catalog.Definition, dexClients []dex.Client) (*install.Result, []dex.Client, error),
-) {
-	defer h.Release()
+// appOp is one install or update, run on a prepared state clone.
+type appOp func(working *config.State, env *envfile.File, allDefs []*catalog.Definition, dexClients []dex.Client) (*install.Result, []dex.Client, error)
 
+// runAppJob is the worker body for install and update jobs. It always
+// releases the op-lock and finishes the job.
+func (s *Server) runAppJob(h *lock.Handle, job *Job, op appOp) {
+	defer h.Release()
+	result, notes, errMsg := s.applyAppOp(job, job.Kind, job.AppID, op)
+	if result != nil {
+		job.setResult(result.SecretsToShow, append(result.Messages, notes...))
+	}
+	job.finish(result != nil && result.Success, errMsg)
+}
+
+// applyAppOp loads a fresh env, snapshots state into a private clone,
+// reconstructs the OIDC client list, runs op, then persists env, dex config
+// and the mutated state clone — all off the request goroutine. A job may call
+// it several times in a row (the basic services, infra.go); each call starts
+// from what the previous one committed. It returns op's result, stackctl's
+// own notes on it (the address it gave the app) apart from the catalog's
+// messages, and on failure the reason.
+func (s *Server) applyAppOp(job *Job, kind, appID string, op appOp) (*install.Result, []string, string) {
 	env, err := envfile.Load(paths.EnvFile())
 	if err != nil {
 		env = envfile.New()
@@ -595,12 +605,13 @@ func (s *Server) runAppJob(
 	if opErr != nil {
 		log.Printf("web: job %s (%s): %v", job.ID, job.Kind, opErr)
 	}
-	if opErr == nil && result != nil && result.Success && job.Kind == "install" {
-		if msg := s.autoPublish(working, job.AppID); msg != "" {
-			result.Messages = append(result.Messages, msg)
+	var notes []string
+	if opErr == nil && result != nil && result.Success && kind == "install" {
+		if msg := s.autoPublish(working, appID); msg != "" {
+			notes = append(notes, msg)
 		}
-		if msg := s.autoPublishAdmin(working, job.AppID); msg != "" {
-			result.Messages = append(result.Messages, msg)
+		if msg := s.autoPublishAdmin(working, appID); msg != "" {
+			notes = append(notes, msg)
 		}
 	}
 
@@ -620,10 +631,6 @@ func (s *Server) runAppJob(
 		}
 	}
 
-	if result != nil {
-		job.setResult(result.SecretsToShow, result.Messages)
-	}
-	success := result != nil && result.Success
 	errMsg := ""
 	switch {
 	case opErr != nil:
@@ -631,7 +638,7 @@ func (s *Server) runAppJob(
 	case result != nil && result.Error != "":
 		errMsg = result.Error
 	}
-	job.finish(success, errMsg)
+	return result, notes, errMsg
 }
 
 // autoPublish gives a freshly installed app its address when that address
