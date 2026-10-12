@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo bash
 #
 # Eine bestimmte Version, z.B. einen Vorab-Stand, den "latest" nicht zeigt:
-#   curl -fsSL .../install.sh | sudo STACKCTL_VERSION=v0.12.0-rc1 bash
+#   curl -fsSL .../install.sh | sudo STACKCTL_VERSION=v0.12.0-rc4 bash
 #
 # What it does:
 #   1. Checks OS, architecture, curl, Docker. On Debian 13 and later it
@@ -47,7 +47,7 @@ error() { echo -e "${RED}✗${NC} $*" >&2; }
 die()   { error "$@"; exit 1; }
 
 # --- Pre-flight checks ----------------------------------------------------
-[ "$(id -u)" -eq 0 ] || die "Bitte als root ausfuehren: sudo bash install.sh"
+[ "$(id -u)" -eq 0 ] || die "Bitte als root ausführen: sudo bash install.sh"
 
 # OS check.
 if [ -f /etc/os-release ]; then
@@ -65,7 +65,7 @@ ARCH="$(uname -m)"
 case "$ARCH" in
     x86_64)  GOARCH="amd64" ;;
     aarch64) GOARCH="arm64" ;;
-    *)       die "Nicht unterstuetzte Architektur: $ARCH (nur amd64/arm64)" ;;
+    *)       die "Nicht unterstützte Architektur: $ARCH (nur amd64/arm64)" ;;
 esac
 
 # Required tools.
@@ -95,7 +95,7 @@ fi
 if ! docker compose version >/dev/null 2>&1 && debian_with_docker; then
     apt_install docker-compose
 fi
-docker compose version >/dev/null 2>&1 || die "Docker-Compose-Plugin fehlt ('docker compose version' schlaegt fehl).
+docker compose version >/dev/null 2>&1 || die "Docker-Compose-Plugin fehlt ('docker compose version' schlägt fehl).
   stackctl braucht Docker Engine inkl. Compose-Plugin (nicht Snap).
   Installation: https://docs.docker.com/engine/install/ (docker-ce + docker-compose-plugin)"
 
@@ -104,7 +104,7 @@ docker compose version >/dev/null 2>&1 || die "Docker-Compose-Plugin fehlt ('doc
 # aber abgeschaltetes Docker (frisch aus apt, oder von Hand deaktiviert)
 # schaltet install.sh einmal selbst ein; scheitert das, zeigt es warum.
 if ! docker info >/dev/null 2>&1; then
-    info "Docker laeuft nicht, schalte es ein..."
+    info "Docker läuft nicht, schalte es ein..."
     # Einzeln: Fehlt eine Unit (containerd heisst nicht ueberall so), soll
     # das die anderen nicht mitreissen.
     for unit in containerd.service docker.socket docker.service; do
@@ -114,7 +114,7 @@ if ! docker info >/dev/null 2>&1; then
     if ! docker info >/dev/null 2>&1; then
         error "Docker-Daemon startet nicht. Letzte Meldungen:"
         journalctl -u docker.service -n 20 --no-pager >&2 || true
-        die "Bitte die Meldungen oben pruefen, dann install.sh erneut ausfuehren."
+        die "Bitte die Meldungen oben prüfen, dann install.sh erneut ausführen."
     fi
 fi
 
@@ -126,7 +126,7 @@ info "OS: ${ID:-unknown} | Arch: ${ARCH} (${GOARCH}) | Docker: $(docker --versio
 if command -v ss >/dev/null 2>&1 \
     && ss -tln 2>/dev/null | grep -Eq '[:.]8090[[:space:]]' \
     && ! systemctl is-active --quiet stackctl 2>/dev/null; then
-    warn "Port 8090 ist bereits belegt (und stackctl laeuft nicht). Der Web-UI-Start wird vermutlich fehlschlagen."
+    warn "Port 8090 ist bereits belegt (und stackctl läuft nicht). Der Web-UI-Start wird vermutlich fehlschlagen."
 fi
 
 # --- Create user and group ------------------------------------------------
@@ -194,16 +194,16 @@ fi
 # damit nicht die einzige Vertrauenskette.
 if ! curl -fsSL --retry 3 -o "$TMP_SUMS" "${RELEASE_URL}/SHA256SUMS"; then
     rm -f "$TMP_BIN" "$TMP_SUMS"
-    die "Pruefsummen-Datei SHA256SUMS fehlt im Release — Abbruch aus Sicherheitsgruenden."
+    die "Prüfsummen-Datei SHA256SUMS fehlt im Release — Abbruch aus Sicherheitsgründen."
 fi
 EXPECTED_SUM=$(awk -v f="$ASSET_NAME" '$2 == f || $2 == "*"f { print $1 }' "$TMP_SUMS")
 ACTUAL_SUM=$(sha256sum "$TMP_BIN" | awk '{ print $1 }')
 rm -f "$TMP_SUMS"
 if [ -z "$EXPECTED_SUM" ] || [ "$EXPECTED_SUM" != "$ACTUAL_SUM" ]; then
     rm -f "$TMP_BIN"
-    die "Pruefsumme stimmt nicht (erwartet ${EXPECTED_SUM:-?}, erhalten ${ACTUAL_SUM}) — nichts installiert."
+    die "Prüfsumme stimmt nicht (erwartet ${EXPECTED_SUM:-?}, erhalten ${ACTUAL_SUM}) — nichts installiert."
 fi
-info "Pruefsumme stimmt."
+info "Prüfsumme stimmt."
 
 chmod 755 "$TMP_BIN"
 chown "$USER:$GROUP" "$TMP_BIN"
@@ -212,7 +212,7 @@ chown "$USER:$GROUP" "$TMP_BIN"
 VERSION=$("$TMP_BIN" version 2>/dev/null || echo "")
 if [ -z "$VERSION" ]; then
     rm -f "$TMP_BIN"
-    die "Heruntergeladenes Binary ist nicht ausfuehrbar."
+    die "Heruntergeladenes Binary ist nicht ausführbar."
 fi
 
 mv -f "$TMP_BIN" "${INSTALL_DIR}/stackctl"
@@ -310,7 +310,7 @@ systemctl restart stackctl
 systemctl enable --now stackctl-autoupdate.timer
 
 info "stackctl-Service gestartet."
-info "Auto-Update-Timer aktiviert (laeuft naechtlich 03:00 +/- 1h)."
+info "Auto-Update-Timer aktiviert (läuft nächtlich 03:00 +/- 1h)."
 
 # --- Detect server IP -----------------------------------------------------
 SERVER_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[\d.]+' || hostname -I | awk '{print $1}' || echo "localhost")
@@ -337,21 +337,21 @@ fi
 # zeigen, woran es liegt, als die Admin ins Leere zu schicken.
 sleep 2
 if ! systemctl is-active --quiet stackctl; then
-    error "stackctl laeuft nicht. Die letzten Zeilen aus dem Journal:"
+    error "stackctl läuft nicht. Die letzten Zeilen aus dem Journal:"
     journalctl -u stackctl -n 20 --no-pager >&2 || true
-    die "Installation abgebrochen. Nach einer Korrektur install.sh einfach erneut ausfuehren."
+    die "Installation abgebrochen. Nach einer Korrektur install.sh einfach erneut ausführen."
 fi
 
 # --- Done -----------------------------------------------------------------
 echo ""
 echo -e "${BOLD}════════════════════════════════════════════════════${NC}"
-echo -e "${BOLD}  stackctl ist installiert und laeuft!${NC}"
+echo -e "${BOLD}  stackctl ist installiert und läuft!${NC}"
 echo ""
 if [ -n "$SETUP_LINK" ]; then
     echo -e "  Einrichtung im Browser starten:"
     echo -e "  ${GREEN}▸${NC} ${BOLD}${SETUP_LINK}${NC}"
     echo ""
-    echo -e "  Der Link enthaelt den Einrichtungscode. Nur an die Person"
+    echo -e "  Der Link enthält den Einrichtungscode. Nur an die Person"
     echo -e "  weitergeben, die einrichtet. Neu anzeigen: sudo stackctl setup-code"
 elif $SETUP_DONE; then
     echo -e "  ${GREEN}▸${NC} Web-UI:  ${BOLD}http://${SERVER_IP}:8090${NC}"

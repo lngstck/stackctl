@@ -50,7 +50,7 @@
         {{end}}
       </div>
     </div>
-    <p class="ls-list-hint">Die Anmeldung braucht jede App mit Schulkonto, sie läuft immer. {{if eq .Mode "local"}}Die Verwaltung bekommt ihre Adresse mit dem Reverse-Proxy. Sie bleibt im Schulnetz, nur geht das Passwort dann verschlüsselt durchs Netz.{{else}}Die Verwaltung unter eigener Adresse ist aus, bis du sie einschaltest.{{end}}</p>
+    <p class="ls-list-hint">Die Anmeldung braucht jede App mit Schulkonto, sie läuft immer. {{if eq .Mode "local"}}Die Verwaltung bekommt ihre Adresse mit dem Webzugang. Sie bleibt im Schulnetz, nur geht das Passwort dann verschlüsselt durchs Netz.{{else}}Die Verwaltung unter eigener Adresse ist aus, bis du sie einschaltest.{{end}}</p>
     {{if eq .Mode "local"}}<p class="ls-list-hint">Zugang von außen richtet stackctl nicht ein. Wer ihn über VPN oder einen eigenen Tunnel löst, muss <code>{{.AuthHost}}</code> mit nach außen geben, sonst scheitert der Login.</p>{{end}}
 
     <span class="ls-list-label">Apps</span>

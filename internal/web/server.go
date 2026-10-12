@@ -501,7 +501,7 @@ func (s *Server) tryLock(w http.ResponseWriter, r *http.Request) (*lock.Handle, 
 	if err != nil {
 		if errors.Is(err, lock.ErrBusy) {
 			http.Redirect(w, r,
-				"/apps?msg=Gerade+laeuft+eine+andere+Aktion+(z.B.+das+naechtliche+Auto-Update).+Bitte+in+einem+Moment+erneut+versuchen.&err=1",
+				"/apps?msg="+url.QueryEscape("Gerade läuft eine andere Aktion, etwa das nächtliche Auto-Update. Bitte gleich noch einmal versuchen.")+"&err=1",
 				http.StatusSeeOther)
 			return nil, false
 		}
@@ -549,12 +549,12 @@ func (s *Server) commitState(working *config.State) error {
 func (s *Server) requireCSRF(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+			http.Error(w, "Ungültige Formulardaten", http.StatusBadRequest)
 			return
 		}
 		if !s.sessions.validCSRF(r.PostFormValue("csrf_token")) {
 			log.Printf("web: CSRF token mismatch on %s %s from %s", r.Method, r.URL.Path, clientIP(r))
-			http.Error(w, "Sicherheitspruefung fehlgeschlagen (CSRF). Bitte Seite neu laden und erneut versuchen.", http.StatusForbidden)
+			http.Error(w, "Sicherheitsprüfung fehlgeschlagen (CSRF). Bitte Seite neu laden und erneut versuchen.", http.StatusForbidden)
 			return
 		}
 		next(w, r)

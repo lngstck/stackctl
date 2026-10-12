@@ -62,7 +62,7 @@
     {{if .Version}}<span class="ls-pill" data-dot="no">Version {{.Version}}</span>{{end}}
   </div>
 
-  {{if .IsMandatory}}<p class="sc-sheet-note" data-tone="warn">{{template "icon" "info"}}<span>Pflicht-Dienst — zuerst installieren. Andere Apps bauen darauf auf.</span></p>{{end}}
+  {{if .IsMandatory}}<p class="sc-sheet-note" data-tone="warn">{{template "icon" "info"}}<span>Gehört zur Grundversorgung, ohne sie geht keine App. Am einfachsten auf Start „Grundversorgung einrichten“, das installiert alles Fehlende.</span></p>{{end}}
   {{if .Error}}<p class="sc-flash" data-tone="bad" role="alert">{{template "icon" "alert"}}<span>{{.Error}}</span></p>{{end}}
 
   {{if .Missing}}

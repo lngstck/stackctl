@@ -501,7 +501,7 @@ func (s *Server) handleAppInstallPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+		http.Error(w, "Ungültige Formulardaten", http.StatusBadRequest)
 		return
 	}
 
@@ -681,7 +681,7 @@ func (s *Server) handleAppAutoUpdateToggle(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+		http.Error(w, "Ungültige Formulardaten", http.StatusBadRequest)
 		return
 	}
 	// The switch in the sheet reads "update automatically"; unchecked it
@@ -712,7 +712,7 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+		http.Error(w, "Ungültige Formulardaten", http.StatusBadRequest)
 		return
 	}
 	wipeData := r.FormValue("wipe_data") == "on"

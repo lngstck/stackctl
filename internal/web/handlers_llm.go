@@ -98,7 +98,7 @@ func (s *Server) handleLLM(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLLMProviderCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		redirectLLM(w, r, "providers", "", "Ungueltige Formulardaten.", nil)
+		redirectLLM(w, r, "providers", "", "Ungültige Formulardaten.", nil)
 		return
 	}
 	id := strings.TrimSpace(r.FormValue("id"))
@@ -123,13 +123,13 @@ func (s *Server) handleLLMProviderCreate(w http.ResponseWriter, r *http.Request)
 		redirectLLM(w, r, "providers", "", "Speichern fehlgeschlagen: "+err.Error(), nil)
 		return
 	}
-	redirectLLM(w, r, "providers", "Provider "+id+" angelegt.", "", nil)
+	redirectLLM(w, r, "providers", "Anbieter "+id+" angelegt.", "", nil)
 }
 
 func (s *Server) handleLLMProviderSetKey(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
-		redirectLLM(w, r, "providers", "", "Ungueltige Formulardaten.", nil)
+		redirectLLM(w, r, "providers", "", "Ungültige Formulardaten.", nil)
 		return
 	}
 	key := strings.TrimSpace(r.FormValue("api_key"))
@@ -137,7 +137,7 @@ func (s *Server) handleLLMProviderSetKey(w http.ResponseWriter, r *http.Request)
 	if clear {
 		key = ""
 	} else if key == "" {
-		redirectLLM(w, r, "providers", "", "Bitte API-Key eingeben (oder 'Loeschen' verwenden).", nil)
+		redirectLLM(w, r, "providers", "", "Bitte einen Schlüssel eingeben oder „Schlüssel entfernen“ wählen.", nil)
 		return
 	}
 
@@ -156,9 +156,9 @@ func (s *Server) handleLLMProviderSetKey(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if clear {
-		redirectLLM(w, r, "providers", "API-Key fuer "+id+" entfernt.", "", nil)
+		redirectLLM(w, r, "providers", "Schlüssel von "+id+" entfernt.", "", nil)
 	} else {
-		redirectLLM(w, r, "providers", "API-Key fuer "+id+" aktualisiert.", "", nil)
+		redirectLLM(w, r, "providers", "Schlüssel von "+id+" gespeichert.", "", nil)
 	}
 }
 
@@ -180,7 +180,7 @@ func (s *Server) handleLLMProviderDelete(w http.ResponseWriter, r *http.Request)
 		redirectLLM(w, r, "providers", "", "Speichern fehlgeschlagen: "+err.Error(), nil)
 		return
 	}
-	redirectLLM(w, r, "providers", "Provider "+id+" geloescht.", "", nil)
+	redirectLLM(w, r, "providers", "Anbieter "+id+" gelöscht.", "", nil)
 }
 
 // handleLLMProviderModels liefert die Upstream-Modellliste als JSON. Wird
@@ -225,7 +225,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func (s *Server) handleLLMPersonaCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		redirectLLM(w, r, "personas", "", "Ungueltige Formulardaten.", nil)
+		redirectLLM(w, r, "personas", "", "Ungültige Formulardaten.", nil)
 		return
 	}
 	id := strings.TrimSpace(r.FormValue("id"))
@@ -255,13 +255,13 @@ func (s *Server) handleLLMPersonaCreate(w http.ResponseWriter, r *http.Request) 
 		redirectLLM(w, r, "personas", "", "Speichern fehlgeschlagen: "+err.Error(), nil)
 		return
 	}
-	redirectLLM(w, r, "personas", "Persona "+id+" angelegt.", "", nil)
+	redirectLLM(w, r, "personas", "Modell "+id+" angelegt.", "", nil)
 }
 
 func (s *Server) handleLLMPersonaUpdate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := r.ParseForm(); err != nil {
-		redirectLLM(w, r, "personas", "", "Ungueltige Formulardaten.", nil)
+		redirectLLM(w, r, "personas", "", "Ungültige Formulardaten.", nil)
 		return
 	}
 	provider := strings.TrimSpace(r.FormValue("provider"))
@@ -290,7 +290,7 @@ func (s *Server) handleLLMPersonaUpdate(w http.ResponseWriter, r *http.Request) 
 		redirectLLM(w, r, "personas", "", "Speichern fehlgeschlagen: "+err.Error(), nil)
 		return
 	}
-	redirectLLM(w, r, "personas", "Persona "+id+" aktualisiert.", "", nil)
+	redirectLLM(w, r, "personas", "Modell "+id+" gespeichert.", "", nil)
 }
 
 // handleLLMPersonaDeactivate clears a persona's provider + upstream in one
@@ -313,7 +313,7 @@ func (s *Server) handleLLMPersonaDeactivate(w http.ResponseWriter, r *http.Reque
 		redirectLLM(w, r, "personas", "", "Speichern fehlgeschlagen: "+err.Error(), nil)
 		return
 	}
-	redirectLLM(w, r, "personas", "Persona "+id+" deaktiviert (Upstream entfernt, Prompt bleibt).", "", nil)
+	redirectLLM(w, r, "personas", "Modell "+id+" deaktiviert. Der Prompt bleibt, ein Anbieter fehlt jetzt.", "", nil)
 }
 
 func (s *Server) handleLLMPersonaDelete(w http.ResponseWriter, r *http.Request) {
@@ -332,14 +332,14 @@ func (s *Server) handleLLMPersonaDelete(w http.ResponseWriter, r *http.Request) 
 		redirectLLM(w, r, "personas", "", "Speichern fehlgeschlagen: "+err.Error(), nil)
 		return
 	}
-	redirectLLM(w, r, "personas", "Persona "+id+" geloescht.", "", nil)
+	redirectLLM(w, r, "personas", "Modell "+id+" gelöscht.", "", nil)
 }
 
 // === API Keys ==============================================================
 
 func (s *Server) handleLLMKeyCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		redirectLLM(w, r, "keys", "", "Ungueltige Formulardaten.", nil)
+		redirectLLM(w, r, "keys", "", "Ungültige Formulardaten.", nil)
 		return
 	}
 	id := strings.TrimSpace(r.FormValue("id"))
@@ -361,7 +361,7 @@ func (s *Server) handleLLMKeyCreate(w http.ResponseWriter, r *http.Request) {
 	plaintext, prefix, hash, err := llm.GenerateAPIKey()
 	if err != nil {
 		log.Printf("web: llm keygen: %v", err)
-		redirectLLM(w, r, "keys", "", "Key-Generierung fehlgeschlagen.", nil)
+		redirectLLM(w, r, "keys", "", "Der Schlüssel ließ sich nicht erzeugen.", nil)
 		return
 	}
 	if err := f.AddAPIKey(llm.APIKey{ID: id, Prefix: prefix, Hash: hash, AllowedPersonas: cleaned}); err != nil {
@@ -379,7 +379,7 @@ func (s *Server) handleLLMKeyCreate(w http.ResponseWriter, r *http.Request) {
 	extras := url.Values{}
 	extras.Set("new_key", plaintext)
 	extras.Set("new_key_id", id)
-	redirectLLM(w, r, "keys", fmt.Sprintf("API-Key %s erstellt.", id), "", extras)
+	redirectLLM(w, r, "keys", fmt.Sprintf("Schlüssel %s erstellt.", id), "", extras)
 }
 
 func (s *Server) handleLLMKeyDelete(w http.ResponseWriter, r *http.Request) {
@@ -398,5 +398,5 @@ func (s *Server) handleLLMKeyDelete(w http.ResponseWriter, r *http.Request) {
 		redirectLLM(w, r, "keys", "", "Speichern fehlgeschlagen: "+err.Error(), nil)
 		return
 	}
-	redirectLLM(w, r, "keys", "API-Key "+id+" geloescht.", "", nil)
+	redirectLLM(w, r, "keys", "Schlüssel "+id+" gesperrt.", "", nil)
 }

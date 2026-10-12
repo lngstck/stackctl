@@ -26,7 +26,7 @@ Gemeinsam ist beiden:
   - `admin.<domain>`: diese Oberfläche. Im Schulnetz-Betrieb an, sobald Caddy
     installiert ist; im direkten Betrieb nur, wenn eingeschaltet
 - **Caddy** hält Port 80/443 auf dem Server, terminiert TLS und verteilt die
-  Anfragen anhand des Hostnamens an die Apps. Er ist Pflichtdienst.
+  Anfragen anhand des Hostnamens an die Apps. Er gehört zur Grundversorgung.
 - **Nur Caddy ist von außen erreichbar.** Alle übrigen Container binden auf
   `127.0.0.1`; Caddy erreicht sie über das Docker-Netz. Eine App ohne Adresse
   ist damit nicht erreichbar, auch nicht unverschlüsselt über ihren Port.

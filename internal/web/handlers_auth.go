@@ -45,7 +45,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Ungueltige Formulardaten", http.StatusBadRequest)
+		http.Error(w, "Ungültige Formulardaten", http.StatusBadRequest)
 		return
 	}
 

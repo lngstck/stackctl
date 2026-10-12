@@ -38,12 +38,12 @@ func (s *Server) runSelfUpdateJob(h *lock.Handle, job *Job) {
 		return
 	}
 	if !result.UpdateAvailable {
-		job.setResult(nil, []string{"stackctl ist bereits aktuell — kein Update noetig."})
+		job.setResult(nil, []string{"stackctl ist bereits aktuell, kein Update nötig."})
 		job.finish(true, "")
 		return
 	}
 
-	job.Step("Herunterladen & Pruefsumme verifizieren")
+	job.Step("Herunterladen und Prüfsumme prüfen")
 	newVersion, err := update.Apply(result.Release)
 	if err != nil {
 		log.Printf("web: self-update: %v", err)
