@@ -164,6 +164,7 @@ type catalogData struct {
 	CatalogMissing bool
 	Available      int
 	Installed      int
+	Updates        int          // installed apps the catalog has a newer version of
 	Apps           []catalogApp // apps not yet installed, for the install sheets
 	Sheets         []appSheet   // installed apps, for their sheets
 }
@@ -186,6 +187,7 @@ type catalogApp struct {
 	Tile        appTile
 	Installed   bool
 	IsMandatory bool
+	UpdateTo    string // installed, and the catalog has this version
 
 	// Install form (only for apps not yet installed).
 	Missing     []string // names of apps it needs first
@@ -375,17 +377,25 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, openApp s
 			order = append(order, title)
 		}
 		shelf := shelves[title]
-		shelf.Apps = append(shelf.Apps, app)
 
 		if app.Installed {
+			// Das Blatt weiß, ob es ein Update gibt; die Kachel zeigt es
+			// wie auf Start.
+			sheet := s.appSheet(e.ID, st.Containers[e.ID])
+			app.UpdateTo = sheet.UpdateTo
+			app.Tile.Update = sheet.UpdateTo != ""
+			if app.Tile.Update {
+				data.Updates++
+			}
 			data.Installed++
 			shelf.Installed++
-			data.Sheets = append(data.Sheets, s.appSheet(e.ID, st.Containers[e.ID]))
+			data.Sheets = append(data.Sheets, sheet)
 		} else {
 			data.Available++
 			shelf.New++
 			data.Apps = append(data.Apps, app)
 		}
+		shelf.Apps = append(shelf.Apps, app)
 	}
 
 	// Grundversorgung steht vorn, solange etwas davon fehlt — sonst hinten,

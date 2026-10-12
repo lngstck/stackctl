@@ -7,7 +7,7 @@
   <span class="ls-tile" data-size="m">{{template "dock-icon" "bag"}}</span>
   <div>
     <h1>Katalog</h1>
-    <p>{{if .CatalogMissing}}Noch nicht geladen{{else if eq .Available 0}}Alles installiert{{else if eq .Installed 0}}{{.Available}} Apps zum Installieren{{else}}{{.Available}} zum Installieren · {{.Installed}} installiert{{end}}</p>
+    <p>{{if .CatalogMissing}}Noch nicht geladen{{else if eq .Available 0}}Alles installiert{{else if eq .Installed 0}}{{.Available}} Apps zum Installieren{{else}}{{.Available}} zum Installieren · {{.Installed}} installiert{{end}}{{if eq .Updates 1}} · 1 Update{{else if .Updates}} · {{.Updates}} Updates{{end}}</p>
   </div>
   <form method="post" action="/system/catalog/sync" class="ls-actions">
     {{csrfField .CSRFToken}}
@@ -41,7 +41,7 @@
     <button type="button" class="ls-app" data-state="{{if .Installed}}installed{{else}}new{{end}}" data-ls-item="{{.Name}} {{.Category}} {{.Description}}" data-ls-open="app-{{.ID}}">
       {{template "tile" .Tile}}
       <span class="ls-app-name">{{.Label}}</span>
-      {{if .Installed}}<span class="ls-app-state">installiert</span>{{else if .IsMandatory}}<span class="ls-app-state" data-tone="bad">zuerst installieren</span>{{end}}
+      {{if .UpdateTo}}<span class="ls-app-state" data-tone="warn">Update {{.UpdateTo}}</span>{{else if .Installed}}<span class="ls-app-state">installiert</span>{{else if .IsMandatory}}<span class="ls-app-state" data-tone="bad">zuerst installieren</span>{{end}}
     </button>
     {{end}}
   </div>
