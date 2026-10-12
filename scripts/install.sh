@@ -8,7 +8,8 @@
 #   curl -fsSL .../install.sh | sudo STACKCTL_VERSION=v0.12.0-rc1 bash
 #
 # What it does:
-#   1. Checks OS, architecture, curl, Docker
+#   1. Checks OS, architecture, curl, Docker. On Debian 13 and later it
+#      installs Docker itself from the Debian archive if it is missing.
 #   2. Creates system user "learningstack" (+ docker group)
 #   3. Creates /opt/stackctl and /opt/learningstack
 #   4. Downloads the stackctl binary from GitHub Releases and verifies it
@@ -18,8 +19,8 @@
 #      setup code stackctl creates on its first start
 #
 # Requires: root, Ubuntu/Debian, Docker Engine with the Compose plugin
-# (docker-ce + docker-compose-plugin). On a fresh Debian, curl and Docker
-# are not there yet — README.md lists the commands.
+# (installed here on Debian 13+, otherwise docker-ce + docker-compose-plugin
+# beforehand — README.md lists the commands).
 set -euo pipefail
 
 GITHUB_REPO="lngstck/stackctl"
@@ -70,14 +71,33 @@ esac
 # Required tools.
 command -v curl  >/dev/null 2>&1 || die "curl ist nicht installiert. Bitte installieren: apt install curl"
 command -v sha256sum >/dev/null 2>&1 || die "sha256sum fehlt (Paket coreutils)."
-command -v docker >/dev/null 2>&1 || die "Docker ist nicht installiert. Bitte zuerst Docker installieren: https://docs.docker.com/engine/install/"
+# Docker. Ab Debian 13 liegen Engine und Compose-Plugin im Debian-Archiv
+# (docker.io 26, docker-compose 2.26 legt das CLI-Plugin ab), also holt
+# install.sh sie dort selbst. Aeltere Debian- und Ubuntu-Pakete haben kein
+# Compose-Plugin; dort bleibt es beim Hinweis auf docker-ce.
+debian_with_docker() {
+    [ "${ID:-}" = debian ] && [ "${VERSION_ID%%.*}" -ge 13 ] 2>/dev/null
+}
+apt_install() {
+    info "Installiere aus den Debian-Paketquellen: $*"
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" >/dev/null
+}
+if ! command -v docker >/dev/null 2>&1; then
+    debian_with_docker || die "Docker ist nicht installiert. Bitte zuerst Docker installieren: https://docs.docker.com/engine/install/"
+    apt_install docker.io docker-compose
+    systemctl enable --now docker >/dev/null 2>&1 || true
+fi
 
-# stackctl ruft durchgehend 'docker compose ...' (v2-Plugin) auf. Das
-# Debian/Ubuntu-Paket 'docker.io' und Snap-Docker bringen das Plugin nicht
-# mit — ohne diesen Check laeuft die Installation durch und scheitert erst
-# beim ersten App-Install mit einer kryptischen Meldung.
+# stackctl ruft durchgehend 'docker compose ...' (v2-Plugin) auf. Snap-Docker
+# und 'docker.io' vor Debian 13 bringen das Plugin nicht mit — ohne diesen
+# Check laeuft die Installation durch und scheitert erst beim ersten
+# App-Install mit einer kryptischen Meldung.
+if ! docker compose version >/dev/null 2>&1 && debian_with_docker; then
+    apt_install docker-compose
+fi
 docker compose version >/dev/null 2>&1 || die "Docker-Compose-Plugin fehlt ('docker compose version' schlaegt fehl).
-  stackctl braucht Docker Engine inkl. Compose-Plugin (nicht 'docker.io' oder Snap).
+  stackctl braucht Docker Engine inkl. Compose-Plugin (nicht Snap).
   Installation: https://docs.docker.com/engine/install/ (docker-ce + docker-compose-plugin)"
 
 # 'docker --version' funktioniert auch ohne laufenden Daemon — erst

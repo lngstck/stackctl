@@ -15,12 +15,17 @@ stackctl ist das einzige Tool, das ein Schul-Admin auf einem frischen Linux-Serv
 
 ## Installation
 
-Voraussetzungen: Debian 12+ oder Ubuntu 22.04+ (amd64 oder arm64), Docker Engine mit Compose-Plugin (`docker-ce` + `docker-compose-plugin`, nicht das Paket `docker.io`), Port 8090 im Schulnetz erreichbar. Der Server braucht eine feste Adresse im Schulnetz, im Router also eine feste IP-Zuweisung: Auf diese Adresse zeigen später Login und Apps.
+Voraussetzungen: Debian 12+ oder Ubuntu 22.04+ (amd64 oder arm64), Docker Engine mit Compose-Plugin, Port 8090 im Schulnetz erreichbar. Der Server braucht eine feste Adresse im Schulnetz, im Router also eine feste IP-Zuweisung: Auf diese Adresse zeigen später Login und Apps.
 
-Auf einem frischen Debian fehlen curl und Docker noch. Als root:
+Auf einem frischen Debian fehlt curl noch. Als root:
 
 ```bash
 apt update && apt install -y curl ca-certificates
+```
+
+Docker installiert das Skript unten auf **Debian 13** selbst aus den Debian-Paketquellen. Auf Debian 12 und Ubuntu vorher Docker von Docker selbst holen, die Pakete dort haben kein Compose-Plugin:
+
+```bash
 curl -fsSL https://get.docker.com | sh
 ```
 
