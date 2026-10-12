@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/lngstck/stackctl/internal/catalog"
 	"github.com/lngstck/stackctl/internal/config"
@@ -119,12 +120,16 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 // inline would make the page slow exactly when something is wrong — the one
 // time an admin needs it to come up.
 func (s *Server) handlePublicHealth(w http.ResponseWriter, r *http.Request) {
-	checks := newProber().Live(r.Context(), preflight.LiveInput{
+	in := preflight.LiveInput{
 		Mode:            preflight.Mode(s.cfg),
 		BaseDomain:      public.BaseDomain(s.cfg),
 		ChallengeDomain: s.cfg.Public.Local.ChallengeDomain,
 		AuthHost:        public.AuthHost(s.cfg),
-	})
+	}
+	if cs := s.snapState().Containers["caddy"]; cs != nil {
+		in.ProxySince, _ = time.Parse(time.RFC3339, cs.InstalledAt)
+	}
+	checks := newProber().Live(r.Context(), in)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{

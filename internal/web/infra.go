@@ -26,11 +26,17 @@ import (
 // infraJobKind marks that job, so the start screen can tell it is running.
 const infraJobKind = "infra"
 
+// infraInstallOrder puts the proxy first. Its first certificate takes
+// minutes in the school network (Caddy waits for deSEC), and that wait then
+// runs while database and login are still being pulled. Nothing else
+// depends on the order: the three do not need each other to install.
+var infraInstallOrder = []string{"caddy", "postgres", "dex"}
+
 // missingInfraIDs lists the basic services not yet installed, in install
-// order (mandatoryAppIDs).
+// order.
 func missingInfraIDs(st *config.State) []string {
 	var missing []string
-	for _, id := range mandatoryAppIDs() {
+	for _, id := range infraInstallOrder {
 		if _, installed := st.Containers[id]; !installed {
 			missing = append(missing, id)
 		}

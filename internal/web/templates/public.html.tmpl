@@ -97,8 +97,9 @@
 (function () {
   var btn = document.getElementById('health-btn');
   var out = document.getElementById('health-result');
-  var TONE = { ok: 'ok', warn: 'warn', fail: 'bad', skip: 'off' };
-  var WORD = { ok: 'in Ordnung', warn: 'Hinweis', fail: 'Fehler', skip: 'übersprungen' };
+  var TONE = { ok: 'ok', warn: 'warn', fail: 'bad', skip: 'off', wait: 'warn' };
+  var WORD = { ok: 'in Ordnung', warn: 'Hinweis', fail: 'Fehler', skip: 'übersprungen', wait: 'wird geholt' };
+  var again;
 
   function row(label, detail, status) {
     var r = document.createElement('div');
@@ -122,6 +123,9 @@
       .then(function (resp) { return resp.json(); })
       .then(function (data) {
         out.replaceChildren.apply(out, (data.checks || []).map(function (c) { return row(c.title, c.detail, c.status); }));
+        // Kommt das Zertifikat noch, von selbst wieder nachsehen.
+        clearTimeout(again);
+        if ((data.checks || []).some(function (c) { return c.status === 'wait'; })) again = setTimeout(load, 30000);
       })
       .catch(function () { out.replaceChildren(row('Prüfung fehlgeschlagen', 'stackctl hat nicht geantwortet.', 'fail')); })
       .finally(function () { btn.removeAttribute('aria-busy'); btn.disabled = false; });

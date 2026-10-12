@@ -38,11 +38,15 @@ const (
 // from Fail ("confirmed missing") — an admin behind NAT gets Warn for the
 // address comparison forever, and telling them their setup is broken would be
 // wrong.
+//
+// Wait means "on its way": the certificate in the first minutes after the
+// proxy is installed. It is no fault, and the page checks again by itself.
 const (
 	StatusOK   = "ok"
 	StatusWarn = "warn"
 	StatusFail = "fail"
 	StatusSkip = "skip"
+	StatusWait = "wait"
 )
 
 // probeTimeout bounds a single check. The wizard runs these interactively
@@ -566,6 +570,10 @@ func Worst(checks []Check) string {
 			return StatusFail
 		case StatusWarn:
 			worst = StatusWarn
+		case StatusWait:
+			if worst == StatusOK {
+				worst = StatusWait
+			}
 		}
 	}
 	return worst

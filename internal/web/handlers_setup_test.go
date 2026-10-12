@@ -132,8 +132,8 @@ func TestSetupGoesStraightToReady(t *testing.T) {
 	if c := rec.Result().Cookies(); len(c) != 1 || c[0].Name != sessionCookie || c[0].Value == "" {
 		t.Errorf("keine Sitzung nach dem Setup: %+v", c)
 	}
-	if ids := <-started; strings.Join(ids, ",") != "postgres,dex,caddy" {
-		t.Errorf("Grundversorgung: %v, want postgres,dex,caddy", ids)
+	if ids := <-started; strings.Join(ids, ",") != "caddy,postgres,dex" {
+		t.Errorf("Grundversorgung: %v, want caddy,postgres,dex", ids)
 	}
 
 	saved, err := config.Load()

@@ -36,8 +36,8 @@ func TestInfraInstallButton(t *testing.T) {
 	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/jobs/") {
 		t.Fatalf("Location = %q, want /jobs/…", loc)
 	}
-	if ids := <-ran; strings.Join(ids, ",") != "postgres,caddy" {
-		t.Errorf("installiert %v, want postgres,caddy", ids)
+	if ids := <-ran; strings.Join(ids, ",") != "caddy,postgres" {
+		t.Errorf("installiert %v, want caddy,postgres", ids)
 	}
 
 	st.Containers["postgres"] = &config.ContainerState{ID: "postgres"}

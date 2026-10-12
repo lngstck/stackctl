@@ -37,8 +37,8 @@ func TestMissingInfraIssues(t *testing.T) {
 	if got := missingInfraIssues(stateWith("postgres", "dex", "caddy")); len(got) != 0 {
 		t.Errorf("alle installiert: want keine Karten, got %+v", got)
 	}
-	if ids := missingInfraIDs(stateWith("dex")); strings.Join(ids, ",") != "postgres,caddy" {
-		t.Errorf("missingInfraIDs = %v, want Reihenfolge postgres,caddy", ids)
+	if ids := missingInfraIDs(stateWith("dex")); strings.Join(ids, ",") != "caddy,postgres" {
+		t.Errorf("missingInfraIDs = %v, want Reihenfolge caddy,postgres", ids)
 	}
 }
 
