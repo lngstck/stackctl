@@ -50,6 +50,7 @@ button.ls-chip[data-tone="bad"] { color: var(--ls-bad); background: var(--ls-bad
 /* Haken unten rechts, gegenüber dem Internet-Abzeichen. */
 .ls-badge[data-kind="installed"] { right: -.35rem; bottom: -.35rem; background: var(--ls-ok); color: light-dark(#fff, #052e16); }
 .sc-seg-count { opacity: .65; font-variant-numeric: tabular-nums; }
+.ls-app-state[data-tone="warn"] { color: var(--ls-warn); font-weight: var(--ls-w-semibold); }
 #katalog[data-view="new"] .ls-app[data-state="installed"],
 #katalog[data-view="installed"] .ls-app[data-state="new"],
 #katalog[data-view="new"] .ls-shelf:not(:has(.ls-app[data-state="new"])),

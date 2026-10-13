@@ -297,3 +297,21 @@ func TestAppSheetOpensOnlyItsAddress(t *testing.T) {
 		t.Errorf("mit Adresse: OpenURL = %q", got)
 	}
 }
+
+// Ein Update zeigt der Katalog an der Kachel, nicht erst im Blatt.
+func TestCatalogShowsUpdateOnTile(t *testing.T) {
+	s, st := testServerWithPublisher(t, &fakePublisher{})
+	st.Containers["sponsorenlauf"] = &config.ContainerState{ID: "sponsorenlauf", Name: "Sponsorenlauf", VersionInstalled: "0.5.0"}
+	writeDefinition(t, "sponsorenlauf", "id: sponsorenlauf\nname: Sponsorenlauf\nversion: \"0.5.0-1\"\nimage:\n  name: x\n  tag: \"1\"\n")
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loadTemplates: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	s.handleApps(rec, httptest.NewRequest(http.MethodGet, "/apps", nil))
+	body := rec.Body.String()
+	for _, want := range []string{`data-kind="update"`, "Update 0.5.0-1", "· 1 Update"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Katalog enthält %q nicht", want)
+		}
+	}
+}

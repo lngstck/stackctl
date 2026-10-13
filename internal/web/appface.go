@@ -44,6 +44,7 @@ var knownFaces = map[string]appFace{
 	"caddy":      {Hue: 190, Icon: "globe"},
 	"llmd":       {Hue: 300, Icon: "spark"},
 	"open-webui": {Hue: 175, Icon: "app-chat"},
+	"roberta":    {Hue: 25, Icon: "robot"},
 }
 
 // faceFor returns the tile face for an app.
