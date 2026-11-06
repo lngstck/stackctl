@@ -324,13 +324,14 @@ SETUP_DONE=false
 grep -q '^setup_state: ready' "${INSTALL_DIR}/config/config.yaml" 2>/dev/null && SETUP_DONE=true
 
 # --- Server am Internet? --------------------------------------------------
-# Hat der Server selbst eine oeffentliche IPv4-Adresse (VPS), nimmt stackctl
-# auf Port 8090 nichts aus dem Internet an (internal/web/internetguard.go):
-# vor der Einrichtung nicht und danach im direkten Betrieb nicht. Der Weg
-# hinein ist dann ein SSH-Tunnel, und den zeigt die Ausgabe unten. Nicht
-# oeffentlich sind dieselben Bereiche wie dort: privat, Loopback,
-# Link-Local, CGNAT (100.64.0.0/10). Im Schulnetz (private Adresse) bleibt
-# alles wie bisher.
+# stackctl nimmt auf Port 8090 nichts aus dem Internet an, vor der
+# Einrichtung nie und danach im direkten Betrieb nicht
+# (internal/web/internetguard.go). Hat der Server selbst eine oeffentliche
+# IPv4-Adresse (VPS), sitzt die Admin also sicher draussen: Dann zeigt die
+# Ausgabe unten den SSH-Tunnel statt http://<IP>:8090. Nicht oeffentlich
+# sind dieselben Bereiche wie dort: privat, Loopback, Link-Local, CGNAT
+# (100.64.0.0/10). Im Schulnetz (private Adresse) bleibt die Ausgabe wie
+# bisher.
 is_public_ipv4() {
     local a b
     [[ "$1" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+\.[0-9]+$ ]] || return 1

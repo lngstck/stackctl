@@ -72,9 +72,6 @@ type Server struct {
 	setupCode string
 	// dnsSync holds the outcome of the last wildcard sync at deSEC.
 	dnsSync dnsSyncStatus
-	// publicHost: the server's own IPv4 address is public, seen once at
-	// start while setup is pending (see internetguard.go).
-	publicHost bool
 }
 
 // Option configures the server.
@@ -131,9 +128,6 @@ func New(cfg *config.Config, state *config.State, opts ...Option) (*Server, erro
 		} else {
 			s.setupCode = code
 			log.Printf("Einrichtungscode: %s (neu anzeigen: sudo stackctl setup-code)", code)
-		}
-		if s.publicHost = hostHasPublicIPv4(); s.publicHost {
-			log.Printf("web: öffentliche IP-Adresse – Einrichtung nur über SSH-Tunnel oder aus dem eigenen Netz")
 		}
 	}
 

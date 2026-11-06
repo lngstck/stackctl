@@ -144,12 +144,16 @@ sondern zeigt dort nur, wie man hineinkommt. Weiter erreichbar ist sie:
   aus dem Docker-Netz,
 - über `admin.<domain>`, wenn eingeschaltet (siehe *Grenzen*).
 
-Dasselbe gilt schon vor der Einrichtung, wenn der Server eine öffentliche
-IPv4-Adresse hat, damit Einrichtungscode und Admin-Passwort nicht
-unverschlüsselt durchs Internet gehen. `install.sh` zeigt dann den
-Tunnel-Befehl statt `http://<IP>:8090`. Geprüft wird die Adresse des
-Absenders, nie ein `X-Forwarded-For`. Im Schulnetz-Betrieb gibt es diese
-Sperre nicht.
+**Vor der Einrichtung gilt das immer**, denn da steht die Betriebsart noch
+nicht fest. So gehen Einrichtungscode und Admin-Passwort nie unverschlüsselt
+durchs Internet.
+
+- Im Schulnetz ändert das nichts: Der Link aus `install.sh` führt über die
+  private Adresse des Servers.
+- Hat der Server eine öffentliche IPv4, zeigt `install.sh` den Tunnel-Befehl
+  statt `http://<IP>:8090`.
+- Geprüft wird die Adresse des Absenders, nie ein `X-Forwarded-For`.
+- Nach der Einrichtung im Schulnetz-Betrieb gibt es diese Sperre nicht.
 
 **Passend, wenn** der Server als VM mit fester IP im Rechenzentrum steht und
 die Apps bewusst aus dem Internet erreichbar sein sollen. Schritt für

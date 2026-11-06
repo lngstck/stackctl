@@ -59,6 +59,9 @@ curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/insta
 - Docker holt das Skript auf Debian 13 selbst.
 - Am Ende zeigt es zwei Dinge: den **Befehl für den SSH-Tunnel** und den
   **Einrichtungslink** mit `localhost`.
+- Zeigt es stattdessen einen Link mit einer privaten IP (Cloud-Server hinter
+  NAT, etwa bei AWS oder Azure): genauso den Tunnel unten nehmen und im Link
+  die IP durch `localhost` ersetzen.
 
 ## 4. Einrichten über den SSH-Tunnel
 

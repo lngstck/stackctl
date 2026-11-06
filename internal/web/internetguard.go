@@ -34,9 +34,19 @@ import (
 // The check uses the TCP peer, never X-Forwarded-For: a header is whatever
 // the client wants it to be.
 //
-// In the school network the guard is never active, whatever the addresses
-// look like. Schools with public IPv4 ranges inside (BelWü, for one) keep
-// reaching the plain port exactly as before.
+// When it is active:
+//
+//   - before setup, always. The mode is not chosen yet, and the setup code
+//     and the new admin password are exactly what must not cross the
+//     internet in clear. Checking the server's own address instead would
+//     miss cloud VMs behind 1:1 NAT (AWS, Azure, Google), which only see a
+//     private address on their interface. In the school network the setup
+//     link from install.sh carries the server's private IPv4, so the admin
+//     comes from a private address and nothing changes there.
+//   - after setup, in the direct mode only. In the school-network mode the
+//     guard is never active, whatever the addresses look like: schools with
+//     public IPv4 ranges inside (BelWü, for one) keep reaching the plain
+//     port exactly as before.
 
 // cgnat is the shared address space of carrier-grade NAT (RFC 6598), also
 // used by overlay networks such as Tailscale. The internet cannot send from it.
@@ -62,35 +72,11 @@ func fromInternet(r *http.Request) bool {
 	return publicAddr(ap.Addr())
 }
 
-// hostHasPublicIPv4 reports whether the address this server uses towards the
-// internet is public — a VPS rather than a server behind the school's router.
-// Dialling UDP sends no packet; it only asks the kernel for the route.
-//
-// IPv4 only, on purpose: behind a router, school servers and their clients
-// often carry public IPv6 addresses that the router does not let in from
-// outside, and that must not make a school server look like a VPS.
-// A variable so tests do not depend on the network they run in.
-var hostHasPublicIPv4 = func() bool {
-	conn, err := net.Dial("udp4", "8.8.8.8:80")
-	if err != nil {
-		return false
-	}
-	defer conn.Close()
-	ua, ok := conn.LocalAddr().(*net.UDPAddr)
-	if !ok {
-		return false
-	}
-	a, ok := netip.AddrFromSlice(ua.IP)
-	return ok && publicAddr(a)
-}
-
-// internetFacing reports whether the plain port must not answer the internet:
-// in the direct mode, and before setup when the server's own address is
-// public. Before setup the mode is still unknown, and the setup code and the
-// new admin password are exactly what must not cross the internet in clear.
-func (s *Server) internetFacing() bool {
+// guardsPlainPort reports whether the plain port must not answer the
+// internet right now; see the comment at the top of this file.
+func (s *Server) guardsPlainPort() bool {
 	if s.cfg.SetupState == config.SetupStateNeedsSetup {
-		return s.publicHost
+		return true
 	}
 	return s.cfg.Public.Transport == config.TransportDirect
 }
@@ -102,7 +88,7 @@ func (s *Server) internetGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		static := (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
 			strings.HasPrefix(r.URL.Path, "/static/")
-		if static || !s.internetFacing() || !fromInternet(r) {
+		if static || !s.guardsPlainPort() || !fromInternet(r) {
 			next.ServeHTTP(w, r)
 			return
 		}

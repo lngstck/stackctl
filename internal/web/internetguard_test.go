@@ -39,7 +39,7 @@ func TestPublicAddr(t *testing.T) {
 }
 
 // guardServer is a server with all routes and templates, in the given state.
-func guardServer(t *testing.T, setup config.SetupState, transport string, publicHost bool) *Server {
+func guardServer(t *testing.T, setup config.SetupState, transport string) *Server {
 	t.Helper()
 	s := &Server{
 		cfg: &config.Config{
@@ -53,7 +53,6 @@ func guardServer(t *testing.T, setup config.SetupState, transport string, public
 		jobs:       newJobStore(),
 		mux:        http.NewServeMux(),
 		listenPort: 8090,
-		publicHost: publicHost,
 	}
 	if err := s.loadTemplates(); err != nil {
 		t.Fatal(err)
@@ -80,37 +79,43 @@ const (
 	fromSchoolLAN  = "192.168.1.50:51000"
 )
 
-// The school network is the usual case and must stay exactly as it was: no
-// address, however public it looks, is turned away there — before setup on a
-// server with a private address, or after setup in the school-network mode.
+var (
+	publicSources  = []string{fromInternetV4, fromInternetV6, fromMapped}
+	privateSources = []string{fromTunnel, fromCaddy, fromSchoolLAN}
+)
+
+// The school network is the usual case and must stay as it was. After setup
+// in the school-network mode no address, however public it looks, is turned
+// away. Before setup the admin comes from the school network over the private
+// address in the install.sh link, and that still gets through.
 func TestInternetGuardLeavesSchoolNetworkAlone(t *testing.T) {
-	servers := map[string]*Server{
-		"Schulnetz eingerichtet":       guardServer(t, config.SetupStateReady, config.TransportLocal, false),
-		"Schulnetz, Server öffentlich": guardServer(t, config.SetupStateReady, config.TransportLocal, true),
-		"vor Einrichtung, privat":      guardServer(t, config.SetupStateNeedsSetup, "", false),
-	}
-	for name, s := range servers {
-		for _, remote := range []string{fromInternetV4, fromInternetV6, fromMapped, fromTunnel, fromCaddy, fromSchoolLAN} {
-			for _, path := range []string{"/healthz", "/login", "/setup"} {
-				rec := guardGet(s, path, remote)
-				if rec.Code == http.StatusForbidden {
-					t.Errorf("%s: GET %s von %s = 403, want the normal page", name, path, remote)
-				}
+	ready := guardServer(t, config.SetupStateReady, config.TransportLocal)
+	for _, remote := range append(publicSources, privateSources...) {
+		for _, path := range []string{"/healthz", "/login", "/setup"} {
+			if rec := guardGet(ready, path, remote); rec.Code == http.StatusForbidden {
+				t.Errorf("Schulnetz eingerichtet: GET %s von %s = 403, want the normal page", path, remote)
 			}
+		}
+	}
+
+	fresh := guardServer(t, config.SetupStateNeedsSetup, "")
+	for _, remote := range privateSources {
+		rec := guardGet(fresh, "/setup?code=ABCD-EFGH", remote)
+		if rec.Code != http.StatusOK {
+			t.Errorf("vor Einrichtung: GET /setup von %s = %d, want 200", remote, rec.Code)
 		}
 	}
 }
 
-// On a server on the internet the plain port answers the public internet
-// with the explanation only — in the direct mode, and before setup when the
-// server's own address is public.
+// The plain port answers the public internet with the explanation only:
+// before setup, always, and after setup in the direct mode.
 func TestInternetGuardBlocksInternet(t *testing.T) {
 	servers := map[string]*Server{
-		"direkter Betrieb":            guardServer(t, config.SetupStateReady, config.TransportDirect, false),
-		"vor Einrichtung, öffentlich": guardServer(t, config.SetupStateNeedsSetup, "", true),
+		"direkter Betrieb": guardServer(t, config.SetupStateReady, config.TransportDirect),
+		"vor Einrichtung":  guardServer(t, config.SetupStateNeedsSetup, ""),
 	}
 	for name, s := range servers {
-		for _, remote := range []string{fromInternetV4, fromInternetV6, fromMapped} {
+		for _, remote := range publicSources {
 			rec := guardGet(s, "/login", remote)
 			if rec.Code != http.StatusForbidden {
 				t.Errorf("%s: GET /login von %s = %d, want 403", name, remote, rec.Code)
@@ -129,7 +134,7 @@ func TestInternetGuardBlocksInternet(t *testing.T) {
 			}
 		}
 		// Tunnel, VPN and Caddy (admin.<domain>) keep working.
-		for _, remote := range []string{fromTunnel, fromCaddy, fromSchoolLAN} {
+		for _, remote := range privateSources {
 			if rec := guardGet(s, "/healthz", remote); rec.Code != http.StatusOK {
 				t.Errorf("%s: GET /healthz von %s = %d, want 200", name, remote, rec.Code)
 			}
@@ -141,25 +146,32 @@ func TestInternetGuardBlocksInternet(t *testing.T) {
 	}
 }
 
-// The setup link from install.sh only needs the tunnel: the page links the
-// same path and code on localhost.
-func TestInternetGuardKeepsSetupLink(t *testing.T) {
-	s := guardServer(t, config.SetupStateNeedsSetup, "", true)
-	rec := guardGet(s, "/setup?code=ABCD-EFGH", fromInternetV4)
+// Before setup the page must not claim the server hangs on the internet — it
+// may well be a school server reached over a public IPv6 address. It links
+// the setup page with the same code through the tunnel.
+func TestInternetGuardSetupPage(t *testing.T) {
+	s := guardServer(t, config.SetupStateNeedsSetup, "")
+	rec := guardGet(s, "/setup?code=ABCD-EFGH", fromInternetV6)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("code = %d, want 403", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), `href="http://localhost:8090/setup?code=ABCD-EFGH"`) {
-		t.Errorf("page does not link the setup page through the tunnel:\n%s", rec.Body.String())
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="http://localhost:8090/setup?code=ABCD-EFGH"`) {
+		t.Errorf("page does not link the setup page through the tunnel:\n%s", body)
 	}
-	if !strings.Contains(rec.Body.String(), "Einrichtungscode") {
-		t.Error("before setup the page should name the setup code")
+	for _, want := range []string{"Einrichtung nur über einen sicheren Weg", "Einrichtungscode", "private Adresse des Servers"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("setup page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "hängt direkt am Internet") {
+		t.Error("before setup the page must not claim the server hangs on the internet")
 	}
 }
 
 // Once admin.<domain> is up, the page offers it as the encrypted way in.
 func TestInternetGuardOffersAdminAddress(t *testing.T) {
-	s := guardServer(t, config.SetupStateReady, config.TransportDirect, false)
+	s := guardServer(t, config.SetupStateReady, config.TransportDirect)
 	s.publisher = &fakePublisher{adminStatus: publish.StatusRunning}
 	rec := guardGet(s, "/", fromInternetV4)
 	if !strings.Contains(rec.Body.String(), `href="https://admin.ls.gym-phoenix.de"`) {
@@ -173,18 +185,26 @@ func TestInternetGuardOffersAdminAddress(t *testing.T) {
 	}
 }
 
-// After setup in the direct mode the guard follows the mode alone: a server
-// whose own address looked private at start (a cloud VM behind 1:1 NAT) is
-// guarded too.
+// Setup decides what follows: the school-network mode opens the plain port
+// again, the direct mode keeps it closed to the internet.
 func TestInternetGuardFollowsModeAfterSetup(t *testing.T) {
-	s := guardServer(t, config.SetupStateNeedsSetup, "", false)
-	if rec := guardGet(s, "/login", fromInternetV4); rec.Code == http.StatusForbidden {
-		t.Fatal("before setup on a private address nothing is blocked")
-	}
-	s.cfg.SetupState = config.SetupStateReady
-	s.cfg.Public.Transport = config.TransportDirect
-	if rec := guardGet(s, "/login", fromInternetV4); rec.Code != http.StatusForbidden {
-		t.Fatalf("direct mode after setup: code = %d, want 403", rec.Code)
+	for _, tc := range []struct {
+		transport string
+		blocked   bool
+	}{
+		{config.TransportLocal, false},
+		{config.TransportDirect, true},
+	} {
+		s := guardServer(t, config.SetupStateNeedsSetup, "")
+		if rec := guardGet(s, "/login", fromInternetV4); rec.Code != http.StatusForbidden {
+			t.Fatalf("before setup: code = %d, want 403", rec.Code)
+		}
+		s.cfg.SetupState = config.SetupStateReady
+		s.cfg.Public.Transport = tc.transport
+		rec := guardGet(s, "/login", fromInternetV4)
+		if blocked := rec.Code == http.StatusForbidden; blocked != tc.blocked {
+			t.Errorf("%s after setup: code = %d, blocked = %v, want %v", tc.transport, rec.Code, blocked, tc.blocked)
+		}
 	}
 }
 
