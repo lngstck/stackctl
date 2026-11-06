@@ -30,7 +30,8 @@ Gemeinsam ist beiden:
 - **Nur Caddy ist von außen erreichbar.** Alle übrigen Container binden auf
   `127.0.0.1`; Caddy erreicht sie über das Docker-Netz. Eine App ohne Adresse
   ist damit nicht erreichbar, auch nicht unverschlüsselt über ihren Port.
-  stackctl selbst bleibt im Schulnetz unter `<Server-IP>:8090`.
+  stackctl selbst bleibt im Schulnetz unter `<Server-IP>:8090`; im direkten
+  Betrieb nimmt dieser Port nichts aus dem Internet an (siehe unten).
 
 ---
 
@@ -133,8 +134,26 @@ Nach außen sichtbar wird eine App ausschließlich über Caddy, nie über einen
 offenen Port. Eine App bekommt ihre Adresse erst, wenn die Admin sie
 einschaltet.
 
+**Die Verwaltung auf Port 8090** spricht nur unverschlüsseltes HTTP. Im
+direkten Betrieb nimmt sie deshalb keine Aufrufe von öffentlichen Adressen an,
+sondern zeigt dort nur, wie man hineinkommt. Weiter erreichbar ist sie:
+
+- über einen SSH-Tunnel (`ssh -L 8090:localhost:8090 …`, dann
+  `http://localhost:8090`),
+- aus privaten Netzen: das Netz des Servers, ein VPN (auch Tailscale), Caddy
+  aus dem Docker-Netz,
+- über `admin.<domain>`, wenn eingeschaltet (siehe *Grenzen*).
+
+Dasselbe gilt schon vor der Einrichtung, wenn der Server eine öffentliche
+IPv4-Adresse hat, damit Einrichtungscode und Admin-Passwort nicht
+unverschlüsselt durchs Internet gehen. `install.sh` zeigt dann den
+Tunnel-Befehl statt `http://<IP>:8090`. Geprüft wird die Adresse des
+Absenders, nie ein `X-Forwarded-For`. Im Schulnetz-Betrieb gibt es diese
+Sperre nicht.
+
 **Passend, wenn** der Server als VM mit fester IP im Rechenzentrum steht und
-die Apps bewusst aus dem Internet erreichbar sein sollen.
+die Apps bewusst aus dem Internet erreichbar sein sollen. Schritt für
+Schritt: [Installation auf einem VPS](vps.md).
 
 ---
 
@@ -235,7 +254,8 @@ neu — Let's Encrypt erlaubt davon fünf pro Woche und Domain.
 - **NS-Einträge für eine Subdomain** erlaubt nicht jeder DNS-Anbieter. Dann
   bleibt der Ausweg über CNAME — mit einer zweiten Domain, die bei deSEC liegt.
 - **Die stackctl-Oberfläche** ist immer auf Port 8090 im Schulnetz
-  erreichbar, dort aber unverschlüsselt. Im Schulnetz-Betrieb kommt mit Caddy
+  erreichbar, dort aber unverschlüsselt; im direkten Betrieb nur aus privaten
+  Netzen und per SSH-Tunnel. Im Schulnetz-Betrieb kommt mit Caddy
   `admin.<domain>` dazu, mit TLS und ebenfalls nur von innen erreichbar.
   Im direkten Betrieb hieße `admin.<domain>`: aus dem Internet. Dort ist sie
   deshalb aus und will überlegt sein — die Oberfläche installiert Apps, zeigt
