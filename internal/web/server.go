@@ -157,9 +157,10 @@ func (s *Server) ListenAndServe(host string, port int) error {
 }
 
 // Handler is the complete HTTP handler: all routes with the security
-// headers around them.
+// headers around them, behind the guard that keeps the plain port off the
+// internet on a server that hangs on it (internetguard.go).
 func (s *Server) Handler() http.Handler {
-	return securityHeaders(s.mux)
+	return securityHeaders(s.internetGuard(s.mux))
 }
 
 // routes registers all HTTP routes.

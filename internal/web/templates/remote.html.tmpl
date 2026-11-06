@@ -1,0 +1,23 @@
+{{define "title"}}Nur über SSH-Tunnel{{end}}
+{{define "page"}}
+{{template "head" .}}
+{{template "bare-start" .}}
+
+<section class="ls-card sc-login">
+  {{if .Setup}}
+  <h1>Einrichtung nur über einen sicheren Weg</h1>
+  <p>Über das Internet gingen Einrichtungscode und Admin-Passwort hier unverschlüsselt durchs Netz. Die Einrichtung geht deshalb nur aus dem eigenen Netz, über die private Adresse des Servers, oder über einen SSH-Tunnel.</p>
+  {{else}}
+  <h1>Verwaltung nur über einen sicheren Weg</h1>
+  <p>Dieser Server hängt direkt am Internet. Hier ginge das Admin-Passwort unverschlüsselt durchs Netz, deshalb nimmt die Verwaltung auf Port {{.Port}} keine Aufrufe aus dem Internet an.</p>
+  {{end}}
+  <div class="ls-list">
+    <div class="ls-row sc-step-row"><span class="sc-num">1</span><span class="ls-row-label">Auf deinem Rechner einen SSH-Tunnel öffnen, mit deinem Login für diesen Server:<pre class="sc-records">ssh -L {{.Port}}:localhost:{{.Port}} login@{{.ServerHost}}</pre></span></div>
+    <div class="ls-row sc-step-row"><span class="sc-num">2</span><span class="ls-row-label">Solange der Tunnel offen ist, im Browser öffnen:<small><a href="{{.LocalURL}}">{{.LocalURL}}</a></small></span></div>
+  </div>
+  {{if .AdminURL}}<p class="sc-flash" data-tone="info">{{template "icon" "lock"}}<span>Oder verschlüsselt über <a href="{{.AdminURL}}">{{.AdminURL}}</a>.</span></p>{{end}}
+</section>
+
+{{template "bare-end" .}}
+{{template "foot" .}}
+{{end}}

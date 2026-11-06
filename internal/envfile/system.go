@@ -21,6 +21,16 @@ var SystemEnvKeys = []string{
 	claims.StudentGroupsEnv,
 }
 
+// SystemKeyMayBeEmpty reports whether a system key is empty by design under
+// cfg. DESEC_TOKEN is the one such key: in the direct mode Caddy gets its
+// certificates over HTTP-01, ApplySystemEnv writes the token empty and the
+// generated Caddyfile never reads it. In the school network — and while the
+// mode is unknown — an empty token means no certificate, so it counts as
+// missing there like any other key.
+func SystemKeyMayBeEmpty(cfg *config.Config, key string) bool {
+	return key == "DESEC_TOKEN" && cfg != nil && cfg.Public.Transport == config.TransportDirect
+}
+
 // ApplySystemEnv overwrites the system-owned keys in the global section
 // using the current Config. adminPassword, if non-empty, overwrites the
 // ADMIN_PASSWORD entry; pass "" to leave any existing value untouched

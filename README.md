@@ -44,6 +44,8 @@ Eine bestimmte Version installieren, etwa einen Vorab-Stand:
 curl -fsSL https://raw.githubusercontent.com/lngstck/stackctl/main/scripts/install.sh | sudo STACKCTL_VERSION=v0.12.0-rc4 bash
 ```
 
+Auf einem gemieteten Server mit öffentlicher IP (VPS) läuft die Einrichtung über einen SSH-Tunnel, `install.sh` zeigt den Befehl dafür. Schritt für Schritt: [Installation auf einem VPS](docs/vps.md).
+
 Der Assistent fragt nach der Domain der Schule und nach der Betriebsart. Für den Standard „nur im Schulnetz“ braucht es ein kostenloses Konto bei deSEC und zwei NS-Einträge beim DNS-Anbieter der Schule, die die Domain an deSEC übergeben — die [Betriebsarten](docs/betriebsarten.md) beschreiben, was wann nötig ist. Die Wahl fällt einmalig bei der Einrichtung.
 
 Nach der Einrichtung installiert stackctl die Grundversorgung von selbst, das dauert ein paar Minuten. Im Schulnetz braucht das erste Zertifikat danach meist noch 5 bis 10 Minuten; „Zugang“ zeigt so lange „wird geholt“.

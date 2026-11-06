@@ -41,7 +41,7 @@
       </div>
       <div class="ls-row">
         <span class="ls-tile" data-size="s">{{template "dock-icon" "gear"}}</span>
-        <span class="ls-row-label">Diese Verwaltung<small><code>{{.AdminHost}}</code> · im Schulnetz immer unter <code>{{.AdminLocalAddr}}</code></small></span>
+        <span class="ls-row-label">Diese Verwaltung<small><code>{{.AdminHost}}</code> · {{if eq .Mode "local"}}im Schulnetz immer unter <code>{{.AdminLocalAddr}}</code>{{else}}immer per SSH-Tunnel unter <code>localhost:{{.AdminPort}}</code>{{end}}</small></span>
         {{if eq .AdminStatus "stopped"}}<span class="ls-pill" data-tone="off">aus</span>{{else}}{{template "route-pill" .AdminStatus}}{{end}}
         {{if eq .AdminStatus "stopped"}}
         <button type="button" data-size="s" data-variant="ghost" data-ls-open="admin-start">Einschalten</button>
@@ -87,7 +87,7 @@
     {{csrfField .CSRFToken}}
     <h2 id="admin-start-t">Verwaltung unter {{.AdminHost}}?</h2>
     <p>Sie ist dann zusätzlich unter dieser Adresse erreichbar{{if ne .Mode "local"}}, auch aus dem Internet{{end}}. Von dort lassen sich Apps installieren, Zugangsdaten ansehen und Sicherungen zurückspielen, geschützt nur durch das Admin-Passwort.</p>
-    <p>Unter {{.AdminLocalAddr}} bleibt sie wie bisher erreichbar.</p>
+    <p>{{if eq .Mode "local"}}Unter {{.AdminLocalAddr}} bleibt sie wie bisher erreichbar.{{else}}Per SSH-Tunnel unter localhost:{{.AdminPort}} bleibt sie wie bisher erreichbar.{{end}}</p>
     <div class="ls-actions"><button type="button" data-variant="ghost" data-close>Abbrechen</button><button type="submit" data-busy>Einschalten</button></div>
   </form>
 </dialog>

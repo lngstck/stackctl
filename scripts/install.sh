@@ -322,6 +322,41 @@ SERVER_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[\d.]+' || hos
 SETUP_CODE_FILE="${INSTALL_DIR}/config/setup-code"
 SETUP_DONE=false
 grep -q '^setup_state: ready' "${INSTALL_DIR}/config/config.yaml" 2>/dev/null && SETUP_DONE=true
+
+# --- Server am Internet? --------------------------------------------------
+# stackctl nimmt auf Port 8090 nichts aus dem Internet an, vor der
+# Einrichtung nie und danach im direkten Betrieb nicht
+# (internal/web/internetguard.go). Hat der Server selbst eine oeffentliche
+# IPv4-Adresse (VPS), sitzt die Admin also sicher draussen: Dann zeigt die
+# Ausgabe unten den SSH-Tunnel statt http://<IP>:8090. Nicht oeffentlich
+# sind dieselben Bereiche wie dort: privat, Loopback, Link-Local, CGNAT
+# (100.64.0.0/10). Im Schulnetz (private Adresse) bleibt die Ausgabe wie
+# bisher.
+is_public_ipv4() {
+    local a b
+    [[ "$1" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+\.[0-9]+$ ]] || return 1
+    a=${BASH_REMATCH[1]}
+    b=${BASH_REMATCH[2]}
+    case "$a" in
+        0|10|127) return 1 ;;
+        100) [ "$b" -ge 64 ] && [ "$b" -le 127 ] && return 1 ;;
+        169) [ "$b" -eq 254 ] && return 1 ;;
+        172) [ "$b" -ge 16 ] && [ "$b" -le 31 ] && return 1 ;;
+        192) [ "$b" -eq 168 ] && return 1 ;;
+    esac
+    return 0
+}
+TUNNEL=false
+if is_public_ipv4 "$SERVER_IP"; then
+    if ! $SETUP_DONE \
+        || grep -Eq '^[[:space:]]+transport:[[:space:]]*"?direct"?[[:space:]]*$' "${INSTALL_DIR}/config/config.yaml" 2>/dev/null; then
+        TUNNEL=true
+    fi
+fi
+UI_HOST="$SERVER_IP"
+$TUNNEL && UI_HOST="localhost"
+SSH_LINE="ssh -L 8090:localhost:8090 ${SUDO_USER:-root}@${SERVER_IP}"
+
 SETUP_LINK=""
 if ! $SETUP_DONE; then
     for _ in $(seq 1 20); do
@@ -329,7 +364,7 @@ if ! $SETUP_DONE; then
         sleep 1
     done
     if [ -s "$SETUP_CODE_FILE" ]; then
-        SETUP_LINK="http://${SERVER_IP}:8090/setup?code=$(tr -d '[:space:]' < "$SETUP_CODE_FILE")"
+        SETUP_LINK="http://${UI_HOST}:8090/setup?code=$(tr -d '[:space:]' < "$SETUP_CODE_FILE")"
     fi
 fi
 
@@ -347,18 +382,29 @@ echo ""
 echo -e "${BOLD}════════════════════════════════════════════════════${NC}"
 echo -e "${BOLD}  stackctl ist installiert und läuft!${NC}"
 echo ""
+if $TUNNEL; then
+    echo -e "  Dieser Server hat eine öffentliche IP-Adresse. Die Verwaltung"
+    echo -e "  ist deshalb nicht aus dem Internet erreichbar, sondern über einen"
+    echo -e "  SSH-Tunnel. Auf deinem Rechner, im eigenen Terminal offen lassen:"
+    echo -e "  ${GREEN}▸${NC} ${BOLD}${SSH_LINE}${NC}"
+    echo ""
+fi
 if [ -n "$SETUP_LINK" ]; then
-    echo -e "  Einrichtung im Browser starten:"
+    if $TUNNEL; then
+        echo -e "  Einrichtung im Browser starten, solange der Tunnel offen ist:"
+    else
+        echo -e "  Einrichtung im Browser starten:"
+    fi
     echo -e "  ${GREEN}▸${NC} ${BOLD}${SETUP_LINK}${NC}"
     echo ""
     echo -e "  Der Link enthält den Einrichtungscode. Nur an die Person"
     echo -e "  weitergeben, die einrichtet. Neu anzeigen: sudo stackctl setup-code"
 elif $SETUP_DONE; then
-    echo -e "  ${GREEN}▸${NC} Web-UI:  ${BOLD}http://${SERVER_IP}:8090${NC}"
+    echo -e "  ${GREEN}▸${NC} Web-UI:  ${BOLD}http://${UI_HOST}:8090${NC}"
 else
     warn "Der Einrichtungscode ist noch nicht da. Gleich noch einmal versuchen:"
     echo -e "    sudo stackctl setup-code"
-    echo -e "  Einrichtung dann unter ${BOLD}http://${SERVER_IP}:8090/setup${NC}"
+    echo -e "  Einrichtung dann unter ${BOLD}http://${UI_HOST}:8090/setup${NC}"
 fi
 echo ""
 echo -e "  ${GREEN}▸${NC} Status:  systemctl status stackctl"

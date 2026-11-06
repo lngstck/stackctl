@@ -98,7 +98,7 @@ func Install(
 
 	// --- 0. Pre-flight: referenced system env vars must be populated -------
 
-	if err := checkSystemEnvDeps(def, env); err != nil {
+	if err := checkSystemEnvDeps(def, cfg, env); err != nil {
 		return fail(res, "%v", err)
 	}
 
@@ -342,7 +342,7 @@ func Update(
 	}
 
 	rep.Step("Vorbereitung & Secrets")
-	if err := checkSystemEnvDeps(def, env); err != nil {
+	if err := checkSystemEnvDeps(def, cfg, env); err != nil {
 		return fail(res, "%v", err)
 	}
 
@@ -514,7 +514,9 @@ func ReconstructDexClients(defs []*catalog.Definition, env *envfile.File, cfg *c
 // WEBUI_ADMIN_PASSWORD seed is rejected without any error in compose. Only
 // envfile.SystemEnvKeys are checked — app secrets / DB passwords get
 // generated later in the install flow, so flagging them here would be wrong.
-func checkSystemEnvDeps(def *catalog.Definition, env *envfile.File) error {
+// A key that is empty by design under cfg (envfile.SystemKeyMayBeEmpty) is
+// not missing.
+func checkSystemEnvDeps(def *catalog.Definition, cfg *config.Config, env *envfile.File) error {
 	systemKey := map[string]bool{}
 	for _, k := range envfile.SystemEnvKeys {
 		systemKey[k] = true
@@ -528,7 +530,7 @@ func checkSystemEnvDeps(def *catalog.Definition, env *envfile.File) error {
 			}
 			seen[key] = true
 			val, ok := env.Get(key)
-			if !ok || val == "" {
+			if (!ok || val == "") && !envfile.SystemKeyMayBeEmpty(cfg, key) {
 				missing = append(missing, key)
 			}
 		}
