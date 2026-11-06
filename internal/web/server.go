@@ -72,6 +72,9 @@ type Server struct {
 	setupCode string
 	// dnsSync holds the outcome of the last wildcard sync at deSEC.
 	dnsSync dnsSyncStatus
+	// publicHost: the server's own IPv4 address is public, seen once at
+	// start while setup is pending (see internetguard.go).
+	publicHost bool
 }
 
 // Option configures the server.
@@ -129,6 +132,9 @@ func New(cfg *config.Config, state *config.State, opts ...Option) (*Server, erro
 			s.setupCode = code
 			log.Printf("Einrichtungscode: %s (neu anzeigen: sudo stackctl setup-code)", code)
 		}
+		if s.publicHost = hostHasPublicIPv4(); s.publicHost {
+			log.Printf("web: öffentliche IP-Adresse – Einrichtung nur über SSH-Tunnel oder aus dem eigenen Netz")
+		}
 	}
 
 	// Keep the wildcard at deSEC in line with this server — in the
@@ -157,9 +163,10 @@ func (s *Server) ListenAndServe(host string, port int) error {
 }
 
 // Handler is the complete HTTP handler: all routes with the security
-// headers around them.
+// headers around them, behind the guard that keeps the plain port off the
+// internet on a server that hangs on it (internetguard.go).
 func (s *Server) Handler() http.Handler {
-	return securityHeaders(s.mux)
+	return securityHeaders(s.internetGuard(s.mux))
 }
 
 // routes registers all HTTP routes.

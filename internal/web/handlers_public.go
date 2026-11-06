@@ -35,7 +35,10 @@ type publicData struct {
 	// the public address because that pair is the whole point: publishing
 	// adds a way in, it does not move one.
 	AdminLocalAddr string
-	Apps           []publicAppEntry
+	// AdminPort is the port of this UI, for the SSH tunnel on a server on
+	// the internet, where the plain port does not answer the internet.
+	AdminPort int
+	Apps      []publicAppEntry
 	// Notice is the outcome of a start/stop action, carried over the
 	// redirect.
 	Notice string
@@ -66,6 +69,10 @@ func (s *Server) handlePublic(w http.ResponseWriter, r *http.Request) {
 		AdminHost:      public.AdminHost(s.cfg),
 		AdminStatus:    publish.StatusStopped,
 		AdminLocalAddr: s.adminLocalAddr(),
+		AdminPort:      s.listenPort,
+	}
+	if data.AdminPort <= 0 {
+		data.AdminPort = 8090
 	}
 
 	if s.publisher != nil {
